@@ -402,10 +402,9 @@ Retourne STRICTEMENT ce JSON :
       text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
     }
     
-    // Fallback for truncated JSON (sometimes the LLM stops right after the last string quote)
+    // Fallback for truncated JSON
     text = text.trim();
     if (text.startsWith('{') && !text.endsWith('}')) {
-      // If it ends with a quote, it just missed the closing brace
       if (text.endsWith('"')) {
         text += '\n}';
       }
@@ -413,7 +412,22 @@ Retourne STRICTEMENT ce JSON :
     
     return JSON.parse(text);
   } catch (err) {
-    console.error("Gemini JSON Parse Error. Raw text:", text);
-    throw new Error("Failed to parse Gemini response: " + err);
+    try {
+      // Second attempt: aggressive cleanup for common LLM JSON syntax errors
+      // Fix stray quotes before closing brace: "\n"\n} -> "}
+      let cleaned = text.replace(/"\s*"\s*}/g, '"}');
+      // Fix trailing commas: ,} -> }
+      cleaned = cleaned.replace(/,\s*}/g, '}');
+      // Extract only the JSON object
+      const startIdx = cleaned.indexOf('{');
+      const endIdx = cleaned.lastIndexOf('}');
+      if (startIdx !== -1 && endIdx !== -1) {
+        cleaned = cleaned.substring(startIdx, endIdx + 1);
+      }
+      return JSON.parse(cleaned);
+    } catch (finalErr) {
+      console.error("Gemini JSON Parse Error. Raw text:", text);
+      throw new Error("Failed to parse Gemini response: " + finalErr);
+    }
   }
 }

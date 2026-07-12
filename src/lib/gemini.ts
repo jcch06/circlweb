@@ -394,6 +394,16 @@ Retourne STRICTEMENT ce JSON :
 }`;
 
   const result = await model.generateContent(prompt);
-  const text = result.response.text();
-  return JSON.parse(text);
+  let text = result.response.text();
+  
+  try {
+    // Sanitize text: remove markdown code block formatting if present
+    if (text.includes('```')) {
+      text = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    }
+    return JSON.parse(text);
+  } catch (err) {
+    console.error("Gemini JSON Parse Error. Raw text:", text);
+    throw new Error("Failed to parse Gemini response: " + err);
+  }
 }

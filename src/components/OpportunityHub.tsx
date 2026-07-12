@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   suggestWarmIntros,
   runOracleV3Pipeline,
+  getCachedOracleV3Result,
   isGeminiConfigured
 } from '../lib/gemini';
 import type {
@@ -82,6 +83,16 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
       }
     }
   }, [user]);
+
+  // Load cached V3 result on mount or contacts change
+  useEffect(() => {
+    if (contacts && contacts.length > 0) {
+      const cached = getCachedOracleV3Result(contacts);
+      if (cached && !pipelineRunning) {
+        setV3Result(cached);
+      }
+    }
+  }, [contacts]);
 
   // V3 Pipeline trigger
   const triggerV3Pipeline = async (forceRefresh = false) => {

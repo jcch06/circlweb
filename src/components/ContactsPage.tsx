@@ -157,11 +157,12 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
 
       let insertCount = 0;
       for (const contact of selectedContacts) {
-        const key = `${contact.first_name.toLowerCase()}|${contact.last_name.toLowerCase()}`;
+        const key = contact.shared_contact_id || `${contact.first_name.toLowerCase()}|${contact.last_name.toLowerCase()}`;
         if (!existingNames.has(key)) {
           const { error } = await supabase.from('contacts').insert({
             space_id: bulkTargetSpaceId,
             owner_id: user.id,
+            shared_contact_id: contact.shared_contact_id || contact.id, // Transmettre le lien de clonage
             first_name: contact.first_name,
             last_name: contact.last_name,
             company: contact.company,
@@ -208,8 +209,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
           .from('contacts')
           .delete()
           .eq('space_id', bulkTargetSpaceId)
-          .eq('first_name', contact.first_name)
-          .eq('last_name', contact.last_name);
+          .eq('shared_contact_id', contact.shared_contact_id || contact.id);
         if (error) throw error;
       }
 
@@ -297,8 +297,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
     try {
       // Find current spaces where contact with this name exists
       const currentSpaces = contacts
-        .filter(c => c.first_name.toLowerCase() === contactDetails.first_name.toLowerCase() && 
-                     c.last_name.toLowerCase() === contactDetails.last_name.toLowerCase())
+        .filter(c => 
+          (contactDetails.shared_contact_id && c.shared_contact_id === contactDetails.shared_contact_id) ||
+          c.id === contactDetails.id ||
+          (c.first_name.toLowerCase() === contactDetails.first_name.toLowerCase() && c.last_name.toLowerCase() === contactDetails.last_name.toLowerCase())
+        )
         .map(c => c.space_id);
 
       // 1. Add to new spaces
@@ -307,6 +310,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
         const { error } = await supabase.from('contacts').insert({
           space_id: spaceId,
           owner_id: user.id,
+          shared_contact_id: contactDetails.shared_contact_id || contactDetails.id,
           first_name: contactDetails.first_name,
           last_name: contactDetails.last_name,
           company: contactDetails.company,
@@ -330,8 +334,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
           .from('contacts')
           .delete()
           .eq('space_id', spaceId)
-          .eq('first_name', contactDetails.first_name)
-          .eq('last_name', contactDetails.last_name);
+          .eq('shared_contact_id', contactDetails.shared_contact_id || contactDetails.id);
         if (error) throw error;
       }
 
@@ -450,9 +453,14 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
         recognitionRef.current.stop();
         setIsDictating(false);
       }
+      
+      const targetContact = contacts.find(c => c.id === contactId);
+      if (!targetContact) throw new Error("Contact introuvable");
+
       const { error } = await supabase.from('contacts').update({
         [field]: editValue
-      }).eq('id', contactId);
+      })
+      .eq('shared_contact_id', targetContact.shared_contact_id || targetContact.id);
       
       if (error) throw error;
       
@@ -524,7 +532,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
         email: fullEditData.email,
         phone: fullEditData.phone,
         linkedin: fullEditData.linkedin
-      }).eq('id', contactDetails.id);
+      })
+      .eq('shared_contact_id', contactDetails.shared_contact_id || contactDetails.id);
 
       if (error) throw error;
       await onRefreshData();
@@ -561,6 +570,25 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
           (c.job_title && c.job_title.toLowerCase().includes(term))
       );
     }
+
+    // Deduplicate visually when viewing "Toutes les galaxies"
+    if (!selectedSpaceId) {
+      const uniqueContactsMap = new Map();
+      list.forEach(c => {
+        // Utiliser le shared_contact_id en priorité, sinon on retombe sur le nom (avant migration complète)
+        const key = c.shared_contact_id || `${(c.first_name || '').toLowerCase().trim()}|${(c.last_name || '').toLowerCase().trim()}`;
+        if (!uniqueContactsMap.has(key)) {
+          uniqueContactsMap.set(key, { ...c, _all_space_ids: [c.space_id] });
+        } else {
+          const existing = uniqueContactsMap.get(key);
+          if (!existing._all_space_ids.includes(c.space_id)) {
+            existing._all_space_ids.push(c.space_id);
+          }
+        }
+      });
+      list = Array.from(uniqueContactsMap.values());
+    }
+
     return list;
   }, [contacts, selectedSpaceId, searchTerm, filterType]);
 
@@ -1097,7 +1125,15 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                     </div>
                     <div>
                       <h3 style={styles.name}>{c.first_name} {c.last_name}</h3>
-                      <span style={styles.spaceBadge}>{spaceName}</span>
+                      {c._all_space_ids ? (
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                          {c._all_space_ids.map((sid: string) => (
+                            <span key={sid} style={styles.spaceBadge}>{spaces.find(s => s.id === sid)?.name || 'Espace inconnu'}</span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span style={styles.spaceBadge}>{spaceName}</span>
+                      )}
                     </div>
                   </div>
 

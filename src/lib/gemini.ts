@@ -1120,6 +1120,24 @@ Retourne UNIQUEMENT un tableau JSON :
 }
 
 /**
+ * Retrieve cached Oracle V3 result without running the pipeline
+ */
+export function getCachedOracleV3Result(contacts: any[]): OracleV3Result | null {
+  if (!contacts || contacts.length === 0) return null;
+  const cacheKey = `circl_oracle_v3_${contacts.length}_${contacts.map(c => c.id).sort().join(',').substring(0, 100)}`;
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    try {
+      const parsed = JSON.parse(cached);
+      if (parsed.timestamp && Date.now() - parsed.timestamp < 3600000) {
+        return parsed as OracleV3Result;
+      }
+    } catch { /* ignore */ }
+  }
+  return null;
+}
+
+/**
  * MASTER ORCHESTRATOR — Runs the full 4-pass pipeline
  */
 export async function runOracleV3Pipeline(

@@ -800,7 +800,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
               <div style={{ flexGrow: 1 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                   <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff' }}>
-                    Enrichissement IA en cours (Gemini)...
+                    Enrichissement IA en cours (Web)...
                   </span>
                   <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                     {bulkProgress.errors > 0 && (
@@ -1308,7 +1308,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={styles.aiContextTitle}>
                     <Sparkles size={14} color="var(--neon-purple)" />
-                    <span>Synthèse IA (Gemini)</span>
+                    <span>Synthèse IA</span>
                   </div>
                   {editingField !== 'ai_context' ? (
                     <button 
@@ -1505,13 +1505,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
             <div style={styles.infoBlock}>
               <div style={styles.blockTitleHeader}>
                 <Sparkles size={14} color="var(--neon-purple)" />
-                <h4 style={styles.blockTitle}>Synergies IA (Gemini)</h4>
+                <h4 style={styles.blockTitle}>Synergies IA</h4>
               </div>
               
               {!isGeminiConfigured() ? (
                 <div style={styles.synergyNotice}>
                   <Key size={14} color="var(--text-muted)" style={{ marginRight: 6 }} />
-                  <span style={styles.emptyText}>Clé Gemini requise pour activer l'Oracle.</span>
+                  <span style={styles.emptyText}>Clé IA requise pour activer l'Oracle.</span>
                 </div>
               ) : !hasSearchedSynergies && !loadingSynergies ? (
                 <button 
@@ -1603,7 +1603,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                   className="btn-primary"
                   style={{ flex: 1, fontSize: '0.75rem', padding: '8px 12px', opacity: autoEnrichingSingle ? 0.7 : 1 }}
                 >
-                  {autoEnrichingSingle ? 'Recherche en cours...' : '✨ Auto-Enrichir (Google)'}
+                  {autoEnrichingSingle ? 'Recherche en cours...' : '✨ Auto-Enrichir (Web)'}
                 </button>
                 {!showEnrichForm && (
                   <button 

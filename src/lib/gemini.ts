@@ -682,6 +682,11 @@ export interface NormalizedProfile {
   painPoints: string[];
   collaborationOpenness: number;
   topicsOfInterest: string[];
+  // Business-oriented fields
+  budgetAuthority: 'none' | 'influencer' | 'decision-maker' | 'budget-holder';
+  businessIntent: string; // What are they actively trying to achieve (deal, hire, raise, sell...)
+  networkValue: 'connector' | 'influencer' | 'specialist' | 'dormant';
+  buyingSignals: string[]; // Signs they might pay for services or solutions
 }
 
 /**
@@ -716,11 +721,16 @@ export interface DeepOpportunity {
   title: string;
   description: string;
   targetCluster: string;
-  demandScore: number; // 1-10: how many people need this
-  feasibilityScore: number; // 1-10: how feasible based on user skills
+  demandScore: number;
+  feasibilityScore: number;
   relevantContacts: { id: string; name: string; role: string; company: string; reason: string }[];
   actionPlan: string[];
   estimatedImpact: string;
+  // Revenue-oriented fields
+  revenueModel: string;   // How does this make money (commission, fee, subscription, equity...)
+  estimatedRevenue: string; // Rough revenue estimate (e.g. "2k-5k€/mois")
+  timeToRevenue: string;   // How fast ("1 semaine", "1 mois", "3 mois")
+  urgency: 'immediate' | 'short-term' | 'medium-term';
 }
 
 /**
@@ -802,12 +812,14 @@ export async function extractNormalizedProfiles(
       };
     });
 
-    const prompt = `Tu es un algorithme d'extraction de données. Pour chaque contact ci-dessous, extrais un profil normalisé.
+    const prompt = `Tu es un analyste d'intelligence commerciale (Business Intelligence). Pour chaque contact ci-dessous, extrais un profil orienté BUSINESS et MONÉTISATION.
+
+Contexte : L'utilisateur de ce réseau est un professionnel qui veut monétiser ses connexions (mise en relation, consulting, freelance, levée de fonds, politique, événementiel). Ton but est d'extraire les signaux COMMERCIAUX de chaque profil.
 
 Contacts à analyser :
 ${JSON.stringify(batchData, null, 2)}
 
-Pour CHAQUE contact, extrais les informations suivantes. Si une donnée n'est pas disponible, déduis-la intelligemment du poste, secteur et contexte.
+Pour CHAQUE contact, extrais les informations suivantes. Si une donnée n'est pas disponible, DÉDUIS-la intelligemment du poste, secteur et contexte. Sois PRÉCIS et CONCRET, pas générique.
 
 Retourne un tableau JSON avec cette structure exacte pour chaque contact :
 [
@@ -815,14 +827,18 @@ Retourne un tableau JSON avec cette structure exacte pour chaque contact :
     "contactId": "l'ID du contact",
     "name": "Nom complet",
     "sector": "Secteur d'activité normalisé (ex: FinTech, EdTech, SaaS, Immobilier, Santé, Consulting, etc.)",
-    "roleCategory": "Catégorie de rôle : Décideur | Technique | Commercial | Créatif | Opérationnel | Support",
+    "roleCategory": "Décideur | Technique | Commercial | Créatif | Opérationnel | Support",
     "seniority": "Junior | Mid | Senior | C-Level | Fondateur",
-    "explicitNeeds": ["Besoins EXPLICITEMENT mentionnés dans les notes ou bio"],
-    "inferredNeeds": ["Besoins DÉDUITS du poste et secteur (ex: un CTO a besoin de recrutement tech, un CEO de levée de fonds)"],
-    "skillsOffered": ["Ce que cette personne PEUT offrir à d'autres (compétences, réseau, expertise)"],
-    "painPoints": ["Frustrations ou problèmes probables vu le contexte"],
+    "explicitNeeds": ["Besoins EXPLICITEMENT mentionnés dans les notes ou bio — sois très spécifique"],
+    "inferredNeeds": ["Besoins DÉDUITS du poste et secteur. Pense business : un CEO cherche des clients/investisseurs, un CTO cherche des devs, un commercial cherche des leads, un freelance cherche des missions"],
+    "skillsOffered": ["Ce que cette personne PEUT VENDRE ou OFFRIR concrètement (expertise précise, réseau dans un secteur, pouvoir de décision, budget)"],
+    "painPoints": ["Frustrations BUSINESS : manque de clients, coût d'acquisition trop élevé, difficulté à recruter, manque de financement, etc."],
     "collaborationOpenness": 3,
-    "topicsOfInterest": ["Sujets qui les passionnent, déduits du profil"]
+    "topicsOfInterest": ["Sujets business qui les passionnent"],
+    "budgetAuthority": "none | influencer | decision-maker | budget-holder",
+    "businessIntent": "Que cherche activement cette personne ? (recruter, vendre, lever des fonds, trouver des partenaires, se former, pivoter, etc.)",
+    "networkValue": "connector | influencer | specialist | dormant",
+    "buyingSignals": ["Signaux d'achat : cherche un prestataire, recrute, lève des fonds, lance un nouveau projet, change de poste, croissance rapide"]
   }
 ]`;
 
@@ -912,18 +928,24 @@ export async function buildSupplyDemandAnalysis(
 
   onProgress?.(10);
 
-  // Build condensed data for the prompt
+  // Build condensed data for the prompt — include business signals
   const profilesSummary = profiles.map(p => ({
     id: p.contactId,
     name: p.name,
     needs: [...p.explicitNeeds, ...p.inferredNeeds],
     skills: p.skillsOffered,
-    sector: p.sector
+    sector: p.sector,
+    seniority: p.seniority,
+    budgetAuthority: p.budgetAuthority || 'none',
+    buyingSignals: p.buyingSignals || [],
+    businessIntent: p.businessIntent || ''
   }));
 
-  const prompt = `Tu es un analyste de réseau expert. Ton rôle est de construire une MATRICE OFFRE/DEMANDE complète à partir de ce réseau professionnel.
+  const prompt = `Tu es un analyste en intelligence de réseau pour des professionnels de la mise en relation, du consulting, du freelance, de la levée de fonds et de l'événementiel.
 
-Profils du réseau :
+Ton objectif : identifier les besoins MONÉTISABLES dans ce réseau. Un besoin monétisable = un problème pour lequel quelqu'un est PRÊT À PAYER (en argent, en temps, en accès).
+
+Profils du réseau (avec signaux d'achat) :
 ${JSON.stringify(profilesSummary, null, 2)}
 
 Clusters détectés :
@@ -933,15 +955,22 @@ Profil de l'utilisateur (propriétaire du réseau) :
 ${JSON.stringify(userProfile, null, 2)}
 
 INSTRUCTIONS :
-1. Identifie TOUS les besoins majeurs exprimés ou déduits dans le réseau (jusqu'à 15 besoins)
-2. Pour chaque besoin, liste QUI en a besoin (demandeurs) et QUI peut y répondre (fournisseurs)
-3. Évalue le niveau de couverture : "covered" (offre >= demande), "partial" (quelques fournisseurs mais pas assez), "opportunity" (forte demande, pas d'offre interne)
-4. Indique si l'utilisateur pourrait combler ce gap avec ses compétences (opportunityForUser)
+1. Identifie les 10-15 besoins les plus CONCRETS et MONÉTISABLES du réseau
+2. Priorise les besoins où il y a des signaux d'achat (gens qui cherchent activement, qui ont le budget, qui sont en phase de décision)
+3. Pour chaque besoin, identifie les demandeurs ET les fournisseurs potentiels dans le réseau
+4. Évalue le gap : "covered" (offre suffisante), "partial" (quelques fournisseurs), "opportunity" (forte demande, pas d'offre → le user peut intervenir)
+5. Indique si le user peut combler ce gap avec ses compétences
 
-Retourne UNIQUEMENT un tableau JSON avec cette structure :
+EXEMPLES de besoins monétisables :
+- "Besoin de développeurs React/Next.js pour un projet 6 mois" (pas juste "besoin tech")
+- "Recherche d'investisseurs seed pour SaaS B2B (300-500K€)" (pas juste "financement")
+- "Besoin d'un consultant growth pour atteindre 100 clients" (pas juste "croissance")
+- "Recherche de partenaires commerciaux sur le marché français" (pas juste "partenariats")
+
+Retourne UNIQUEMENT un tableau JSON :
 [
   {
-    "need": "Description du besoin (ex: Expertise en IA générative)",
+    "need": "Description PRÉCISE et CHIFFRÉE du besoin monétisable",
     "demanders": [{ "id": "ID contact", "name": "Nom" }],
     "suppliers": [{ "id": "ID contact", "name": "Nom" }],
     "gapLevel": "covered" | "partial" | "opportunity",
@@ -949,7 +978,7 @@ Retourne UNIQUEMENT un tableau JSON avec cette structure :
   }
 ]
 
-Trie les résultats par importance : les "opportunity" d'abord, puis "partial", puis "covered".`;
+Trie par potentiel de monétisation : "opportunity" avec budget-holders d'abord.`;
 
   onProgress?.(30);
 
@@ -1061,7 +1090,9 @@ export async function deepUserOpportunityAnalysis(
   const gaps = supplyDemand.filter(sd => sd.gapLevel === 'opportunity' || sd.gapLevel === 'partial');
   const userOpportunities = supplyDemand.filter(sd => sd.opportunityForUser);
 
-  const prompt = `Tu es un Business Strategist de haut niveau. Tu dois analyser en profondeur les opportunités que l'utilisateur peut saisir dans son réseau professionnel.
+  const prompt = `Tu es un Business Strategist et Deal Maker de haut niveau. Tu conseilles des professionnels qui monétisent leur réseau : consultants, freelances, connecteurs, entrepreneurs, lobbyistes, leveurs de fonds, organisateurs d'événements.
+
+Ton but : trouver les DEALS CACHÉS dans ce réseau. Pas des idées vagues — des opportunités concrètes avec un modèle de revenu clair.
 
 ## PROFIL DE L'UTILISATEUR (celui qui possède le réseau)
 ${JSON.stringify(userProfile, null, 2)}
@@ -1070,50 +1101,67 @@ ${JSON.stringify(userProfile, null, 2)}
 ${JSON.stringify(clusters.map(c => ({
     name: c.clusterName,
     theme: c.theme,
-    members: c.members.length,
+    memberCount: c.members.length,
     commonNeeds: c.commonNeeds,
     commonSkills: c.commonSkills
   })), null, 2)}
 
-## GAPS IDENTIFIÉS (Besoins non couverts)
+## GAPS IDENTIFIÉS (Besoins monétisables non couverts)
 ${JSON.stringify(gaps, null, 2)}
 
 ## OPPORTUNITÉS SPÉCIFIQUES POUR L'UTILISATEUR
 ${JSON.stringify(userOpportunities, null, 2)}
 
-## PROFILS DÉTAILLÉS DES CONTACTS
+## PROFILS DÉTAILLÉS DES CONTACTS (avec signaux d'achat)
 ${JSON.stringify(profiles.map(p => ({
     name: p.name,
     sector: p.sector,
-    needs: [...p.explicitNeeds, ...p.inferredNeeds].slice(0, 3),
-    skills: p.skillsOffered.slice(0, 3)
+    seniority: p.seniority,
+    needs: [...p.explicitNeeds, ...p.inferredNeeds].slice(0, 4),
+    skills: p.skillsOffered.slice(0, 3),
+    budgetAuthority: p.budgetAuthority || 'none',
+    buyingSignals: p.buyingSignals || [],
+    businessIntent: p.businessIntent || ''
   })), null, 2)}
 
-ANALYSE EN PROFONDEUR et génère jusqu'à 8 opportunités concrètes réparties en 4 catégories :
+GÉNÈRE jusqu'à 8 opportunités concrètes. Pour chaque opportunité, pense comme un deal maker :
+- QUI paie ? (le client, un sponsor, une commission ?)
+- COMBIEN ? (estimation réaliste en euros)
+- QUAND ? (immédiat, 1 mois, 3 mois)
+- COMMENT tu te fais payer ? (prestation, commission d'apporteur d'affaires, abonnement, ticket d'entrée, equity)
 
-1. **"service"** : Prestations de consulting, formation, ou accompagnement que l'utilisateur peut vendre à son réseau
-2. **"product"** : Produits numériques (SaaS, templates, outils) à créer pour répondre à un besoin récurrent
-3. **"connection"** : Introductions stratégiques à orchestrer entre contacts (l'utilisateur joue le rôle de connecteur)
-4. **"event"** : Événements, masterclasses ou cercles de réflexion à organiser pour fédérer des clusters
-
-Pour chaque opportunité, sois TRÈS CONCRET et ACTIONNABLE. Pas de généralités.
+Répartis en 4 catégories :
+1. **"service"** : Missions de consulting, formations payantes, accompagnement stratégique, coaching
+2. **"product"** : Produits numériques (SaaS, templates, guides premium, outils) pour un besoin récurrent
+3. **"connection"** : Mise en relation à haute valeur. L'utilisateur joue le BROKER : il prend une commission ou renforce sa position en orchestrant le deal
+4. **"event"** : Dîners privés, masterclasses, cercles de réflexion exclusifs avec un ticket d'entrée ou des sponsors
 
 Retourne UNIQUEMENT un tableau JSON :
 [
   {
     "category": "service" | "product" | "connection" | "event",
-    "title": "Nom concret de l'opportunité",
-    "description": "Description détaillée en 2-3 phrases",
+    "title": "Nom concret et vendeur (ex: 'Sprint Acquisition Client pour fondateurs SaaS')",
+    "description": "Description en 2-3 phrases qui donne envie d'agir",
     "targetCluster": "Nom du cluster ciblé",
     "demandScore": 8,
     "feasibilityScore": 7,
     "relevantContacts": [
-      { "id": "ID", "name": "Nom", "role": "Poste", "company": "Entreprise", "reason": "Pourquoi ce contact est pertinent (prospect, partenaire, ambassadeur)" }
+      { "id": "ID", "name": "Nom", "role": "Poste", "company": "Entreprise", "reason": "Prospect / Partenaire / Ambassadeur / Sponsor — et pourquoi" }
     ],
-    "actionPlan": ["Étape 1 concrète", "Étape 2 concrète", "Étape 3 concrète"],
-    "estimatedImpact": "Impact estimé (ex: 5 clients potentiels, 3 partenariats, revenus récurrents possibles)"
+    "actionPlan": ["Action 1 faisable CETTE SEMAINE", "Action 2 dans les 2 semaines", "Action 3 dans le mois"],
+    "estimatedImpact": "Impact business concret (ex: 5 clients à 2K€, 3 partenariats qui ouvrent 50 leads)",
+    "revenueModel": "Comment tu gagnes de l'argent (ex: commission 10% sur mise en relation, 3K€/jour de consulting, ticket 200€/personne)",
+    "estimatedRevenue": "Estimation réaliste (ex: 5K-15K€ sur 3 mois)",
+    "timeToRevenue": "Délai estimé (ex: 2 semaines, 1 mois, 3 mois)",
+    "urgency": "immediate | short-term | medium-term"
   }
-]`;
+]
+
+RÈGLES :
+- Priorise les opportunités "immediate" avec des budget-holders identifiés
+- Sois CONCRET sur les montants — mieux vaut une fourchette réaliste que pas de chiffre
+- Chaque contact dans "relevantContacts" doit avoir une raison SPÉCIFIQUE (pas juste "intéressé par le sujet")
+- L'action plan doit être faisable par UNE personne sans budget initial`;
 
   onProgress?.(50);
 

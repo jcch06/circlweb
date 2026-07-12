@@ -535,10 +535,19 @@ const OpportunityCard: React.FC<{ opportunity: DeepOpportunity }> = ({ opportuni
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
             <span style={{ background: `${config.color}20`, color: config.color, padding: '3px 10px', borderRadius: 99, fontSize: '0.72rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, textTransform: 'uppercase' }}>
               {config.icon} {config.label}
             </span>
+            {opp.urgency && (
+              <span style={{ 
+                background: opp.urgency === 'immediate' ? 'rgba(255, 59, 48, 0.15)' : opp.urgency === 'short-term' ? 'rgba(255, 159, 10, 0.15)' : 'rgba(255,255,255,0.05)',
+                color: opp.urgency === 'immediate' ? '#ff3b30' : opp.urgency === 'short-term' ? '#ff9f0a' : 'var(--text-muted)',
+                padding: '3px 10px', borderRadius: 99, fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase'
+              }}>
+                {opp.urgency === 'immediate' ? '🔥 Urgent' : opp.urgency === 'short-term' ? '⚡ Court terme' : '📅 Moyen terme'}
+              </span>
+            )}
             <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
               Cluster : {opp.targetCluster}
             </span>
@@ -546,6 +555,30 @@ const OpportunityCard: React.FC<{ opportunity: DeepOpportunity }> = ({ opportuni
           <h4 style={{ color: '#fff', fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>{opp.title}</h4>
         </div>
       </div>
+
+      {/* Revenue Section */}
+      {(opp.revenueModel || opp.estimatedRevenue) && (
+        <div style={{ background: 'linear-gradient(135deg, rgba(48, 192, 96, 0.08), rgba(79, 142, 247, 0.08))', border: '1px solid rgba(48, 192, 96, 0.2)', borderRadius: 10, padding: 14, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          {opp.estimatedRevenue && (
+            <div>
+              <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block', marginBottom: 2 }}>Revenu estimé</span>
+              <span style={{ fontSize: '1rem', color: 'var(--neon-green)', fontWeight: 800 }}>{opp.estimatedRevenue}</span>
+            </div>
+          )}
+          {opp.revenueModel && (
+            <div>
+              <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block', marginBottom: 2 }}>Modèle</span>
+              <span style={{ fontSize: '0.82rem', color: 'var(--neon-blue)', fontWeight: 600 }}>{opp.revenueModel}</span>
+            </div>
+          )}
+          {opp.timeToRevenue && (
+            <div>
+              <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block', marginBottom: 2 }}>Délai</span>
+              <span style={{ fontSize: '0.82rem', color: 'var(--neon-yellow)', fontWeight: 600 }}>{opp.timeToRevenue}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Scores */}
       <div style={{ display: 'flex', gap: 16 }}>

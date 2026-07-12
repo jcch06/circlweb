@@ -399,8 +399,18 @@ Retourne STRICTEMENT ce JSON :
   try {
     // Sanitize text: remove markdown code block formatting if present
     if (text.includes('```')) {
-      text = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
     }
+    
+    // Fallback for truncated JSON (sometimes the LLM stops right after the last string quote)
+    text = text.trim();
+    if (text.startsWith('{') && !text.endsWith('}')) {
+      // If it ends with a quote, it just missed the closing brace
+      if (text.endsWith('"')) {
+        text += '\n}';
+      }
+    }
+    
     return JSON.parse(text);
   } catch (err) {
     console.error("Gemini JSON Parse Error. Raw text:", text);

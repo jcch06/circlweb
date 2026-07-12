@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { detectContactSynergies, enrichProfileFromScraping, autoEnrichContact, isGeminiConfigured } from '../lib/gemini';
+import { detectContactSynergies, enrichProfileFromScraping, autoEnrichContact, isGeminiConfigured, isPerplexityConfigured } from '../lib/gemini';
 import type { ContactSynergy } from '../lib/gemini';
 import { 
   Users, 
@@ -612,8 +612,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
 
   const handleAutoEnrichSingle = async () => {
     if (!contactDetails) return;
-    if (!isGeminiConfigured()) {
-      alert("Clé Gemini requise pour la recherche web automatique.");
+    if (!isPerplexityConfigured()) {
+      alert("Clé Perplexity requise pour la recherche web automatique.");
       return;
     }
 

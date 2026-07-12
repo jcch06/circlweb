@@ -14,6 +14,11 @@ export const isGeminiConfigured = () => {
   return client !== null;
 };
 
+export const isPerplexityConfigured = () => {
+  const key = import.meta.env.VITE_PERPLEXITY_API_KEY;
+  return key && key.trim().length > 0;
+};
+
 
 // Interface definitions for the return schemas
 export interface SynergyResult {
@@ -397,9 +402,9 @@ export async function autoEnrichContact(contact: {
   bio?: string;
   location?: string;
 }): Promise<EnrichmentResult> {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!apiKey || apiKey === 'YOUR_GEMINI_API_KEY_HERE') {
-    throw new Error("Gemini API key is not configured");
+  const perplexityKey = import.meta.env.VITE_PERPLEXITY_API_KEY;
+  if (!perplexityKey) {
+    throw new Error("Perplexity API key is not configured");
   }
 
   // Validate before even calling the API
@@ -431,25 +436,30 @@ Retourne UNIQUEMENT un objet JSON valide avec cette structure exacte, sans markd
 }`;
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+    `https://api.perplexity.ai/chat/completions`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Authorization': `Bearer ${perplexityKey}`,
+        'Content-Type': 'application/json' 
+      },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        tools: [{ googleSearch: {} }],
-        generationConfig: { responseMimeType: 'application/json' },
+        model: 'sonar',
+        messages: [
+          { role: 'system', content: 'You are a strict data extraction assistant. Always output only valid JSON without any markdown or extra text.' },
+          { role: 'user', content: prompt }
+        ]
       }),
     }
   );
 
   if (!response.ok) {
     const err = await response.text();
-    throw new Error(`Gemini API error: ${response.status} — ${err}`);
+    throw new Error(`Perplexity API error: ${response.status} — ${err}`);
   }
 
   const data = await response.json();
-  let text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+  let text = data.choices?.[0]?.message?.content || '{}';
 
   // Sanitize markdown wrappers if present
   text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();

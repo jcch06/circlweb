@@ -219,7 +219,9 @@ export function kMeansClustering(
 export function findOptimalK(data: number[][], maxK?: number): number {
   if (data.length <= 2) return 1;
 
-  const effectiveMaxK = maxK ?? Math.min(8, Math.floor(data.length / 2));
+  // Enforce sensible K range: at least 3 clusters for 6+ contacts
+  const minK = data.length >= 6 ? 3 : 2;
+  const effectiveMaxK = maxK ?? Math.min(8, Math.max(minK + 1, Math.floor(data.length / 2)));
   if (effectiveMaxK <= 1) return 1;
 
   const inertias: number[] = [];
@@ -230,9 +232,7 @@ export function findOptimalK(data: number[][], maxK?: number): number {
   }
 
   // Find the elbow: the k where the second derivative is maximized.
-  // secondDerivative[i] = inertias[i-1] - 2*inertias[i] + inertias[i+1]
-  // This is defined for i in [1, effectiveMaxK - 2] (0-indexed).
-  let bestElbowIdx = 0; // 0-indexed into inertias, so k = bestElbowIdx + 1
+  let bestElbowIdx = minK - 1; // Default to minK
   let bestSecondDeriv = -Infinity;
 
   for (let i = 1; i < inertias.length - 1; i++) {
@@ -243,8 +243,8 @@ export function findOptimalK(data: number[][], maxK?: number): number {
     }
   }
 
-  // k is 1-indexed
-  return bestElbowIdx + 1;
+  // k is 1-indexed, enforce minimum
+  return Math.max(minK, bestElbowIdx + 1);
 }
 
 // ─── Betweenness Centrality ──────────────────────────────────────────────────

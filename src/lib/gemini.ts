@@ -1007,23 +1007,28 @@ export async function nameClusters(
       .map(m => m.contactId)
   }));
 
-  const prompt = `Tu es un expert en analyse de communautés. Voici des groupes de personnes regroupées automatiquement par proximité sémantique (besoins, compétences, secteurs similaires).
+  const prompt = `Tu es un expert en analyse de communautés. Voici des groupes de personnes regroupées AUTOMATIQUEMENT par proximité sémantique (via un algorithme K-means sur des embeddings vectoriels).
 
-Pour chaque cluster, donne-lui un nom accrocheur et identifie son thème principal, ses besoins communs et ses compétences partagées.
+RÈGLES STRICTES :
+1. CHAQUE PERSONNE N'APPARAÎT QUE DANS UN SEUL CLUSTER. Ne duplique JAMAIS un contact dans plusieurs clusters.
+2. Les membres de chaque cluster sont CEUX QUI SONT LISTÉS dans le cluster — tu ne peux PAS les déplacer.
+3. Donne un nom accrocheur au cluster qui capture PRÉCISÉMENT le point commun de ces personnes spécifiques.
+4. Les "commonNeeds" et "commonSkills" doivent être des choses que la MAJORITÉ des membres du cluster partagent réellement, pas des généralités.
+5. Si un cluster contient des profils très variés, sois honnête dans le thème (ex: "Profils entrepreneuriaux diversifiés") plutôt que d'inventer un lien artificiel.
 
-Clusters :
+Clusters (groupements calculés par K-means) :
 ${JSON.stringify(clustersData, null, 2)}
 
-Retourne un tableau JSON avec cette structure exacte :
+Retourne un tableau JSON avec cette structure exacte. GARDE EXACTEMENT les mêmes membres dans chaque cluster, ne modifie pas les groupements :
 [
   {
     "clusterId": 0,
-    "clusterName": "Nom accrocheur du groupe (ex: Les Architectes du Digital)",
-    "theme": "Thème principal en une phrase (ex: Transformation digitale et innovation produit)",
-    "members": [{ "id": "ID", "name": "Nom", "role": "Rôle", "company": "Entreprise" }],
-    "commonNeeds": ["Besoin partagé 1", "Besoin partagé 2"],
-    "commonSkills": ["Compétence commune 1", "Compétence commune 2"],
-    "bridgeContacts": ["IDs des contacts qui font le pont avec d'autres clusters"]
+    "clusterName": "Nom accrocheur et PRÉCIS du groupe",
+    "theme": "Thème principal en une phrase courte",
+    "members": [{ "id": "ID ORIGINAL du contact", "name": "Nom", "role": "Rôle", "company": "Entreprise" }],
+    "commonNeeds": ["Besoin vraiment partagé par la majorité"],
+    "commonSkills": ["Compétence vraiment commune"],
+    "bridgeContacts": ["IDs des contacts qui font le pont"]
   }
 ]`;
 
@@ -1183,9 +1188,25 @@ export async function runOracleV3Pipeline(
     const vectors = embeddings.map(e => e.embedding);
     const simMatrix = buildSimilarityMatrix(vectors);
     
-    // Find optimal K and cluster
-    const optimalK = findOptimalK(vectors);
-    const { clusters: assignments } = kMeansClustering(vectors, optimalK);
+    // Find optimal K — enforce minimum granularity
+    let optimalK = findOptimalK(vectors);
+    // For bigger networks, be more aggressive with splitting
+    if (vectors.length >= 10) optimalK = Math.max(optimalK, 4);
+    if (vectors.length >= 20) optimalK = Math.max(optimalK, 5);
+    
+    let { clusters: assignments } = kMeansClustering(vectors, optimalK);
+    
+    // Post-check: if any cluster has > 40% of contacts, increase K and retry
+    const maxClusterSize = Math.ceil(vectors.length * 0.4);
+    const clusterSizes = new Map<number, number>();
+    assignments.forEach(c => clusterSizes.set(c, (clusterSizes.get(c) || 0) + 1));
+    const hasOversizedCluster = Array.from(clusterSizes.values()).some(size => size > maxClusterSize);
+    
+    if (hasOversizedCluster && optimalK < vectors.length - 1) {
+      const newK = Math.min(optimalK + 2, Math.floor(vectors.length / 2));
+      const result2 = kMeansClustering(vectors, newK);
+      assignments = result2.clusters;
+    }
     
     // Compute bridge contacts
     const centrality = computeBetweennessCentrality(simMatrix, 0.4);

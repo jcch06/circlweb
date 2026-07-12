@@ -200,6 +200,7 @@ function App() {
               tags={tags}
               spaces={spaces}
               selectedSpaceId={selectedSpaceId}
+              user={session.user}
             />
           )}
 

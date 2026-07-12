@@ -59,6 +59,23 @@ export interface EnrichmentResult {
   aiContext: string;
 }
 
+export interface GroupSynergyResult {
+  clusterName: string;
+  commonNeeds: string[];
+  members: { id: string; name: string; role: string; company: string }[];
+  potentialService: string;
+  matchReason: string;
+}
+
+export interface UserOpportunityResult {
+  opportunityTitle: string;
+  targetAudience: string;
+  problemSolved: string;
+  proposedSolution: string;
+  relevantContacts: { id: string; name: string; role: string; company: string }[];
+  actionPlan: string;
+}
+
 /**
  * 1. Synergy Detector
  * Compares contacts' needs and skills to find complementary matches
@@ -473,5 +490,168 @@ Retourne UNIQUEMENT un objet JSON valide avec cette structure exacte, sans markd
     const end = cleaned.lastIndexOf('}');
     if (start !== -1 && end !== -1) cleaned = cleaned.substring(start, end + 1);
     return JSON.parse(cleaned);
+  }
+}
+
+/**
+ * 7. Advanced Group Synergies
+ * Analyzes the entire network to find clusters of people with common needs/interests.
+ */
+export async function detectGroupSynergies(contacts: any[], notes: any[]): Promise<GroupSynergyResult[]> {
+  const genAI = getGeminiClient();
+  if (!genAI) throw new Error("Gemini API key is not configured");
+
+  const model = genAI.getGenerativeModel({
+    model: "gemini-1.5-flash",
+    generationConfig: { responseMimeType: "application/json" }
+  });
+
+  const networkData = contacts.map(c => {
+    const contactNotes = notes.filter(n => n.contact_id === c.id).map(n => n.content).join(" | ");
+    return {
+      id: c.id,
+      name: `${c.first_name} ${c.last_name}`,
+      company: c.company || 'Inconnue',
+      role: c.job_title || 'Inconnu',
+      needs: c.inferred_needs || [],
+      skills: c.skills || [],
+      bio: c.bio || '',
+      notes: contactNotes
+    };
+  });
+
+  const prompt = `Tu es un expert en analyse de réseaux (Network Science). Ton but est d'analyser ce réseau professionnel pour identifier des "clusters" (groupes de personnes) ayant des besoins, défis ou intérêts communs.
+
+Voici les membres du réseau avec leurs besoins, compétences et notes contextuelles :
+${JSON.stringify(networkData, null, 2)}
+
+Analyse tout le réseau et identifie jusqu'à 4 groupes de personnes (minimum 2 personnes par groupe) qui partagent une problématique majeure ou qui auraient intérêt à collaborer ensemble.
+
+Retourne UNIQUEMENT un tableau JSON valide avec cette structure exacte :
+[
+  {
+    "clusterName": "Nom accrocheur du groupe (ex: Les pionniers de l'IA RH)",
+    "commonNeeds": ["Besoin majeur partagé 1", "Besoin partagé 2"],
+    "members": [
+      { "id": "ID du contact", "name": "Nom complet", "role": "Poste", "company": "Entreprise" }
+    ],
+    "potentialService": "Idée de service, produit, ou événement qui pourrait résoudre leur problème commun",
+    "matchReason": "Explication détaillée de pourquoi ces personnes forment un groupe cohérent et ce qu'elles ont à gagner à se rencontrer"
+  }
+]`;
+
+  const result = await model.generateContent(prompt);
+  const text = result.response.text();
+  return JSON.parse(text);
+}
+
+/**
+ * 8. User Opportunities Brainstorming
+ * Proposes specific services or projects the SaaS user can launch to serve network clusters.
+ */
+export async function brainstormUserOpportunities(userProfile: any, contacts: any[], notes: any[]): Promise<UserOpportunityResult[]> {
+  const genAI = getGeminiClient();
+  if (!genAI) throw new Error("Gemini API key is not configured");
+
+  const model = genAI.getGenerativeModel({
+    model: "gemini-1.5-pro", // Pro model for deeper reasoning
+    generationConfig: { responseMimeType: "application/json" }
+  });
+
+  const networkData = contacts.map(c => {
+    const contactNotes = notes.filter(n => n.contact_id === c.id).map(n => n.content).join(" | ");
+    return {
+      id: c.id,
+      name: `${c.first_name} ${c.last_name}`,
+      company: c.company || '',
+      role: c.job_title || '',
+      needs: c.inferred_needs || [],
+      bio: c.bio || '',
+      notes: contactNotes
+    };
+  });
+
+  const prompt = `Tu es un conseiller stratégique (Business Strategist). Ton but est d'analyser le réseau de l'utilisateur pour lui suggérer des offres, services ou projets très concrets qu'il pourrait créer pour monétiser son réseau ou y apporter de la valeur, en te basant sur SON profil.
+
+Voici le profil de l'utilisateur (celui qui possède ce réseau) :
+${JSON.stringify(userProfile, null, 2)}
+
+Voici les contacts de son réseau avec leurs besoins et contextes :
+${JSON.stringify(networkData, null, 2)}
+
+Identifie les plus grandes opportunités (jusqu'à 4) où les compétences de l'utilisateur croisent un besoin partagé par plusieurs contacts de son réseau.
+
+Retourne UNIQUEMENT un tableau JSON valide avec cette structure exacte :
+[
+  {
+    "opportunityTitle": "Nom de l'offre/projet (ex: Création d'une formation IA pour les RH)",
+    "targetAudience": "Description du segment cible dans le réseau",
+    "problemSolved": "Quel problème profond cette opportunité résout-elle ?",
+    "proposedSolution": "Comment l'utilisateur peut-il utiliser ses compétences pour répondre à ce besoin ?",
+    "relevantContacts": [
+      { "id": "ID du contact cible", "name": "Nom", "role": "Poste", "company": "Entreprise" }
+    ],
+    "actionPlan": "Les 3 prochaines étapes concrètes pour lancer cette opportunité."
+  }
+]`;
+
+  const result = await model.generateContent(prompt);
+  const text = result.response.text();
+  return JSON.parse(text);
+}
+
+/**
+ * 9. Auto-Enrich User Profile (Perplexity)
+ */
+export async function autoEnrichUserProfile(name: string, company: string, role: string): Promise<any> {
+  const perplexityKey = import.meta.env.VITE_PERPLEXITY_API_KEY;
+  if (!perplexityKey) {
+    throw new Error("Perplexity API key is not configured");
+  }
+
+  const prompt = \`Tu es un assistant d'analyse de profil B2B. Fais une recherche approfondie sur cette personne.
+Nom : \${name}
+Poste : \${role}
+Entreprise : \${company}
+
+Trouve ses compétences probables, ses projets actuels et les défis (besoins) auxquels elle fait face dans ce rôle.
+Retourne UNIQUEMENT un objet JSON valide avec cette structure exacte :
+{
+  "skills": ["Compétence 1", "Compétence 2"],
+  "currentProjects": "Un paragraphe décrivant les missions ou projets probables...",
+  "needs": "Un paragraphe décrivant ses enjeux et défis actuels..."
+}\`;
+
+  const response = await fetch(
+    \`https://api.perplexity.ai/chat/completions\`,
+    {
+      method: 'POST',
+      headers: { 
+        'Authorization': \`Bearer \${perplexityKey}\`,
+        'Content-Type': 'application/json' 
+      },
+      body: JSON.stringify({
+        model: 'sonar',
+        messages: [
+          { role: 'system', content: 'You are a strict data extraction assistant. Always output only valid JSON without any markdown or extra text.' },
+          { role: 'user', content: prompt }
+        ]
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(\`Perplexity API error: \${response.status} — \${err}\`);
+  }
+
+  const data = await response.json();
+  let text = data.choices?.[0]?.message?.content || '{}';
+  text = text.replace(/\`\`\`json\\n?/gi, '').replace(/\`\`\`\\n?/gi, '').trim();
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { skills: [], currentProjects: "", needs: "" };
   }
 }

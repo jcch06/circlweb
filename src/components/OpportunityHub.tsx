@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   detectSynergies, 
-  brainstormProjects, 
+  detectGroupSynergies,
+  brainstormUserOpportunities,
   suggestWarmIntros,
   isGeminiConfigured
 } from '../lib/gemini';
 import type {
   SynergyResult,
-  ProjectIdea,
+  GroupSynergyResult,
+  UserOpportunityResult,
   WarmIntroSuggestion
 } from '../lib/gemini';
 import { 
@@ -20,8 +22,10 @@ import {
   X, 
   Copy, 
   Check, 
-  ArrowRight
+  ArrowRight,
+  User
 } from 'lucide-react';
+import { UserProfilePopup } from './UserProfilePopup';
 
 interface OpportunityHubProps {
   contacts: any[];
@@ -29,23 +33,25 @@ interface OpportunityHubProps {
   tags: any[];
   spaces?: any[];
   selectedSpaceId?: string | null;
+  user: any;
 }
 
-type Mode = 'synergies' | 'brainstorm' | 'intros';
+type Mode = 'synergies' | 'opportunities' | 'intros';
 
-export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes, tags: _tags, spaces = [], selectedSpaceId = null }) => {
+export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes, tags: _tags, spaces = [], selectedSpaceId = null, user }) => {
   const [activeMode, setActiveMode] = useState<Mode>('synergies');
   const [loading, setLoading] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
+  // User Profile State
+  const [showProfilePopup, setShowProfilePopup] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
+
   // State for AI results
   const [synergies, setSynergies] = useState<SynergyResult[]>([]);
-  const [projects, setProjects] = useState<ProjectIdea[]>([]);
+  const [groupSynergies, setGroupSynergies] = useState<GroupSynergyResult[]>([]);
+  const [opportunities, setOpportunities] = useState<UserOpportunityResult[]>([]);
   const [intros, setIntros] = useState<WarmIntroSuggestion[]>([]);
-
-  // Inputs for Project Brainstorming
-  const [mySkills, setMySkills] = useState<string[]>(['React', 'Node.js', 'No-Code']);
-  const [newSkill, setNewSkill] = useState('');
 
   // Inputs for Warm Intros
   const [targetCompany, setTargetCompany] = useState('');
@@ -53,22 +59,26 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
 
   const hasApiKey = isGeminiConfigured();
 
-  const handleAddSkill = () => {
-    if (newSkill.trim() && !mySkills.includes(newSkill.trim())) {
-      setMySkills([...mySkills, newSkill.trim()]);
-      setNewSkill('');
+  useEffect(() => {
+    if (user) {
+      const saved = localStorage.getItem(`circl_user_profile_${user.id}`);
+      if (saved) {
+        setUserProfile(JSON.parse(saved));
+      } else {
+        setShowProfilePopup(true); // Auto-prompt
+      }
     }
-  };
-
-  const handleRemoveSkill = (skill: string) => {
-    setMySkills(mySkills.filter(s => s !== skill));
-  };
+  }, [user]);
 
   const triggerSynergyDetection = async () => {
     setLoading(true);
     try {
-      const res = await detectSynergies(contacts, notes);
-      setSynergies(res);
+      const [synRes, groupRes] = await Promise.all([
+        detectSynergies(contacts, notes),
+        detectGroupSynergies(contacts, notes)
+      ]);
+      setSynergies(synRes);
+      setGroupSynergies(groupRes);
     } catch (err) {
       console.error(err);
       alert("Erreur lors de la détection des synergies. Vérifiez votre clé API.");
@@ -77,15 +87,16 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
     }
   };
 
-  const triggerProjectBrainstorm = async () => {
-    if (mySkills.length === 0) {
-      alert("Veuillez renseigner au moins une compétence.");
+  const triggerUserOpportunitiesBrainstorm = async () => {
+    if (!userProfile || !userProfile.name) {
+      alert("Veuillez d'abord remplir votre profil (Bouton 'Mon Profil' en haut) !");
+      setShowProfilePopup(true);
       return;
     }
     setLoading(true);
     try {
-      const res = await brainstormProjects(mySkills, contacts, notes);
-      setProjects(res);
+      const res = await brainstormUserOpportunities(userProfile, contacts, notes);
+      setOpportunities(res);
     } catch (err) {
       console.error(err);
       alert("Erreur lors du brainstorming. Vérifiez votre clé API.");
@@ -141,9 +152,29 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
             </span>
           </div>
         </div>
-        <div style={styles.apiBadge}>
-          <Sparkles size={14} color="var(--neon-purple)" />
-          <span style={styles.apiBadgeText}>Gemini Pro Connecté</span>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <button 
+            onClick={() => setShowProfilePopup(true)}
+            className="hover-glow"
+            style={{ 
+              background: 'rgba(138, 43, 226, 0.15)', 
+              border: '1px solid var(--neon-purple)', 
+              color: '#fff', 
+              padding: '6px 12px', 
+              borderRadius: 99, 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 6,
+              fontSize: '0.8rem',
+              cursor: 'pointer'
+            }}
+          >
+            <User size={14} /> Mon Profil Oracle
+          </button>
+          <div style={styles.apiBadge}>
+            <Sparkles size={14} color="var(--neon-purple)" />
+            <span style={styles.apiBadgeText}>Gemini Pro Connecté</span>
+          </div>
         </div>
       </div>
 
@@ -174,14 +205,14 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
               style={{ ...styles.tabBtn, ...(activeMode === 'synergies' ? styles.tabBtnActive : {}) }}
             >
               <Zap size={16} />
-              Détecteur de Synergies
+              Synergies Croisées
             </button>
             <button 
-              onClick={() => setActiveMode('brainstorm')} 
-              style={{ ...styles.tabBtn, ...(activeMode === 'brainstorm' ? styles.tabBtnActive : {}) }}
+              onClick={() => setActiveMode('opportunities')} 
+              style={{ ...styles.tabBtn, ...(activeMode === 'opportunities' ? styles.tabBtnActive : {}) }}
             >
               <Lightbulb size={16} />
-              Brainstorming de Projets
+              Mes Services & Projets
             </button>
             <button 
               onClick={() => setActiveMode('intros')} 
@@ -206,150 +237,190 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                   <div style={styles.tabContent}>
                     <div style={styles.controlsRow}>
                       <p style={styles.tabDescription}>
-                        L'IA analyse les profils et les notes de vos contacts pour détecter qui a un besoin que quelqu'un d'autre peut résoudre. Utile pour faire des connexions croisées.
+                        L'IA analyse les profils et les notes de vos contacts pour détecter des groupes d'intérêts et des connexions 1-à-1 croisées.
                       </p>
                       <button onClick={triggerSynergyDetection} className="btn-primary">
-                        Lancer l'Analyse de Synergies 🚀
+                        Lancer l'Analyse Systémique 🚀
                       </button>
                     </div>
 
                     <div style={styles.resultsGrid}>
-                      {synergies.length === 0 ? (
+                      {synergies.length === 0 && groupSynergies.length === 0 ? (
                         <div style={styles.emptyResults}>
                           <span>Cliquez sur le bouton ci-dessus pour lancer la détection.</span>
                         </div>
                       ) : (
-                        synergies.map((syn, idx) => (
-                          <div key={idx} className="glass-card glow-active" style={styles.synergyCard}>
-                            <h3 style={styles.cardHeaderTitle}>{syn.title}</h3>
-                            <p style={styles.cardDescription}>{syn.description}</p>
-                            
-                            {/* The Match visualizer */}
-                            <div style={styles.matchVisualizer}>
-                              <div style={styles.matchParty}>
-                                <span style={styles.partyLabel}>A BESOIN</span>
-                                <span style={styles.partyName}>{syn.sourceContact.name}</span>
-                                <span style={styles.partyMeta}>{syn.sourceContact.role} @ {syn.sourceContact.company}</span>
-                              </div>
-                              <ArrowRight size={18} color="var(--neon-purple)" />
-                              <div style={styles.matchParty}>
-                                <span style={{ ...styles.partyLabel, color: 'var(--neon-green)' }}>A LA SOLUTION</span>
-                                <span style={styles.partyName}>{syn.targetContact.name}</span>
-                                <span style={styles.partyMeta}>{syn.targetContact.role} @ {syn.targetContact.company}</span>
-                              </div>
-                            </div>
+                        <>
+                          {groupSynergies.length > 0 && (
+                            <div style={{ gridColumn: '1 / -1', marginBottom: 24 }}>
+                              <h3 style={{ color: 'var(--neon-blue)', marginBottom: 16, borderBottom: '1px solid rgba(79, 142, 247, 0.3)', paddingBottom: 8 }}>
+                                🌌 Clusters & Synergies de Groupe
+                              </h3>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
+                                {groupSynergies.map((group, idx) => (
+                                  <div key={idx} className="glass-card glow-active" style={{ ...styles.synergyCard, borderColor: 'rgba(79, 142, 247, 0.3)' }}>
+                                    <h3 style={styles.cardHeaderTitle}>{group.clusterName}</h3>
+                                    
+                                    <div style={{ marginTop: 12 }}>
+                                      <span style={styles.boxTitle}>Besoins Partagés :</span>
+                                      <ul style={{ margin: 0, paddingLeft: 20, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                        {group.commonNeeds.map((need, i) => <li key={i}>{need}</li>)}
+                                      </ul>
+                                    </div>
 
-                            <div style={styles.reasonBox}>
-                              <span style={styles.boxTitle}>Pourquoi ils doivent se connecter :</span>
-                              <p style={styles.boxText}>{syn.matchReason}</p>
-                            </div>
+                                    <div style={styles.matchVisualizer}>
+                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                        {group.members.map(m => (
+                                          <div key={m.id} style={{ background: 'rgba(255,255,255,0.05)', padding: '6px 10px', borderRadius: 6, fontSize: '0.8rem' }}>
+                                            <span style={{ color: '#fff', fontWeight: 500 }}>{m.name}</span>
+                                            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.7rem' }}>{m.role}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
 
-                            <div style={styles.introBox}>
-                              <span style={styles.boxTitle}>Action recommandée :</span>
-                              <p style={{ ...styles.boxText, color: 'var(--neon-blue)', fontSize: '0.825rem' }}>
-                                {syn.recommendedIntroPath}
-                              </p>
+                                    <div style={styles.reasonBox}>
+                                      <span style={styles.boxTitle}>Pourquoi ce groupe ?</span>
+                                      <p style={styles.boxText}>{group.matchReason}</p>
+                                    </div>
+
+                                    <div style={styles.introBox}>
+                                      <span style={styles.boxTitle}>Service / Produit Potentiel :</span>
+                                      <p style={{ ...styles.boxText, color: 'var(--neon-green)', fontSize: '0.85rem', fontWeight: 500 }}>
+                                        {group.potentialService}
+                                      </p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        ))
+                          )}
+
+                          {synergies.length > 0 && (
+                            <div style={{ gridColumn: '1 / -1' }}>
+                              <h3 style={{ color: 'var(--neon-purple)', marginBottom: 16, borderBottom: '1px solid rgba(138, 43, 226, 0.3)', paddingBottom: 8 }}>
+                                ⚡ Connexions 1-à-1 Directes
+                              </h3>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
+                                {synergies.map((syn, idx) => (
+                                  <div key={idx} className="glass-card" style={styles.synergyCard}>
+                                    <h3 style={styles.cardHeaderTitle}>{syn.title}</h3>
+                                    <p style={styles.cardDescription}>{syn.description}</p>
+                                    
+                                    <div style={styles.matchVisualizer}>
+                                      <div style={styles.matchParty}>
+                                        <span style={styles.partyLabel}>A BESOIN</span>
+                                        <span style={styles.partyName}>{syn.sourceContact.name}</span>
+                                        <span style={styles.partyMeta}>{syn.sourceContact.role} @ {syn.sourceContact.company}</span>
+                                      </div>
+                                      <ArrowRight size={18} color="var(--neon-purple)" />
+                                      <div style={styles.matchParty}>
+                                        <span style={{ ...styles.partyLabel, color: 'var(--neon-green)' }}>A LA SOLUTION</span>
+                                        <span style={styles.partyName}>{syn.targetContact.name}</span>
+                                        <span style={styles.partyMeta}>{syn.targetContact.role} @ {syn.targetContact.company}</span>
+                                      </div>
+                                    </div>
+
+                                    <div style={styles.reasonBox}>
+                                      <span style={styles.boxTitle}>Pourquoi ils doivent se connecter :</span>
+                                      <p style={styles.boxText}>{syn.matchReason}</p>
+                                    </div>
+
+                                    <div style={styles.introBox}>
+                                      <span style={styles.boxTitle}>Action recommandée :</span>
+                                      <p style={{ ...styles.boxText, color: 'var(--neon-blue)', fontSize: '0.825rem' }}>
+                                        {syn.recommendedIntroPath}
+                                      </p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
                 )}
 
-                {/* 2. BRAINSTORM TAB */}
-                {activeMode === 'brainstorm' && (
+                {/* 2. OPPORTUNITIES TAB */}
+                {activeMode === 'opportunities' && (
                   <div style={styles.tabContent}>
                     <div style={styles.brainstormHeader}>
                       <div style={styles.skillsConfig}>
-                        <h4 style={styles.configTitle}>1. Vos compétences clés</h4>
-                        <div style={styles.skillsWrapper}>
-                          {mySkills.map((s, idx) => (
-                            <span key={idx} style={styles.skillBadge}>
-                              {s}
-                              <button onClick={() => handleRemoveSkill(s)} style={styles.removeSkillBtn}>
-                                <X size={10} />
-                              </button>
-                            </span>
-                          ))}
-                          <div style={styles.addSkillInputWrapper}>
-                            <input
-                              type="text"
-                              value={newSkill}
-                              onChange={(e) => setNewSkill(e.target.value)}
-                              placeholder="Ajouter (ex: Python)..."
-                              onKeyDown={(e) => e.key === 'Enter' && handleAddSkill()}
-                              style={styles.addSkillInput}
-                            />
-                            <button onClick={handleAddSkill} style={styles.addSkillBtn}>
-                              <Plus size={14} />
+                        <h4 style={styles.configTitle}>1. Mon Profil Oracle</h4>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 8 }}>
+                          L'IA va croiser vos compétences avec les besoins cachés de votre réseau.
+                        </p>
+                        {userProfile ? (
+                          <div style={{ background: 'rgba(255,255,255,0.05)', padding: 12, borderRadius: 8 }}>
+                            <span style={{ color: '#fff', fontWeight: 600 }}>{userProfile.name}</span>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginLeft: 8 }}>{userProfile.role}</span>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                              {userProfile.skills?.map((s: string) => (
+                                <span key={s} style={{ background: 'rgba(138, 43, 226, 0.2)', color: 'var(--neon-purple)', padding: '2px 8px', borderRadius: 99, fontSize: '0.75rem' }}>{s}</span>
+                              ))}
+                            </div>
+                            <button onClick={() => setShowProfilePopup(true)} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '4px 8px', borderRadius: 4, marginTop: 12, cursor: 'pointer', fontSize: '0.75rem' }}>
+                              Modifier le profil
                             </button>
                           </div>
-                        </div>
+                        ) : (
+                          <button onClick={() => setShowProfilePopup(true)} style={{ background: 'var(--neon-purple)', border: 'none', color: '#fff', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontSize: '0.85rem' }}>
+                            Remplir mon profil
+                          </button>
+                        )}
                       </div>
                       <div style={styles.brainstormAction}>
-                        <h4 style={styles.configTitle}>2. Lancer la génération</h4>
-                        <button onClick={triggerProjectBrainstorm} className="btn-primary" style={{ width: '100%' }}>
-                          Brainstormer des Idées 💡
+                        <h4 style={styles.configTitle}>2. Générer mes Opportunités</h4>
+                        <button onClick={triggerUserOpportunitiesBrainstorm} className="btn-primary" style={{ width: '100%' }}>
+                          Lancer l'Analyse 💡
                         </button>
                       </div>
                     </div>
 
                     <div style={styles.resultsGrid}>
-                      {projects.length === 0 ? (
+                      {opportunities.length === 0 ? (
                         <div style={styles.emptyResults}>
-                          <span>Configurez vos compétences et lancez la génération pour voir vos idées de business.</span>
+                          <span>Générez des idées pour voir les services ou projets que vous devriez lancer.</span>
                         </div>
                       ) : (
-                        projects.map((proj, idx) => (
-                          <div key={idx} className="glass-card" style={styles.projectCard}>
+                        opportunities.map((opp, idx) => (
+                          <div key={idx} className="glass-card glow-active" style={{ ...styles.projectCard, borderColor: 'rgba(48, 192, 96, 0.3)' }}>
                             <div style={styles.projectHeader}>
                               <div>
-                                <h3 style={styles.projectTitle}>{proj.title}</h3>
-                                <span style={styles.projectTagline}>{proj.tagline}</span>
+                                <h3 style={{ ...styles.projectTitle, color: 'var(--neon-green)' }}>{opp.opportunityTitle}</h3>
+                                <span style={styles.projectTagline}>Cible : {opp.targetAudience}</span>
                               </div>
-                              <span style={{ 
-                                ...styles.difficultyBadge,
-                                backgroundColor: proj.difficulty === 'Facile' ? 'rgba(48, 192, 96, 0.15)' : 
-                                                 proj.difficulty === 'Moyen' ? 'rgba(212, 160, 48, 0.15)' : 'rgba(236, 111, 139, 0.15)',
-                                color: proj.difficulty === 'Facile' ? 'var(--neon-green)' : 
-                                       proj.difficulty === 'Moyen' ? 'var(--neon-yellow)' : 'var(--neon-pink)'
-                              }}>
-                                {proj.difficulty}
-                              </span>
                             </div>
 
                             <div style={styles.projSection}>
-                              <span style={styles.sectionHeaderTitle}>Le Problème dans le réseau :</span>
-                              <p style={styles.projText}>{proj.problem}</p>
+                              <span style={styles.sectionHeaderTitle}>Le Problème Résolu :</span>
+                              <p style={styles.projText}>{opp.problemSolved}</p>
                             </div>
 
                             <div style={styles.projSection}>
-                              <span style={styles.sectionHeaderTitle}>La Solution proposée :</span>
-                              <p style={styles.projText}>{proj.solution}</p>
-                            </div>
-
-                            <div style={styles.projSection}>
-                              <span style={styles.sectionHeaderTitle}>Technologies :</span>
-                              <div style={styles.techStack}>
-                                {proj.techStackSuggested.map((t, tIdx) => (
-                                  <span key={tIdx} style={styles.techBadge}>{t}</span>
-                                ))}
-                              </div>
+                              <span style={styles.sectionHeaderTitle}>Votre Solution (Basée sur votre profil) :</span>
+                              <p style={styles.projText}>{opp.proposedSolution}</p>
                             </div>
 
                             <div style={styles.teamSection}>
-                              <span style={styles.sectionHeaderTitle}>Qui impliquer dans votre réseau ?</span>
+                              <span style={styles.sectionHeaderTitle}>Vos Premiers Prospects / Partenaires :</span>
                               <div style={styles.teamList}>
-                                {proj.involvedContacts.map((c, cIdx) => (
-                                  <div key={cIdx} style={styles.teamMemberCard}>
+                                {opp.relevantContacts.map((c, cIdx) => (
+                                  <div key={cIdx} style={{ ...styles.teamMemberCard, borderLeft: '2px solid var(--neon-green)' }}>
                                     <div style={styles.teamMemberHeader}>
                                       <span style={styles.memberName}>{c.name}</span>
-                                      <span style={styles.memberContribution}>{c.contribution}</span>
+                                      <span style={styles.memberContribution}>{c.role} @ {c.company}</span>
                                     </div>
                                   </div>
                                 ))}
                               </div>
+                            </div>
+
+                            <div style={styles.reasonBox}>
+                              <span style={styles.boxTitle}>Plan d'Action :</span>
+                              <p style={{ ...styles.boxText, color: 'var(--text-secondary)' }}>{opp.actionPlan}</p>
                             </div>
                           </div>
                         ))
@@ -458,6 +529,14 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
             )}
           </div>
         </>
+      )}
+
+      {showProfilePopup && (
+        <UserProfilePopup 
+          userId={user?.id || 'default'} 
+          onClose={() => setShowProfilePopup(false)} 
+          onSave={(p) => setUserProfile(p)} 
+        />
       )}
     </div>
   );

@@ -25,6 +25,7 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
   const [outgoingInvites, setOutgoingInvites] = useState<any[]>([]);
   const [loadingInvites, setLoadingInvites] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState<'list' | 'invitations'>('list');
+  const [syncingSpaceId, setSyncingSpaceId] = useState<string | null>(null);
 
   const fetchInvitations = async () => {
     if (!user) return;
@@ -106,6 +107,74 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
       alert(`Erreur d'acceptation : ${err.message || "Impossible d'accepter la fusion."}`);
     } finally {
       setLoadingInvites(false);
+    }
+  };
+
+  const handleSyncNetwork = async (targetSpaceId: string) => {
+    if (!window.confirm("Voulez-vous vraiment copier tous vos contacts personnels dans cet espace partagé ?")) return;
+
+    setSyncingSpaceId(targetSpaceId);
+    try {
+      const personalSpace = spaces.find(s => s.type === 'personal');
+      if (!personalSpace) throw new Error("Espace personnel introuvable.");
+
+      const { data: personalContacts, error: fetchError } = await supabase
+        .from('contacts')
+        .select('*')
+        .eq('space_id', personalSpace.id);
+
+      if (fetchError) throw fetchError;
+      if (!personalContacts || personalContacts.length === 0) {
+        alert("Votre carnet d'adresses personnel est vide.");
+        return;
+      }
+
+      const { data: existingContacts, error: existError } = await supabase
+        .from('contacts')
+        .select('first_name, last_name')
+        .eq('space_id', targetSpaceId);
+
+      if (existError) throw existError;
+
+      const newContacts = personalContacts.filter(pc => 
+        !existingContacts.some(ec => 
+          ec.first_name.toLowerCase() === pc.first_name.toLowerCase() && 
+          ec.last_name.toLowerCase() === pc.last_name.toLowerCase()
+        )
+      );
+
+      if (newContacts.length === 0) {
+        alert("Tous vos contacts personnels sont déjà présents dans cet espace.");
+        return;
+      }
+
+      const insertPayload = newContacts.map(c => ({
+        space_id: targetSpaceId,
+        owner_id: user.id,
+        first_name: c.first_name,
+        last_name: c.last_name,
+        company: c.company,
+        job_title: c.job_title,
+        industry: c.industry,
+        location: c.location,
+        bio: c.bio,
+        email: c.email,
+        phone: c.phone,
+        linkedin: c.linkedin,
+        ai_context: c.ai_context,
+        source: 'import'
+      }));
+
+      const { error: insertError } = await supabase.from('contacts').insert(insertPayload);
+      if (insertError) throw insertError;
+
+      await onRefreshData();
+      alert(`${newContacts.length} contacts synchronisés avec succès dans cet espace !`);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Erreur lors de la synchronisation : ${err.message}`);
+    } finally {
+      setSyncingSpaceId(null);
     }
   };
 
@@ -240,6 +309,16 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
                         year: 'numeric'
                       })}
                     </span>
+                    {!isPersonal && (
+                      <button 
+                        onClick={() => handleSyncNetwork(s.id)}
+                        disabled={syncingSpaceId !== null}
+                        style={styles.syncBtn}
+                        title="Copier vos contacts personnels dans cet espace partagé"
+                      >
+                        {syncingSpaceId === s.id ? 'Sync...' : 'Pousser mon réseau 🚀'}
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -472,10 +551,24 @@ const styles: Record<string, React.CSSProperties> = {
   cardFooter: {
     borderTop: '1px solid rgba(255,255,255,0.03)',
     paddingTop: 10,
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   creationText: {
     fontSize: '0.725rem',
     color: 'var(--text-muted)',
+  },
+  syncBtn: {
+    background: 'rgba(48, 192, 96, 0.1)',
+    border: '1px solid rgba(48, 192, 96, 0.3)',
+    color: 'var(--neon-green)',
+    fontSize: '0.7rem',
+    fontWeight: 600,
+    padding: '4px 10px',
+    borderRadius: 6,
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
   },
   emptyState: {
     gridColumn: '1 / -1',

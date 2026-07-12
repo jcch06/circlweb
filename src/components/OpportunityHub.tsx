@@ -27,11 +27,13 @@ interface OpportunityHubProps {
   contacts: any[];
   notes: any[];
   tags: any[];
+  spaces?: any[];
+  selectedSpaceId?: string | null;
 }
 
 type Mode = 'synergies' | 'brainstorm' | 'intros';
 
-export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes, tags: _tags }) => {
+export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes, tags: _tags, spaces = [], selectedSpaceId = null }) => {
   const [activeMode, setActiveMode] = useState<Mode>('synergies');
   const [loading, setLoading] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
@@ -115,6 +117,10 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
+  const activeSpaceName = selectedSpaceId 
+    ? spaces.find(s => s.id === selectedSpaceId)?.name || 'Espace Inconnu'
+    : 'Toutes les Galaxies (Fusion Globale)';
+
   return (
     <div style={styles.container}>
       {/* Background space elements */}
@@ -126,6 +132,14 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
         <div>
           <h1 style={styles.title}>L'Oracle IA</h1>
           <p style={styles.subtitle}>Générez de la valeur et trouvez des synergies dans vos galaxies de réseaux</p>
+          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--neon-blue)', fontWeight: 600, background: 'rgba(79, 142, 247, 0.1)', padding: '4px 10px', borderRadius: 99 }}>
+              Espace actif : {activeSpaceName}
+            </span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              ({contacts.length} contacts analysables)
+            </span>
+          </div>
         </div>
         <div style={styles.apiBadge}>
           <Sparkles size={14} color="var(--neon-purple)" />

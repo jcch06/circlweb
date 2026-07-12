@@ -14,6 +14,7 @@ export const isGeminiConfigured = () => {
   return client !== null;
 };
 
+
 // Interface definitions for the return schemas
 export interface SynergyResult {
   title: string;
@@ -419,7 +420,7 @@ RÈGLE ABSOLUE : Si tu n'as pas assez d'informations vérifiables, mets "null" p
 Ne génère JAMAIS de bio générique comme "professionnel chevronné" ou "experte en marketing digital".
 La bio doit être SPÉCIFIQUE à cette personne et cette entreprise.
 
-Retourne ce JSON :
+Retourne UNIQUEMENT un objet JSON valide avec cette structure exacte, sans markdown ni code blocks autour :
 {
   "industry": "secteur précis ou null si inconnu",
   "companySize": "taille estimée (1-10 | 11-50 | 51-200 | 201-1000 | 1000+) ou null",
@@ -430,7 +431,7 @@ Retourne ce JSON :
 }`;
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -198,6 +198,8 @@ function App() {
               contacts={selectedSpaceId ? contacts.filter(c => c.space_id === selectedSpaceId) : contacts}
               notes={notes}
               tags={tags}
+              spaces={spaces}
+              selectedSpaceId={selectedSpaceId}
             />
           )}
 

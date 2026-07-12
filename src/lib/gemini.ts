@@ -85,7 +85,7 @@ export async function detectSynergies(contacts: any[], notes: any[]): Promise<Sy
   if (!genAI) throw new Error("Gemini API key is not configured in .env.local");
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-3.5-flash",
+    model: "gemini-1.5-flash",
     generationConfig: { responseMimeType: "application/json" }
   });
 
@@ -145,7 +145,7 @@ export async function brainstormProjects(
   if (!genAI) throw new Error("Gemini API key is not configured in .env.local");
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-3.5-flash",
+    model: "gemini-1.5-flash",
     generationConfig: { responseMimeType: "application/json" }
   });
 
@@ -208,7 +208,7 @@ export async function suggestWarmIntros(
   if (!genAI) throw new Error("Gemini API key is not configured in .env.local");
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-3.5-flash",
+    model: "gemini-1.5-flash",
     generationConfig: { responseMimeType: "application/json" }
   });
 
@@ -260,7 +260,7 @@ export async function enrichProfileFromScraping(
 
   // Gemini Flash is perfect for parsing and structuring raw text quickly and cheaply
   const model = genAI.getGenerativeModel({
-    model: "gemini-3.5-flash",
+    model: "gemini-1.5-flash",
     generationConfig: { responseMimeType: "application/json" }
   });
 
@@ -311,7 +311,7 @@ export async function detectContactSynergies(
   if (!genAI) throw new Error("Gemini API key is not configured in .env.local");
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-3.5-flash",
+    model: "gemini-1.5-flash",
     generationConfig: { responseMimeType: "application/json" }
   });
 
@@ -507,7 +507,7 @@ export async function detectGroupSynergies(contacts: any[], notes: any[]): Promi
   if (!genAI) throw new Error("Gemini API key is not configured");
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-3.5-flash",
+    model: "gemini-1.5-flash",
     generationConfig: { responseMimeType: "application/json" }
   });
 
@@ -560,7 +560,7 @@ export async function brainstormUserOpportunities(userProfile: any, contacts: an
   if (!genAI) throw new Error("Gemini API key is not configured");
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-3.5-flash", // Pro model for deeper reasoning
+    model: "gemini-1.5-flash", // Pro model for deeper reasoning
     generationConfig: { responseMimeType: "application/json" }
   });
 
@@ -862,7 +862,7 @@ export async function extractNormalizedProfiles(
   if (!genAI) throw new Error("Gemini API key is not configured");
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-3.5-flash",
+    model: "gemini-1.5-flash",
     generationConfig: { responseMimeType: "application/json" }
   });
 
@@ -1018,7 +1018,7 @@ export async function buildSupplyDemandAnalysis(
   if (!genAI) throw new Error("Gemini API key is not configured");
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-3.5-flash",
+    model: "gemini-1.5-flash",
     generationConfig: { responseMimeType: "application/json" }
   });
 
@@ -1098,7 +1098,7 @@ export async function nameClusters(
   if (!genAI) throw new Error("Gemini API key is not configured");
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-3.5-flash",
+    model: "gemini-1.5-flash",
     generationConfig: { responseMimeType: "application/json" }
   });
 
@@ -1176,7 +1176,7 @@ export async function deepUserOpportunityAnalysis(
   if (!genAI) throw new Error("Gemini API key is not configured");
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-3.5-flash",
+    model: "gemini-1.5-flash",
     generationConfig: { responseMimeType: "application/json" }
   });
 
@@ -1495,7 +1495,7 @@ async function detectStrategicIntros(
   if (topCandidates.length === 0) return [];
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-3.5-flash",
+    model: "gemini-1.5-flash",
     generationConfig: { responseMimeType: "application/json" }
   });
 
@@ -1557,7 +1557,7 @@ async function analyzeNetworkGenome(
   if (!genAI) return { valuationScore: 0, valuationReasoning: '', networkPersona: 'Inconnu', topStrengths: [], blindSpots: [] };
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-3.5-flash",
+    model: "gemini-1.5-flash",
     generationConfig: { responseMimeType: "application/json" }
   });
 
@@ -1630,7 +1630,7 @@ async function analyzeReciprocity(
   if (!genAI) return [];
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-3.5-flash",
+    model: "gemini-1.5-flash",
     generationConfig: { responseMimeType: "application/json" }
   });
 

@@ -609,10 +609,10 @@ export async function autoEnrichUserProfile(name: string, company: string, role:
     throw new Error("Perplexity API key is not configured");
   }
 
-  const prompt = \`Tu es un assistant d'analyse de profil B2B. Fais une recherche approfondie sur cette personne.
-Nom : \${name}
-Poste : \${role}
-Entreprise : \${company}
+  const prompt = `Tu es un assistant d'analyse de profil B2B. Fais une recherche approfondie sur cette personne.
+Nom : ${name}
+Poste : ${role}
+Entreprise : ${company}
 
 Trouve ses compétences probables, ses projets actuels et les défis (besoins) auxquels elle fait face dans ce rôle.
 Retourne UNIQUEMENT un objet JSON valide avec cette structure exacte :
@@ -620,14 +620,14 @@ Retourne UNIQUEMENT un objet JSON valide avec cette structure exacte :
   "skills": ["Compétence 1", "Compétence 2"],
   "currentProjects": "Un paragraphe décrivant les missions ou projets probables...",
   "needs": "Un paragraphe décrivant ses enjeux et défis actuels..."
-}\`;
+}`;
 
   const response = await fetch(
-    \`https://api.perplexity.ai/chat/completions\`,
+    `https://api.perplexity.ai/chat/completions`,
     {
       method: 'POST',
       headers: { 
-        'Authorization': \`Bearer \${perplexityKey}\`,
+        'Authorization': `Bearer ${perplexityKey}`,
         'Content-Type': 'application/json' 
       },
       body: JSON.stringify({
@@ -642,12 +642,12 @@ Retourne UNIQUEMENT un objet JSON valide avec cette structure exacte :
 
   if (!response.ok) {
     const err = await response.text();
-    throw new Error(\`Perplexity API error: \${response.status} — \${err}\`);
+    throw new Error(`Perplexity API error: ${response.status} — ${err}`);
   }
 
   const data = await response.json();
   let text = data.choices?.[0]?.message?.content || '{}';
-  text = text.replace(/\`\`\`json\\n?/gi, '').replace(/\`\`\`\\n?/gi, '').trim();
+  text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
 
   try {
     return JSON.parse(text);

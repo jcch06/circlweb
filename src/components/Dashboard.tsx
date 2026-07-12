@@ -398,7 +398,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '2.25rem',
     fontWeight: 800,
     marginBottom: 6,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   subtitle: {
     fontSize: '0.95rem',
@@ -445,7 +445,7 @@ const styles: Record<string, React.CSSProperties> = {
   metricValue: {
     fontSize: '2.5rem',
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--text-primary)',
     fontFamily: 'var(--font-display)',
     lineHeight: 1,
   },
@@ -527,7 +527,7 @@ const styles: Record<string, React.CSSProperties> = {
   noteContact: {
     fontSize: '0.85rem',
     fontWeight: 600,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   noteDate: {
     fontSize: '0.7rem',

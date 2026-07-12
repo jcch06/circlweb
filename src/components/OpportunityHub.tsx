@@ -175,7 +175,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
             style={{ 
               background: 'rgba(138, 43, 226, 0.15)', 
               border: '1px solid var(--neon-purple)', 
-              color: '#fff', 
+              color: 'var(--text-primary)', 
               padding: '6px 12px', 
               borderRadius: 99, 
               display: 'flex', 
@@ -290,13 +290,13 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                             {v3Result.clusters.map((cluster, idx) => (
                               <div key={idx} className="glass-card glow-active" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14, borderColor: 'rgba(79, 142, 247, 0.3)' }}>
                                 <div>
-                                  <h4 style={{ color: '#fff', fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>{cluster.clusterName}</h4>
+                                  <h4 style={{ color: 'var(--text-primary)', fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>{cluster.clusterName}</h4>
                                   <p style={{ color: 'var(--neon-blue)', fontSize: '0.8rem', margin: '4px 0 0 0' }}>{cluster.theme}</p>
                                 </div>
 
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                                   {cluster.members.map(m => (
-                                    <span key={m.id} style={{ background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: 6, fontSize: '0.78rem', color: '#fff' }}>
+                                    <span key={m.id} style={{ background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: 6, fontSize: '0.78rem', color: 'var(--text-primary)' }}>
                                       {m.name}
                                     </span>
                                   ))}
@@ -336,11 +336,11 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                               {v3Result.bridgeContacts.map((bc, idx) => (
                                 <div key={idx} className="glass-card" style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 10, borderColor: 'rgba(138, 43, 226, 0.3)' }}>
-                                  <div style={{ background: 'linear-gradient(135deg, var(--neon-purple), var(--neon-blue))', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.8rem', color: '#fff' }}>
+                                  <div style={{ background: 'linear-gradient(135deg, var(--neon-purple), var(--neon-blue))', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-primary)' }}>
                                     {idx + 1}
                                   </div>
                                   <div>
-                                    <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.9rem' }}>{bc.name}</span>
+                                    <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '0.9rem' }}>{bc.name}</span>
                                     <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.72rem' }}>
                                       Score de centralité : {bc.centralityScore}
                                     </span>
@@ -552,7 +552,7 @@ const OpportunityCard: React.FC<{ opportunity: DeepOpportunity }> = ({ opportuni
               Cluster : {opp.targetCluster}
             </span>
           </div>
-          <h4 style={{ color: '#fff', fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>{opp.title}</h4>
+          <h4 style={{ color: 'var(--text-primary)', fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>{opp.title}</h4>
         </div>
       </div>
 
@@ -584,14 +584,14 @@ const OpportunityCard: React.FC<{ opportunity: DeepOpportunity }> = ({ opportuni
       <div style={{ display: 'flex', gap: 16 }}>
         <div style={{ flex: 1 }}>
           <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block', marginBottom: 4 }}>Demande</span>
-          <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 4, height: 6, overflow: 'hidden' }}>
+          <div style={{ background: 'var(--bg-space)', borderRadius: 4, height: 6, overflow: 'hidden' }}>
             <div style={{ width: `${opp.demandScore * 10}%`, height: '100%', background: `linear-gradient(90deg, ${config.color}, ${config.color}80)`, borderRadius: 4 }} />
           </div>
           <span style={{ fontSize: '0.7rem', color: config.color, fontWeight: 600 }}>{opp.demandScore}/10</span>
         </div>
         <div style={{ flex: 1 }}>
           <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block', marginBottom: 4 }}>Faisabilité</span>
-          <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 4, height: 6, overflow: 'hidden' }}>
+          <div style={{ background: 'var(--bg-space)', borderRadius: 4, height: 6, overflow: 'hidden' }}>
             <div style={{ width: `${opp.feasibilityScore * 10}%`, height: '100%', background: 'linear-gradient(90deg, var(--neon-green), rgba(48,192,96,0.5))', borderRadius: 4 }} />
           </div>
           <span style={{ fontSize: '0.7rem', color: 'var(--neon-green)', fontWeight: 600 }}>{opp.feasibilityScore}/10</span>
@@ -609,7 +609,7 @@ const OpportunityCard: React.FC<{ opportunity: DeepOpportunity }> = ({ opportuni
             {opp.relevantContacts.map((c, i) => (
               <div key={i} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-glow)', borderRadius: 6, padding: '6px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.82rem' }}>{c.name}</span>
+                  <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '0.82rem' }}>{c.name}</span>
                   <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginLeft: 8 }}>{c.role} @ {c.company}</span>
                 </div>
                 <span style={{ color: config.color, fontSize: '0.72rem', fontWeight: 500, maxWidth: '40%', textAlign: 'right' }}>{c.reason}</span>
@@ -621,7 +621,7 @@ const OpportunityCard: React.FC<{ opportunity: DeepOpportunity }> = ({ opportuni
 
       {/* Action Plan */}
       {opp.actionPlan && opp.actionPlan.length > 0 && (
-        <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid var(--border-glow)', borderRadius: 8, padding: 12 }}>
+        <div style={{ background: 'var(--bg-space)', border: '1px solid var(--border-glow)', borderRadius: 8, padding: 12 }}>
           <span style={cardStyles.sectionTitle}>Plan d'action :</span>
           <ol style={{ margin: '6px 0 0 0', paddingLeft: 18, color: 'var(--text-secondary)', fontSize: '0.82rem', lineHeight: 1.6 }}>
             {opp.actionPlan.map((step, i) => <li key={i}>{step}</li>)}
@@ -671,7 +671,7 @@ const styles: Record<string, React.CSSProperties> = {
   title: {
     fontSize: '2.25rem',
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--text-primary)',
     marginBottom: 6,
   },
   subtitle: {
@@ -710,7 +710,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   setupInstructions: {
     textAlign: 'left',
-    background: 'rgba(0, 0, 0, 0.2)',
+    background: 'var(--bg-space)',
     padding: 20,
     borderRadius: 12,
     border: '1px solid var(--border-glow)',
@@ -742,7 +742,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   tabBtnActive: {
     background: 'rgba(255, 255, 255, 0.05)',
-    color: '#fff',
+    color: 'var(--text-primary)',
     boxShadow: '0 0 10px rgba(255,255,255,0.02)',
   },
   contentArea: {
@@ -816,11 +816,11 @@ const styles: Record<string, React.CSSProperties> = {
     textTransform: 'uppercase',
   },
   formInput: {
-    background: 'rgba(0,0,0,0.2)',
+    background: 'var(--bg-space)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: '10px 14px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     fontSize: '0.9rem',
     outline: 'none',
   },
@@ -845,7 +845,7 @@ const styles: Record<string, React.CSSProperties> = {
   introCardTitle: {
     fontSize: '1.2rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   introReason: {
     fontSize: '0.85rem',

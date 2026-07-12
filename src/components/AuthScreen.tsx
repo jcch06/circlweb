@@ -226,7 +226,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: '12px 16px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     fontSize: '0.95rem',
     outline: 'none',
     transition: 'border-color 0.2s',

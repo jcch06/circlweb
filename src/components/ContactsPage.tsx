@@ -827,7 +827,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
               <div style={{ width: 20, height: 20, flexShrink: 0, border: '2px solid var(--neon-purple)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
               <div style={{ flexGrow: 1 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff' }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                     Enrichissement IA en cours (Web)...
                   </span>
                   <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
@@ -853,7 +853,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
             </div>
             {bulkProgress.current && (
               <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                🤖 Analyse IA : <b style={{ color: '#fff' }}>{bulkProgress.current}</b>
+                🤖 Analyse IA : <b style={{ color: 'var(--text-primary)' }}>{bulkProgress.current}</b>
               </span>
             )}
           </div>
@@ -1001,10 +1001,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
             onChange={(e) => setFilterType(e.target.value as any)}
             style={{ ...styles.input, width: 'auto', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glow)', minWidth: 220 }}
           >
-            <option value="all" style={{ background: '#1a1a2e' }}>Tous les contacts</option>
-            <option value="enriched" style={{ background: '#1a1a2e' }}>✨ Déjà enrichis</option>
-            <option value="not_enriched" style={{ background: '#1a1a2e' }}>❌ Non enrichis (données valides)</option>
-            <option value="invalid" style={{ background: '#1a1a2e' }}>⚠️ Données insuffisantes (à corriger)</option>
+            <option value="all" style={{ background: 'var(--bg-space)' }}>Tous les contacts</option>
+            <option value="enriched" style={{ background: 'var(--bg-space)' }}>✨ Déjà enrichis</option>
+            <option value="not_enriched" style={{ background: 'var(--bg-space)' }}>❌ Non enrichis (données valides)</option>
+            <option value="invalid" style={{ background: 'var(--bg-space)' }}>⚠️ Données insuffisantes (à corriger)</option>
           </select>
         </div>
 
@@ -1025,7 +1025,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                 }
               }}
               className="btn-primary"
-              style={{ fontSize: '0.7rem', padding: '4px 10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glow)', color: '#fff' }}
+              style={{ fontSize: '0.7rem', padding: '4px 10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glow)', color: 'var(--text-primary)' }}
             >
               {filteredContacts.map(c => c.id).every(id => bulkSelectedIds.includes(id)) ? 'Tout désélectionner' : 'Tout sélectionner'}
             </button>
@@ -1035,7 +1035,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
         {/* Bulk Action Bar */}
         {bulkSelectedIds.length > 0 && (
           <div className="glass-panel glow-active" style={styles.bulkActionBar}>
-            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
               🛠️ Action en Masse ({bulkSelectedIds.length} contact(s) sélectionné(s))
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -1421,7 +1421,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                   {spaces.map(s => {
                     const isChecked = selectedSpaces.includes(s.id);
                     return (
-                      <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.8rem', color: '#fff', cursor: 'pointer' }}>
+                      <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.8rem', color: 'var(--text-primary)', cursor: 'pointer' }}>
                         <input 
                           type="checkbox" 
                           checked={isChecked}
@@ -1654,7 +1654,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
               {showEnrichForm && (
                 <div className="glass-card" style={styles.enrichForm}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                    <h5 style={{ margin: 0, fontSize: '0.8rem', color: '#fff' }}>Données Web à analyser</h5>
+                    <h5 style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-primary)' }}>Données Web à analyser</h5>
                     <button onClick={() => setShowEnrichForm(false)} style={styles.closeBtnSmall}>
                       <X size={12} />
                     </button>
@@ -1744,7 +1744,7 @@ const styles: Record<string, React.CSSProperties> = {
   title: {
     fontSize: '2.25rem',
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--text-primary)',
     marginBottom: 6,
   },
   subtitle: {
@@ -1767,7 +1767,7 @@ const styles: Record<string, React.CSSProperties> = {
   formTitle: {
     fontSize: '1.25rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   formGrid: {
     display: 'grid',
@@ -1786,29 +1786,29 @@ const styles: Record<string, React.CSSProperties> = {
     textTransform: 'uppercase',
   },
   input: {
-    background: 'rgba(0,0,0,0.2)',
+    background: 'var(--bg-space)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: '10px 14px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontSize: '0.9rem',
   },
   select: {
-    background: 'rgba(0,0,0,0.2)',
+    background: 'var(--bg-space)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: '10px 14px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontSize: '0.9rem',
   },
   textarea: {
-    background: 'rgba(0,0,0,0.2)',
+    background: 'var(--bg-space)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: '10px 14px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontSize: '0.9rem',
     minHeight: '80px',
@@ -1827,7 +1827,7 @@ const styles: Record<string, React.CSSProperties> = {
   searchInput: {
     background: 'none',
     border: 'none',
-    color: '#fff',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontSize: '0.95rem',
     width: '100%',
@@ -1853,8 +1853,8 @@ const styles: Record<string, React.CSSProperties> = {
     width: 44,
     height: 44,
     borderRadius: '12px',
-    background: 'rgba(255, 255, 255, 0.04)',
-    border: '1.5px solid var(--neon-purple)',
+    background: 'linear-gradient(135deg, var(--neon-purple), var(--neon-blue))',
+    border: 'none',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1866,7 +1866,7 @@ const styles: Record<string, React.CSSProperties> = {
   name: {
     fontSize: '1.05rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
     marginBottom: 2,
   },
   spaceBadge: {
@@ -1935,7 +1935,7 @@ const styles: Record<string, React.CSSProperties> = {
   drawerTitle: {
     fontSize: '1rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
   },
@@ -1984,7 +1984,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
-    color: '#fff',
+    color: 'var(--text-primary)',
     fontSize: '1.5rem',
     fontWeight: 700,
     marginBottom: 14,
@@ -1992,7 +1992,7 @@ const styles: Record<string, React.CSSProperties> = {
   profileName: {
     fontSize: '1.35rem',
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--text-primary)',
     marginBottom: 8,
   },
   profileRole: {
@@ -2119,7 +2119,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
     fontSize: '0.75rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   connectionDetails: {
     display: 'flex',
@@ -2130,7 +2130,7 @@ const styles: Record<string, React.CSSProperties> = {
   connectionName: {
     fontSize: '0.8rem',
     fontWeight: 600,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   connectionReason: {
     fontSize: '0.7rem',
@@ -2170,7 +2170,7 @@ const styles: Record<string, React.CSSProperties> = {
   synergyCardTitle: {
     fontSize: '0.85rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   synergyDesc: {
     fontSize: '0.75rem',
@@ -2180,7 +2180,7 @@ const styles: Record<string, React.CSSProperties> = {
   synergyParty: {
     display: 'flex',
     flexDirection: 'column',
-    background: 'rgba(0, 0, 0, 0.2)',
+    background: 'var(--bg-space)',
     border: '1px solid var(--border-glow)',
     padding: 10,
     borderRadius: 8,
@@ -2196,7 +2196,7 @@ const styles: Record<string, React.CSSProperties> = {
   partyNameSmall: {
     fontSize: '0.8rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   partyMetaSmall: {
     fontSize: '0.7rem',
@@ -2241,11 +2241,11 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 6,
   },
   scrapedInput: {
-    background: 'rgba(0,0,0,0.2)',
+    background: 'var(--bg-space)',
     border: '1px solid var(--border-glow)',
     borderRadius: 6,
     padding: 8,
-    color: '#fff',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontSize: '0.75rem',
     minHeight: '60px',
@@ -2290,7 +2290,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid var(--border-glow)',
     borderRadius: 6,
     padding: '6px 10px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontSize: '0.8rem',
   },
@@ -2299,7 +2299,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid var(--border-glow)',
     borderRadius: 6,
     padding: '6px 10px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontSize: '0.8rem',
   },
@@ -2321,7 +2321,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid var(--border-glow)',
     borderRadius: 6,
     padding: '6px 10px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontSize: '0.8rem',
     minWidth: '180px',

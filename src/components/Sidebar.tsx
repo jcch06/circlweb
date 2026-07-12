@@ -1,7 +1,6 @@
 import React from 'react';
-import { 
-  Sparkles, 
-  LayoutDashboard, 
+import {
+  LayoutDashboard,
   Orbit, 
   Brain, 
   PlusCircle, 
@@ -35,16 +34,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   return (
     <aside className="glass-sidebar" style={styles.sidebar}>
-      {/* Title */}
-      <div style={styles.header}>
-        <div style={styles.logoIcon}>
-          <Sparkles size={20} color="var(--neon-purple)" />
-        </div>
-        <h2 style={styles.logoText}>
-          CIRCL <span className="text-gradient-purple-blue">WEB</span>
-        </h2>
-      </div>
-
       {/* Galaxy Space Selector (Core concept: Fusion) */}
       <div style={styles.section}>
         <div style={styles.sectionHeader}>

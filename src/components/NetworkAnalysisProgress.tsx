@@ -236,7 +236,7 @@ export const NetworkAnalysisProgress: React.FC<NetworkAnalysisProgressProps> = (
                     style={{
                       fontSize: 20,
                       animation: 'nap-check-pop 0.4s ease forwards',
-                      color: '#fff',
+                      color: 'var(--text-primary)',
                     }}
                   >
                     ✓

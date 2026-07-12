@@ -465,7 +465,7 @@ Si aucun contact n'est présent, retourne {"contacts": []}. Réponds uniquement 
                   <div key={idx} style={styles.extractedCard}>
                     <div style={styles.extractedCardHeader}>
                       <UserCheck size={16} color="var(--neon-green)" />
-                      <span style={{ fontWeight: 700, color: '#fff' }}>{c.first_name} {c.last_name}</span>
+                      <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{c.first_name} {c.last_name}</span>
                     </div>
                     <div style={styles.extractedDetails}>
                       {c.company && (
@@ -523,7 +523,7 @@ const styles: Record<string, React.CSSProperties> = {
   title: {
     fontSize: '2.25rem',
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--text-primary)',
     marginBottom: 6,
   },
   subtitle: {
@@ -551,8 +551,9 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'var(--transition-smooth)',
   },
   tabBtnActive: {
-    background: 'rgba(255, 255, 255, 0.05)',
-    color: '#fff',
+    color: 'var(--text-primary)',
+    borderBottom: '2px solid var(--ink)',
+    borderRadius: 0,
   },
   card: {
     padding: 30,
@@ -577,20 +578,20 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: '0.05em',
   },
   select: {
-    background: 'rgba(0,0,0,0.2)',
+    background: 'var(--bg-space)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: '12px 16px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     fontSize: '0.95rem',
     outline: 'none',
   },
   textarea: {
-    background: 'rgba(0,0,0,0.2)',
+    background: 'var(--bg-space)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: 16,
-    color: '#fff',
+    color: 'var(--text-primary)',
     fontSize: '0.95rem',
     outline: 'none',
     resize: 'vertical',
@@ -607,7 +608,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 10,
     borderBottom: '1px solid var(--border-glow)',
     paddingBottom: 12,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   resultDetails: {
     display: 'flex',
@@ -654,7 +655,7 @@ const styles: Record<string, React.CSSProperties> = {
     textTransform: 'capitalize',
   },
   updateVal: {
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   tagsRow: {
     display: 'flex',

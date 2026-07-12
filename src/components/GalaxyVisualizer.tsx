@@ -611,7 +611,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
             graphData={graphData}
             width={dimensions.width}
             height={dimensions.height}
-            backgroundColor="#06060a"
+            backgroundColor="#faf9fc"
             linkColor={(link: any) => 
               link.type === 'company' ? 'rgba(79, 142, 247, 0.35)' : 
               link.type === 'tag' ? 'rgba(159, 97, 232, 0.3)' : 'rgba(255, 255, 255, 0.08)'
@@ -785,7 +785,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
                   {spaces.map(s => {
                     const isChecked = selectedSpaces.includes(s.id);
                     return (
-                      <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.8rem', color: '#fff', cursor: 'pointer' }}>
+                      <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.8rem', color: 'var(--text-primary)', cursor: 'pointer' }}>
                         <input 
                           type="checkbox" 
                           checked={isChecked}
@@ -1176,7 +1176,7 @@ const styles: Record<string, React.CSSProperties> = {
   profileName: {
     fontSize: '1.5rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   profileRole: {
     display: 'flex',
@@ -1288,11 +1288,11 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.4,
   },
   textarea: {
-    background: 'rgba(0, 0, 0, 0.2)',
+    background: 'var(--bg-space)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: 10,
-    color: '#fff',
+    color: 'var(--text-primary)',
     fontSize: '0.85rem',
     outline: 'none',
     resize: 'none',
@@ -1375,7 +1375,7 @@ const styles: Record<string, React.CSSProperties> = {
   connectionName: {
     fontSize: '0.8rem',
     fontWeight: 600,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   connectionReason: {
     fontSize: '0.7rem',
@@ -1424,7 +1424,7 @@ const styles: Record<string, React.CSSProperties> = {
   synergyCardTitle: {
     fontSize: '0.85rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   synergyDesc: {
     fontSize: '0.75rem',
@@ -1434,7 +1434,7 @@ const styles: Record<string, React.CSSProperties> = {
   synergyParty: {
     display: 'flex',
     flexDirection: 'column',
-    background: 'rgba(0, 0, 0, 0.2)',
+    background: 'var(--bg-space)',
     border: '1px solid var(--border-glow)',
     padding: 10,
     borderRadius: 8,
@@ -1450,7 +1450,7 @@ const styles: Record<string, React.CSSProperties> = {
   partyNameSmall: {
     fontSize: '0.8rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   partyMetaSmall: {
     fontSize: '0.7rem',
@@ -1490,7 +1490,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid var(--border-glow)',
     borderRadius: 6,
     padding: '6px 10px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontSize: '0.8rem',
     width: '100%',
@@ -1500,7 +1500,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid var(--border-glow)',
     borderRadius: 6,
     padding: '6px 10px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontSize: '0.8rem',
     width: '100%',
@@ -1536,7 +1536,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: '8px 12px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     fontSize: '0.85rem',
     outline: 'none',
   },
@@ -1562,7 +1562,7 @@ const styles: Record<string, React.CSSProperties> = {
   itemName: {
     fontSize: '0.8rem',
     fontWeight: 600,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   itemCompany: {
     fontSize: '0.7rem',

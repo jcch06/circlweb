@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   suggestWarmIntros,
   runOracleV3Pipeline,
@@ -49,6 +49,11 @@ interface OpportunityHubProps {
 
 type Mode = 'network' | 'opportunities' | 'intros' | 'radar';
 
+interface NetworkSnapshot {
+  timestamp: string;
+  valuationScore: number;
+}
+
 const CATEGORY_CONFIG: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
   service: { icon: <Briefcase size={16} />, color: 'var(--neon-purple)', label: 'Service' },
   product: { icon: <Target size={16} />, color: 'var(--neon-blue)', label: 'Produit' },
@@ -67,6 +72,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
 
   // V3 Pipeline State
   const [v3Result, setV3Result] = useState<OracleV3Result | null>(null);
+  const [valuationHistory, setValuationHistory] = useState<NetworkSnapshot[]>([]);
   const [pipelinePass, setPipelinePass] = useState(0);
   const [pipelineProgress, setPipelineProgress] = useState(0);
   const [pipelineRunning, setPipelineRunning] = useState(false);
@@ -99,6 +105,18 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
     }
   }, [contacts]);
 
+  // Load history
+  useEffect(() => {
+    if (user?.id) {
+      const historyRaw = localStorage.getItem(`circl_network_history_${user.id}`);
+      if (historyRaw) {
+        try {
+          setValuationHistory(JSON.parse(historyRaw));
+        } catch(e) {}
+      }
+    }
+  }, [user?.id]);
+
   // V3 Pipeline trigger
   const triggerV3Pipeline = async (forceRefresh = false) => {
     if (!userProfile || !userProfile.name) {
@@ -129,6 +147,16 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
         }
       );
       setV3Result(result);
+      
+      if (result.genome && result.genome.valuationScore > 0 && user?.id) {
+        const newSnap = { timestamp: new Date().toISOString(), valuationScore: result.genome.valuationScore };
+        setValuationHistory(prev => {
+          // Avoid duplicate same-score snapshots within short timeframes (optional, but let's just append)
+          const updated = [...prev, newSnap];
+          localStorage.setItem(`circl_network_history_${user.id}`, JSON.stringify(updated));
+          return updated;
+        });
+      }
     } catch (err) {
       console.error(err);
       alert("Erreur lors de l'analyse Oracle V3. Vérifiez votre clé API.");
@@ -160,6 +188,24 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
     setCopiedIndex(idx);
     setTimeout(() => setCopiedIndex(null), 2000);
   };
+
+  // Calculate valuation growth (Time-Machine)
+  const valuationGrowth = useMemo(() => {
+    if (valuationHistory.length < 2 || !v3Result?.genome) return null;
+    const currentScore = v3Result.genome.valuationScore;
+    
+    // Find the oldest score in history to compare
+    const initialScore = valuationHistory[0].valuationScore;
+    
+    if (initialScore === 0 || initialScore === currentScore) return null;
+    
+    const growthPercent = ((currentScore - initialScore) / initialScore) * 100;
+    return {
+      value: growthPercent,
+      label: growthPercent > 0 ? `+${growthPercent.toFixed(1)}%` : `${growthPercent.toFixed(1)}%`,
+      isPositive: growthPercent > 0
+    };
+  }, [valuationHistory, v3Result]);
 
   return (
     <div style={styles.container}>
@@ -505,6 +551,23 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                                 {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v3Result.genome.valuationScore)}
                               </div>
                               <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: 1 }}>Potentiel Annuel</span>
+                              {valuationGrowth && (
+                                <div style={{ 
+                                  marginTop: 8,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  background: valuationGrowth.isPositive ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                                  color: valuationGrowth.isPositive ? '#4ade80' : '#f87171',
+                                  padding: '4px 10px',
+                                  borderRadius: 99,
+                                  fontSize: '0.8rem',
+                                  fontWeight: 600
+                                }}>
+                                  <TrendingUp size={14} style={{ transform: valuationGrowth.isPositive ? 'none' : 'rotate(180deg)' }} />
+                                  {valuationGrowth.label} depuis la 1ère analyse
+                                </div>
+                              )}
                             </div>
                           </div>
                         )}
@@ -648,6 +711,59 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
                         
+                        {/* Section 0: Leaderboard des Connecteurs */}
+                        <div>
+                          <h3 style={{ color: 'var(--neon-yellow)', marginBottom: 16, borderBottom: '1px solid rgba(255, 214, 10, 0.3)', paddingBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Award size={20} /> Top Connecteurs (Leaderboard)
+                          </h3>
+                          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 16 }}>
+                            Vos contacts les plus influents, classés par leur capacité à agir comme des "ponts" entre différents univers de votre réseau.
+                          </p>
+                          
+                          {(!v3Result.bridgeContacts || v3Result.bridgeContacts.length === 0) ? (
+                            <div className="glass-card" style={{ padding: 24, textAlign: 'center', borderColor: 'rgba(255,255,255,0.05)' }}>
+                              <p style={{ margin: 0, color: 'var(--text-muted)' }}>Pas assez de données pour établir un classement.</p>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                              {[...v3Result.bridgeContacts].sort((a,b) => b.centralityScore - a.centralityScore).slice(0, 5).map((bc, idx) => (
+                                <div key={idx} className="glass-card" style={{ 
+                                  padding: '16px 20px', 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'space-between',
+                                  borderColor: idx === 0 ? 'rgba(255, 214, 10, 0.4)' : idx === 1 ? 'rgba(156, 163, 175, 0.4)' : idx === 2 ? 'rgba(180, 83, 9, 0.4)' : 'rgba(255,255,255,0.05)',
+                                  background: idx === 0 ? 'linear-gradient(90deg, rgba(255, 214, 10, 0.05), transparent)' : 'transparent'
+                                }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                                    <div style={{ 
+                                      width: 40, height: 40, borderRadius: '50%', 
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                      background: idx === 0 ? 'var(--neon-yellow)' : idx === 1 ? '#9ca3af' : idx === 2 ? '#cd7f32' : 'rgba(255,255,255,0.1)',
+                                      color: idx < 3 ? '#000' : '#fff',
+                                      fontWeight: 800, fontSize: '1.2rem'
+                                    }}>
+                                      #{idx + 1}
+                                    </div>
+                                    <div>
+                                      <div style={{ fontWeight: 600, color: '#fff', fontSize: '1.1rem' }}>{bc.name}</div>
+                                      <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: 2 }}>
+                                        Nœud stratégique
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div style={{ textAlign: 'right' }}>
+                                    <div style={{ color: 'var(--neon-blue)', fontWeight: 700, fontSize: '1.2rem' }}>
+                                      {Math.round(bc.centralityScore * 100)} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>pts</span>
+                                    </div>
+                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', textTransform: 'uppercase' }}>Centralité</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
                         {/* Section 1: Moteur de Réciprocité */}
                         <div>
                           <h3 style={{ color: 'var(--neon-purple)', marginBottom: 16, borderBottom: '1px solid rgba(168, 85, 247, 0.3)', paddingBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>

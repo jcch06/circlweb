@@ -17,6 +17,7 @@ function App() {
   const [session, setSession] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
 
@@ -47,6 +48,12 @@ function App() {
   const fetchNetworkData = useCallback(async () => {
     if (!session?.user) return;
     setDataLoading(true);
+    setErrorMsg(null);
+
+    const timeout = setTimeout(() => {
+      setDataLoading(false);
+      setErrorMsg("Le chargement a expiré (Timeout). Il y a peut-être un problème avec Supabase.");
+    }, 15000);
 
     try {
       // 1. Fetch Spaces
@@ -70,11 +77,9 @@ function App() {
 
         if (contactsData && contactsData.length > 0) {
           // 3. Fetch Notes associated with loaded contacts
-          const contactIds = contactsData.map(c => c.id);
           const { data: notesData, error: notesError } = await supabase
             .from('notes')
             .select('*')
-            .in('contact_id', contactIds)
             .order('created_at', { ascending: false });
           
           if (notesError) throw notesError;
@@ -100,9 +105,11 @@ function App() {
         if (contactTagsError) throw contactTagsError;
         setContactTags(contactTagsData || []);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erreur lors du chargement des données réseau:', err);
+      setErrorMsg("Erreur réseau: " + (err.message || "Impossible de joindre Supabase"));
     } finally {
+      clearTimeout(timeout);
       setDataLoading(false);
     }
   }, [session]);
@@ -164,6 +171,14 @@ function App() {
             <div style={{ ...styles.loadingScreen, position: 'absolute', inset: 0, zIndex: 5 }}>
               <div className="orbit-spinner"></div>
               <span style={{ marginTop: 16, color: 'var(--text-secondary)' }}>Chargement de vos galaxies...</span>
+            </div>
+          ) : errorMsg ? (
+            <div style={{ padding: 40, textAlign: 'center', color: 'var(--neon-pink)' }}>
+              <h3>⚠️ Oups, une erreur cosmique...</h3>
+              <p>{errorMsg}</p>
+              <button onClick={() => window.location.reload()} style={{...styles.primaryBtn, marginTop: 20}}>
+                Relancer la synchronisation
+              </button>
             </div>
           ) : null}
 

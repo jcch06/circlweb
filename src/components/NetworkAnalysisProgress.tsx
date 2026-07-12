@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Brain, Fingerprint, Network, Target } from 'lucide-react';
+import { Brain, Fingerprint, Network, Target, Activity } from 'lucide-react';
 
 /**
  * Props for NetworkAnalysisProgress.
@@ -20,9 +20,10 @@ const DEFAULT_LABELS = [
   'Clustering Network',
   'Mapping Supply & Demand',
   'Scoring Opportunities',
+  'Extracting Network DNA'
 ];
 
-const STEP_ICONS = [Brain, Fingerprint, Network, Target] as const;
+const STEP_ICONS = [Brain, Fingerprint, Network, Target, Activity] as const;
 
 type StepStatus = 'pending' | 'active' | 'done';
 

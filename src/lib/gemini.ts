@@ -747,7 +747,19 @@ export interface OracleV3Result {
   opportunities: DeepOpportunity[];
   bridgeContacts: { id: string; name: string; centralityScore: number }[];
   keyIntros: StrategicIntro[];
+  genome?: NetworkGenome;
   timestamp: number;
+}
+
+/**
+ * Network Genome (Valuation & DNA)
+ */
+export interface NetworkGenome {
+  valuationScore: number;
+  valuationReasoning: string;
+  networkPersona: string;
+  topStrengths: string[];
+  blindSpots: string[];
 }
 
 /**
@@ -1381,6 +1393,11 @@ export async function runOracleV3Pipeline(
   }
   onPassChange?.(4, 100);
 
+  // === PASSE 5: Network Genome & Valuation ===
+  onPassChange?.(5, 0);
+  const genome = await analyzeNetworkGenome(userProfile, profiles, opportunities, keyIntros);
+  onPassChange?.(5, 100);
+
   const result: OracleV3Result = {
     profiles,
     clusters,
@@ -1388,6 +1405,7 @@ export async function runOracleV3Pipeline(
     opportunities,
     bridgeContacts,
     keyIntros,
+    genome,
     timestamp: Date.now()
   };
 
@@ -1505,6 +1523,81 @@ Retourne entre 3 et 6 introductions les plus stratégiques.`;
   } catch (err) {
     console.error('Strategic intros error:', err);
     return [];
+  }
+}
+
+/**
+ * PASSE 5 — Analyze Network Genome & Valuation
+ */
+async function analyzeNetworkGenome(
+  userProfile: any,
+  profiles: NormalizedProfile[],
+  opportunities: DeepOpportunity[],
+  keyIntros: StrategicIntro[]
+): Promise<NetworkGenome> {
+  const genAI = getGeminiClient();
+  if (!genAI) return { valuationScore: 0, valuationReasoning: '', networkPersona: 'Inconnu', topStrengths: [], blindSpots: [] };
+
+  const model = genAI.getGenerativeModel({
+    model: "gemini-3.5-flash",
+    generationConfig: { responseMimeType: "application/json" }
+  });
+
+  const prompt = `Tu es un auditeur financier spécialisé dans la valorisation de capital social et de réseaux d'affaires.
+
+${buildUserContext(userProfile)}
+
+Voici un résumé du réseau de l'utilisateur :
+- Taille : ${profiles.length} contacts qualifiés
+- Opportunités directes détectées : ${opportunities.length}
+- Introductions stratégiques détectées : ${keyIntros.length}
+
+Détails des opportunités :
+${JSON.stringify(opportunities.map(o => ({ title: o.title, estimatedRevenue: o.estimatedRevenue, urgency: o.urgency })), null, 2)}
+
+Ton objectif : Générer l'ADN du réseau (Network Genome) et estimer sa valeur financière ANNUELLE potentielle.
+
+Instructions pour la valorisation financière (valuationScore) :
+- Additionne la valeur basse estimée de chaque opportunité. Si c'est "2k-5k€", compte 2000€.
+- Ajoute 500€ de valeur pour chaque introduction stratégique.
+- Applique un multiplicateur basé sur la densité de décideurs (budget-holder/decision-maker) dans le réseau.
+- Retourne UNIQUEMENT un NOMBRE ENTIER (ex: 47000) pour la valeur \`valuationScore\`.
+
+Retourne un objet JSON avec la structure exacte suivante :
+{
+  "valuationScore": 47000,
+  "valuationReasoning": "Explication courte du calcul. Ex: 'Basé sur 3 opportunités qualifiées (25K€) et 4 intros stratégiques (2K€), plus une prime pour votre densité de décideurs Tech.'",
+  "networkPersona": "Un titre accrocheur définissant le style du réseau (ex: 'Le Hub B2B Parisien', 'L'Insider FinTech', 'Le Connecteur de Talents')",
+  "topStrengths": [
+    "Force 1 : Très forte concentration de fondateurs SaaS en recherche de fonds",
+    "Force 2 : Excellente couverture des décideurs RH",
+    "Force 3 : Capacité à connecter la tech et le marketing"
+  ],
+  "blindSpots": [
+    "Angle mort 1 : Beaucoup de startups mais aucun investisseur VC pour les financer",
+    "Angle mort 2 : Un réseau très francilien, peu d'ouvertures à l'international"
+  ]
+}`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const genome = safeParseGeminiJSON(result.response.text());
+    
+    // Fallback if parsing fails or structure is wrong
+    if (!genome || typeof genome.valuationScore !== 'number') {
+      return {
+        valuationScore: 0,
+        valuationReasoning: 'Calcul de valorisation indisponible.',
+        networkPersona: 'Analyse en cours',
+        topStrengths: [],
+        blindSpots: []
+      };
+    }
+    
+    return genome as NetworkGenome;
+  } catch (err) {
+    console.error('Network genome error:', err);
+    return { valuationScore: 0, valuationReasoning: 'Erreur', networkPersona: 'Erreur', topStrengths: [], blindSpots: [] };
   }
 }
 

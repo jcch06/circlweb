@@ -29,7 +29,10 @@ import {
   RefreshCw,
   TrendingUp,
   Handshake,
-  ArrowLeftRight
+  ArrowLeftRight,
+  Activity,
+  Award,
+  AlertTriangle
 } from 'lucide-react';
 import { UserProfilePopup } from './UserProfilePopup';
 import { NetworkAnalysisProgress } from './NetworkAnalysisProgress';
@@ -283,6 +286,41 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
 
                     {v3Result ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+                        {/* Network Genome Section */}
+                        {v3Result.genome && (
+                          <div>
+                            <h3 style={{ color: 'var(--neon-purple)', marginBottom: 16, borderBottom: '1px solid rgba(168, 85, 247, 0.3)', paddingBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <Activity size={20} /> L'ADN de votre Réseau
+                            </h3>
+                            <div className="glass-card" style={{ padding: 24, borderColor: 'rgba(168, 85, 247, 0.4)', background: 'linear-gradient(135deg, rgba(20,15,30,0.8) 0%, rgba(30,20,50,0.8) 100%)' }}>
+                              <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700 }}>Votre Profil Réseau</span>
+                                <h2 style={{ color: '#fff', fontSize: '1.8rem', margin: '4px 0 0 0', textShadow: '0 0 10px rgba(168, 85, 247, 0.5)' }}>
+                                  {v3Result.genome.networkPersona}
+                                </h2>
+                              </div>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                                <div style={{ background: 'rgba(34, 197, 94, 0.05)', padding: 16, borderRadius: 12, border: '1px solid rgba(34, 197, 94, 0.2)' }}>
+                                  <h4 style={{ color: 'var(--neon-green)', margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: 6 }}><Award size={16} /> Top Forces</h4>
+                                  <ul style={{ margin: 0, paddingLeft: 20, color: 'var(--text-secondary)', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    {v3Result.genome.topStrengths.map((strength, i) => (
+                                      <li key={i}>{strength}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                                <div style={{ background: 'rgba(239, 68, 68, 0.05)', padding: 16, borderRadius: 12, border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                                  <h4 style={{ color: 'var(--neon-red, #ef4444)', margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={16} /> Angles Morts</h4>
+                                  <ul style={{ margin: 0, paddingLeft: 20, color: 'var(--text-secondary)', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    {v3Result.genome.blindSpots.map((spot, i) => (
+                                      <li key={i}>{spot}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Clusters Section */}
                         <div>
                           <h3 style={{ color: 'var(--neon-blue)', marginBottom: 16, borderBottom: '1px solid rgba(79, 142, 247, 0.3)', paddingBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -436,6 +474,34 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                        {/* Valuation Banner */}
+                        {v3Result.genome && v3Result.genome.valuationScore > 0 && (
+                          <div className="glass-card glow-active" style={{ 
+                            padding: '24px 32px', 
+                            background: 'linear-gradient(135deg, rgba(255, 214, 10, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%)',
+                            borderColor: 'rgba(255, 214, 10, 0.4)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 20
+                          }}>
+                            <div>
+                              <h2 style={{ color: 'var(--neon-yellow)', margin: '0 0 8px 0', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <Award size={24} /> Valeur de votre Réseau
+                              </h2>
+                              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>
+                                {v3Result.genome.valuationReasoning}
+                              </p>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontSize: '2.5rem', fontWeight: 800, color: '#fff', textShadow: '0 0 15px rgba(255, 214, 10, 0.6)', lineHeight: 1 }}>
+                                {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v3Result.genome.valuationScore)}
+                              </div>
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: 1 }}>Potentiel Annuel</span>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Category filter badges */}
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                           <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', marginRight: 8 }}>

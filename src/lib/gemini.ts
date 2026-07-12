@@ -9,6 +9,20 @@ const getGeminiClient = () => {
   return new GoogleGenerativeAI(apiKey);
 };
 
+export let globalTokenUsage: TokenUsage | null = null;
+
+export function trackGlobalUsage(result: any) {
+  if (globalTokenUsage && result?.response?.usageMetadata) {
+    globalTokenUsage.promptTokens += result.response.usageMetadata.promptTokenCount || 0;
+    globalTokenUsage.candidateTokens += result.response.usageMetadata.candidatesTokenCount || 0;
+    globalTokenUsage.totalTokens += result.response.usageMetadata.totalTokenCount || 0;
+  }
+}
+
+export function resetGlobalUsage() {
+  globalTokenUsage = { promptTokens: 0, candidateTokens: 0, totalTokens: 0 };
+};
+
 export const isGeminiConfigured = () => {
   const client = getGeminiClient();
   return client !== null;
@@ -127,6 +141,7 @@ Retourne un tableau JSON contenant jusqu'à 5 synergies les plus fortes avec la 
 Règle absolue : Ne propose que des synergies réalistes basées sur les données fournies. Réponds uniquement avec le JSON.`;
 
   const result = await model.generateContent(prompt);
+  trackGlobalUsage(result);
   let text = result.response.text();
   text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
   return JSON.parse(text);
@@ -191,6 +206,7 @@ Format de réponse attendu (Strictement ce JSON) :
 ]`;
 
   const result = await model.generateContent(prompt);
+  trackGlobalUsage(result);
   let text = result.response.text();
   text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
   return JSON.parse(text);
@@ -241,6 +257,7 @@ Format attendu :
 ]`;
 
   const result = await model.generateContent(prompt);
+  trackGlobalUsage(result);
   let text = result.response.text();
   text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
   return JSON.parse(text);
@@ -285,6 +302,7 @@ Retourne STRICTEMENT le JSON suivant :
 Règle : Reste factuel, ne sur-interprète pas si le texte ne contient rien de pertinent.`;
 
   const result = await model.generateContent(prompt);
+  trackGlobalUsage(result);
   let text = result.response.text();
   text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
   return JSON.parse(text);
@@ -374,6 +392,7 @@ Retourne un tableau JSON contenant les synergies trouvées avec cette structure 
 Règle absolue : Ne propose que des synergies réalistes basées sur les données fournies. S'il n'y a aucune synergie évidente ou sensée, renvoie un tableau vide []. Réponds uniquement avec le JSON.`;
 
   const result = await model.generateContent(prompt);
+  trackGlobalUsage(result);
   let text = result.response.text();
   text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
   return JSON.parse(text);
@@ -546,6 +565,7 @@ Retourne UNIQUEMENT un tableau JSON valide avec cette structure exacte :
 ]`;
 
   const result = await model.generateContent(prompt);
+  trackGlobalUsage(result);
   let text = result.response.text();
   text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
   return JSON.parse(text);
@@ -602,6 +622,7 @@ Retourne UNIQUEMENT un tableau JSON valide avec cette structure exacte :
 ]`;
 
   const result = await model.generateContent(prompt);
+  trackGlobalUsage(result);
   let text = result.response.text();
   text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
   return JSON.parse(text);
@@ -737,6 +758,12 @@ export interface DeepOpportunity {
   urgency: 'immediate' | 'short-term' | 'medium-term';
 }
 
+export interface TokenUsage {
+  promptTokens: number;
+  candidateTokens: number;
+  totalTokens: number;
+}
+
 /**
  * Full pipeline result
  */
@@ -750,6 +777,7 @@ export interface OracleV3Result {
   genome?: NetworkGenome;
   reciprocity?: ReciprocityImbalance[];
   timestamp: number;
+  tokenUsage?: TokenUsage;
 }
 
 /**
@@ -933,6 +961,7 @@ Retourne un tableau JSON avec cette structure exacte pour chaque contact :
 
     try {
       const result = await model.generateContent(prompt);
+      trackGlobalUsage(result);
       const parsed = safeParseGeminiJSON(result.response.text());
       if (Array.isArray(parsed)) {
         allProfiles.push(...parsed);
@@ -984,7 +1013,7 @@ export async function computeContactEmbeddings(
       ].filter(Boolean).join(' ');
 
       try {
-        const result = await model.embedContent(parts);
+        const result = await model.embedContent(parts); trackGlobalUsage(result);
         return {
           contactId: profile.contactId,
           embedding: result.embedding.values
@@ -1079,6 +1108,7 @@ Trie par potentiel de monétisation : "opportunity" avec budget-holders d'abord.
   onProgress?.(30);
 
   const result = await model.generateContent(prompt);
+  trackGlobalUsage(result);
   const entries = safeParseGeminiJSON(result.response.text());
 
   onProgress?.(100);
@@ -1158,6 +1188,7 @@ Retourne un tableau JSON avec cette structure exacte. GARDE EXACTEMENT les même
 ]`;
 
   const result = await model.generateContent(prompt);
+  trackGlobalUsage(result);
   return safeParseGeminiJSON(result.response.text());
 }
 
@@ -1264,6 +1295,7 @@ RÈGLES :
   onProgress?.(50);
 
   const result = await model.generateContent(prompt);
+  trackGlobalUsage(result);
   const opportunities = safeParseGeminiJSON(result.response.text());
 
   onProgress?.(100);
@@ -1309,6 +1341,9 @@ export async function runOracleV3Pipeline(
       }
     } catch { /* ignore invalid cache */ }
   }
+
+  // Initialize usage tracker
+  resetGlobalUsage();
 
   // Import vectorMath dynamically to keep the module lightweight
   const { buildSimilarityMatrix, kMeansClustering, findOptimalK, computeBetweennessCentrality } = await import('./vectorMath');
@@ -1415,7 +1450,7 @@ export async function runOracleV3Pipeline(
   const reciprocity = await analyzeReciprocity(profiles, notes);
   onPassChange?.(6, 100);
 
-  const result: OracleV3Result = {
+  const v3Result: OracleV3Result = {
     profiles,
     clusters,
     supplyDemand,
@@ -1424,15 +1459,16 @@ export async function runOracleV3Pipeline(
     keyIntros,
     genome,
     reciprocity,
-    timestamp: Date.now()
+    timestamp: Date.now(),
+    tokenUsage: globalTokenUsage || undefined
   };
-
-  // Cache result
+  globalTokenUsage = null; // cleanup
+  
   try {
-    localStorage.setItem(cacheKey, JSON.stringify(result));
+    localStorage.setItem(cacheKey, JSON.stringify(v3Result));
   } catch { /* localStorage full, ignore */ }
 
-  return result;
+  return v3Result;
 }
 
 /**

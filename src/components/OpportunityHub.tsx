@@ -868,6 +868,19 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
         </>
       )}
 
+      {/* API Cost Tracker (Tier 5) */}
+      {v3Result && v3Result.tokenUsage && (
+        <div style={{ marginTop: 32, padding: 12, borderRadius: 8, background: 'rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, border: '1px solid rgba(255,255,255,0.05)' }}>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+            ⚡ <b>Consommation API (Gemini Flash) :</b> {v3Result.tokenUsage.totalTokens.toLocaleString()} jetons
+          </div>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>|</div>
+          <div style={{ color: 'var(--neon-green)', fontSize: '0.8rem', fontWeight: 600 }}>
+            Coût estimé : ${(v3Result.tokenUsage.totalTokens / 1000000 * 0.35).toFixed(4)}
+          </div>
+        </div>
+      )}
+
       {showProfilePopup && (
         <UserProfilePopup 
           userId={user?.id || 'default'} 

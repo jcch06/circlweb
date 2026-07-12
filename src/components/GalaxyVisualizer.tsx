@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { supabase } from '../lib/supabase';
-import { enrichProfileFromScraping, isGeminiConfigured, detectContactSynergies } from '../lib/gemini';
-import type { ContactSynergy } from '../lib/gemini';
+import { enrichProfileFromScraping, isMistralConfigured, detectContactSynergies } from '../lib/mistral';
+import type { ContactSynergy } from '../lib/mistral';
 import { 
   X, 
   User, 
@@ -461,11 +461,11 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
     setEnriching(true);
 
     try {
-      if (!isGeminiConfigured()) {
-        throw new Error("Clé Gemini API non configurée. Veuillez ajouter votre clé dans le fichier .env.local.");
+      if (!isMistralConfigured()) {
+        throw new Error("Clé Mistral API non configurée. Veuillez ajouter votre clé dans le fichier .env.local.");
       }
 
-      // Call Gemini enrichment helper
+      // Call Mistral enrichment helper
       const enrichment = await enrichProfileFromScraping(
         selectedNode.first_name,
         selectedNode.company || 'Inconnue',
@@ -740,7 +740,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
               <div className="glow-active" style={styles.aiContextBlock}>
                 <div style={styles.aiContextTitle}>
                   <Sparkles size={14} color="var(--neon-purple)" />
-                  <span>Synthèse IA (Gemini)</span>
+                  <span>Synthèse IA (Mistral)</span>
                 </div>
                 <p style={styles.aiContextText}>{contactDetails.ai_context}</p>
               </div>
@@ -916,13 +916,13 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
             <div style={styles.infoBlock}>
               <div style={styles.blockTitleHeader}>
                 <Sparkles size={14} color="var(--neon-purple)" />
-                <h4 style={styles.blockTitle}>Synergies IA (Gemini)</h4>
+                <h4 style={styles.blockTitle}>Synergies IA (Mistral)</h4>
               </div>
               
-              {!isGeminiConfigured() ? (
+              {!isMistralConfigured() ? (
                 <div style={styles.synergyNotice}>
                   <Key size={14} color="var(--text-muted)" style={{ marginRight: 6 }} />
-                  <span style={styles.emptyText}>Clé Gemini requise pour activer l'Oracle.</span>
+                  <span style={styles.emptyText}>Clé Mistral requise pour activer l'Oracle.</span>
                 </div>
               ) : !hasSearchedSynergies && !loadingSynergies ? (
                 <button 
@@ -1026,7 +1026,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
               ) : (
                 <div className="glass-panel" style={styles.enrichForm}>
                   <h5 style={styles.formTitle}>Coller du contenu public</h5>
-                  <p style={styles.formDesc}>Collez le résumé LinkedIn, des extraits de son site web ou son parcours pour que Gemini l'analyse.</p>
+                  <p style={styles.formDesc}>Collez le résumé LinkedIn, des extraits de son site web ou son parcours pour que Mistral l'analyse.</p>
                   <textarea
                     value={scrapedText}
                     onChange={(e) => setScrapedText(e.target.value)}

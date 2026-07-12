@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { detectContactSynergies, enrichProfileFromScraping, autoEnrichContact, isGeminiConfigured, isPerplexityConfigured } from '../lib/gemini';
-import type { ContactSynergy } from '../lib/gemini';
+import { detectContactSynergies, enrichProfileFromScraping, autoEnrichContact, isMistralConfigured, isPerplexityConfigured } from '../lib/mistral';
+import type { ContactSynergy } from '../lib/mistral';
 import { 
   Users, 
   Plus, 
@@ -374,7 +374,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
     return score;
   };
 
-  // Bulk enrich contacts via Gemini AI with Google Search grounding
+  // Bulk enrich contacts via Mistral AI with Google Search grounding
   const handleBulkEnrich = async () => {
     // Filter by selected space if specified, otherwise all contacts
     const pool = bulkEnrichSpaceId
@@ -434,7 +434,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
         errorCount++;
         console.warn(`Enrichissement ignoré pour ${c.first_name} ${c.last_name}:`, err);
       }
-      // Delay between calls to respect Gemini rate limits
+      // Delay between calls to respect Mistral rate limits
       await new Promise(resolve => setTimeout(resolve, 1500));
     }
 
@@ -1544,7 +1544,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                 <h4 style={styles.blockTitle}>Synergies IA</h4>
               </div>
               
-              {!isGeminiConfigured() ? (
+              {!isMistralConfigured() ? (
                 <div style={styles.synergyNotice}>
                   <Key size={14} color="var(--text-muted)" style={{ marginRight: 6 }} />
                   <span style={styles.emptyText}>Clé IA requise pour activer l'Oracle.</span>

@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@mistralai/mistralai": "^2.4.1",
+    "@opentelemetry/api": "^1.9.1",
     "@supabase/supabase-js": "^2.110.2",
     "lucide-react": "^1.24.0",
     "react": "^19.2.7",

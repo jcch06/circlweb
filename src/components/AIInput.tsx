@@ -40,7 +40,7 @@ export const AIInput: React.FC<AIInputProps> = ({
     return personalSpace?.id || (spaces.length > 0 ? spaces[0].id : null);
   };
 
-  // 1. Structure a note for an existing contact using Gemini Pro
+  // 1. Structure a note for an existing contact using Mistral Pro
   const handleStructureNote = async () => {
     if (!selectedContactId) {
       alert("Veuillez sélectionner un contact.");
@@ -55,14 +55,14 @@ export const AIInput: React.FC<AIInputProps> = ({
     setResults(null);
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const apiKey = import.meta.env.VITE_MISTRAL_API_KEY;
       if (!apiKey || apiKey === 'YOUR_GEMINI_API_KEY_HERE') {
-        throw new Error("Clé Gemini API manquante dans .env.local");
+        throw new Error("Clé Mistral API manquante dans .env.local");
       }
 
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({
-        model: "gemini-3.5-flash",
+        model: "mistral-small-latest",
         generationConfig: { responseMimeType: "application/json" }
       });
 
@@ -192,14 +192,14 @@ Réponds uniquement avec le JSON.`;
     setResults(null);
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const apiKey = import.meta.env.VITE_MISTRAL_API_KEY;
       if (!apiKey || apiKey === 'YOUR_GEMINI_API_KEY_HERE') {
-        throw new Error("Clé Gemini API manquante dans .env.local");
+        throw new Error("Clé Mistral API manquante dans .env.local");
       }
 
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({
-        model: "gemini-3.5-flash", // Flash is faster and perfect for extraction
+        model: "mistral-small-latest", // Flash is faster and perfect for extraction
         generationConfig: { responseMimeType: "application/json" }
       });
 
@@ -453,7 +453,7 @@ Si aucun contact n'est présent, retourne {"contacts": []}. Réponds uniquement 
         <div className="glass-card glow-active" style={styles.resultsCard}>
           <div style={styles.resultsHeader}>
             <Sparkles size={18} color="var(--neon-purple)" />
-            <h3 style={{ fontSize: '1.1rem' }}>Contacts identifiés par Gemini ({results.contacts.length})</h3>
+            <h3 style={{ fontSize: '1.1rem' }}>Contacts identifiés par Mistral ({results.contacts.length})</h3>
           </div>
 
           {results.contacts.length === 0 ? (

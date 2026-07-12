@@ -1,42 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
+import React, { useState, useEffect } from 'react';
+import { Zap, Copy, Check, Target, Key, Brain, Workflow, Award } from 'lucide-react';
+import type { MistralPipelineResult } from '../lib/mistral';
+import {
   suggestWarmIntros,
-  runOracleV3Pipeline,
-  getCachedOracleV3Result,
-  isGeminiConfigured
-} from '../lib/gemini';
-import type {
-  WarmIntroSuggestion,
-  OracleV3Result,
-  DeepOpportunity
-} from '../lib/gemini';
-import { 
-  Sparkles, 
-  Zap, 
-  Lightbulb, 
-  Send, 
-  Key, 
-  Copy, 
-  Check, 
-  User,
-  Brain,
-  Network,
-  Target,
-  Star,
-  Briefcase,
-  Link2,
-  Calendar,
-  RefreshCw,
-  TrendingUp,
-  Handshake,
-  ArrowLeftRight,
-  Activity,
-  Award,
-  AlertTriangle
-} from 'lucide-react';
+  isMistralConfigured,
+  runMistralOracleBatchPipeline,
+  getCachedMistralPipelineResult
+} from '../lib/mistral';
 import { UserProfilePopup } from './UserProfilePopup';
-import { NetworkAnalysisProgress } from './NetworkAnalysisProgress';
-import { SupplyDemandMatrix } from './SupplyDemandMatrix';
 
 interface OpportunityHubProps {
   contacts: any[];
@@ -47,49 +18,27 @@ interface OpportunityHubProps {
   user: any;
 }
 
-type Mode = 'network' | 'opportunities' | 'intros' | 'radar';
-
-interface NetworkSnapshot {
-  timestamp: string;
-  valuationScore: number;
-}
-
-const CATEGORY_CONFIG: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
-  service: { icon: <Briefcase size={16} />, color: 'var(--neon-purple)', label: 'Service' },
-  product: { icon: <Target size={16} />, color: 'var(--neon-blue)', label: 'Produit' },
-  connection: { icon: <Link2 size={16} />, color: 'var(--neon-green)', label: 'Connexion' },
-  event: { icon: <Calendar size={16} />, color: 'var(--neon-yellow)', label: 'Événement' },
-};
-
-export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes, tags: _tags, user }) => {
-  const [activeMode, setActiveMode] = useState<Mode>('network');
+export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes, user }) => {
+  const [activeMode, setActiveMode] = useState<'network' | 'opportunities' | 'intros' | 'radar'>('network');
+  
   const [loading, setLoading] = useState(false);
-  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
-
-  // User Profile State
-  const [showProfilePopup, setShowProfilePopup] = useState(false);
-  const [userProfile, setUserProfile] = useState<any>(null);
-
-  // V3 Pipeline State
-  const [v3Result, setV3Result] = useState<OracleV3Result | null>(null);
-  const [valuationHistory, setValuationHistory] = useState<NetworkSnapshot[]>([]);
-  const [pipelinePass, setPipelinePass] = useState(0);
-  const [pipelineProgress, setPipelineProgress] = useState(0);
   const [pipelineRunning, setPipelineRunning] = useState(false);
+  const [pipelineProgress, setPipelineProgress] = useState(0);
+  
+  const [v3Result, setV3Result] = useState<MistralPipelineResult | null>(null);
+  const [showProfilePopup, setShowProfilePopup] = useState(false);
 
   // Legacy: Warm Intros (kept as a separate targeted feature)
-  const [intros, setIntros] = useState<WarmIntroSuggestion[]>([]);
+  const [intros, setIntros] = useState<any[]>([]);
   const [targetCompany, setTargetCompany] = useState('');
   const [targetRole, setTargetRole] = useState('');
 
-  const hasApiKey = isGeminiConfigured();
+  const hasApiKey = isMistralConfigured();
 
   useEffect(() => {
     if (user) {
       const saved = localStorage.getItem(`circl_user_profile_${user.id}`);
-      if (saved) {
-        setUserProfile(JSON.parse(saved));
-      } else {
+      if (!saved) {
         setShowProfilePopup(true);
       }
     }
@@ -98,68 +47,36 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
   // Load cached V3 result on mount or contacts change
   useEffect(() => {
     if (contacts && contacts.length > 0) {
-      const cached = getCachedOracleV3Result(contacts);
+      const cached = getCachedMistralPipelineResult(contacts);
       if (cached && !pipelineRunning) {
         setV3Result(cached);
       }
     }
   }, [contacts]);
 
-  // Load history
-  useEffect(() => {
-    if (user?.id) {
-      const historyRaw = localStorage.getItem(`circl_network_history_${user.id}`);
-      if (historyRaw) {
-        try {
-          setValuationHistory(JSON.parse(historyRaw));
-        } catch(e) {}
-      }
-    }
-  }, [user?.id]);
-
   // V3 Pipeline trigger
   const triggerV3Pipeline = async (forceRefresh = false) => {
-    if (!userProfile || !userProfile.name) {
-      alert("Veuillez d'abord remplir votre profil (Bouton 'Mon Profil' en haut) !");
-      setShowProfilePopup(true);
-      return;
-    }
-
     setPipelineRunning(true);
-    setPipelinePass(0);
     setPipelineProgress(0);
     setLoading(true);
 
-    // Clear cache if forced
     if (forceRefresh) {
-      const keys = Object.keys(localStorage).filter(k => k.startsWith('circl_oracle_v3_'));
+      const keys = Object.keys(localStorage).filter(k => k.startsWith('circl_mistral_v4_'));
       keys.forEach(k => localStorage.removeItem(k));
     }
 
     try {
-      const result = await runOracleV3Pipeline(
+      const result = await runMistralOracleBatchPipeline(
         contacts,
         notes,
-        userProfile,
-        (pass, progress) => {
-          setPipelinePass(pass);
+        (progress) => {
           setPipelineProgress(progress);
         }
       );
       setV3Result(result);
-      
-      if (result.genome && result.genome.valuationScore > 0 && user?.id) {
-        const newSnap = { timestamp: new Date().toISOString(), valuationScore: result.genome.valuationScore };
-        setValuationHistory(prev => {
-          // Avoid duplicate same-score snapshots within short timeframes (optional, but let's just append)
-          const updated = [...prev, newSnap];
-          localStorage.setItem(`circl_network_history_${user.id}`, JSON.stringify(updated));
-          return updated;
-        });
-      }
     } catch (err) {
       console.error(err);
-      alert("Erreur lors de l'analyse Oracle V3. Vérifiez votre clé API.");
+      alert("Erreur lors de l'analyse Mistral AI. Vérifiez votre clé API.");
     } finally {
       setPipelineRunning(false);
       setLoading(false);
@@ -183,65 +100,42 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
     }
   };
 
-  const handleCopy = (text: string, idx: number) => {
-    navigator.clipboard.writeText(text);
-    setCopiedIndex(idx);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const handleCopyEmail = (email: string, index: number) => {
+    navigator.clipboard.writeText(email);
+    setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 2000);
   };
-
-  // Calculate valuation growth (Time-Machine)
-  const valuationGrowth = useMemo(() => {
-    if (valuationHistory.length < 2 || !v3Result?.genome) return null;
-    const currentScore = v3Result.genome.valuationScore;
-    
-    // Find the oldest score in history to compare
-    const initialScore = valuationHistory[0].valuationScore;
-    
-    if (initialScore === 0 || initialScore === currentScore) return null;
-    
-    const growthPercent = ((currentScore - initialScore) / initialScore) * 100;
-    return {
-      value: growthPercent,
-      label: growthPercent > 0 ? `+${growthPercent.toFixed(1)}%` : `${growthPercent.toFixed(1)}%`,
-      isPositive: growthPercent > 0
-    };
-  }, [valuationHistory, v3Result]);
 
   return (
     <div style={styles.container}>
       {/* Header */}
       <div style={styles.header}>
-        <div>
-          <h1 style={styles.title}>
-            L'Oracle <span className="text-gradient-purple-blue">IA V3</span>
-          </h1>
-          <span style={styles.subtitle}>
-            Pipeline d'intelligence réseau multi-couches — Analyse profonde de votre constellation de contacts
-          </span>
-        </div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <button 
-            onClick={() => setShowProfilePopup(true)}
-            className="hover-glow"
-            style={{ 
-              background: 'rgba(138, 43, 226, 0.15)', 
-              border: '1px solid var(--neon-purple)', 
-              color: '#fff', 
-              padding: '6px 12px', 
-              borderRadius: 99, 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 6,
-              fontSize: '0.8rem',
-              cursor: 'pointer'
-            }}
-          >
-            <User size={14} /> Mon Profil Oracle
-          </button>
-          <div style={styles.apiBadge}>
-            <Sparkles size={14} color="var(--neon-purple)" />
-            <span style={styles.apiBadgeText}>Oracle V3 Actif</span>
+        <div style={styles.titleContainer}>
+          <div style={styles.iconWrapper}>
+            <Brain size={24} color="var(--bg-primary)" />
           </div>
+          <div>
+            <h2 style={styles.title}>Oracle IA <span style={{ color: 'var(--neon-green)', fontSize: '0.9rem', marginLeft: 8, padding: '2px 8px', background: 'rgba(34,197,94,0.1)', borderRadius: 12 }}>V4 (Mistral)</span></h2>
+            <p style={styles.subtitle}>Analyse Map-Reduce de votre réseau par Mistral Small</p>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button 
+            className="glass-button" 
+            onClick={() => setShowProfilePopup(true)}
+            style={{ fontSize: '0.85rem', padding: '6px 12px', background: 'transparent', borderColor: 'var(--neon-purple)' }}
+          >
+            Mon Profil
+          </button>
+          <button 
+            className="glow-button primary" 
+            onClick={() => triggerV3Pipeline(true)}
+            disabled={loading || contacts.length === 0}
+          >
+            {loading ? 'Analyse en cours...' : 'Lancer l\'Analyse Globale'}
+          </button>
         </div>
       </div>
 
@@ -249,15 +143,13 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
       {!hasApiKey && (
         <div className="glass-card" style={styles.setupCard}>
           <Key size={36} color="var(--neon-purple)" style={{ marginBottom: 12 }} />
-          <h3>Clé API Gemini Pro Requise</h3>
+          <h3>Clé API Mistral Requise</h3>
           <p style={styles.setupDesc}>
-            Pour activer le cerveau IA de l'application, vous devez fournir votre clé Google AI Studio. 
-            C'est gratuit, ultra-rapide et sécurisé (la clé reste uniquement dans vos variables d'environnement locales).
+            Pour activer le cerveau IA de l'application, vous devez fournir votre clé Mistral AI.
           </p>
           <div style={styles.setupInstructions}>
-            <p>1. Allez sur <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer" style={{ color: 'var(--neon-blue)' }}>Google AI Studio</a> et cliquez sur <b>"Get API Key"</b>.</p>
-            <p>2. Copiez votre clé de développement.</p>
-            <p>3. Ouvrez le fichier <code>.env.local</code> de votre projet et remplacez la valeur : <br/> <code>VITE_GEMINI_API_KEY=votre_cle_ici</code></p>
+            <p>1. Allez sur <a href="https://console.mistral.ai/" target="_blank" rel="noreferrer" style={{ color: 'var(--neon-blue)' }}>Mistral Console</a> et créez une clé API.</p>
+            <p>3. Ouvrez le fichier <code>.env.local</code> de votre projet et remplacez la valeur : <br/> <code>VITE_MISTRAL_API_KEY=votre_cle_ici</code></p>
             <p>4. Relancez l'application.</p>
           </div>
         </div>
@@ -272,611 +164,258 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
               style={{ ...styles.tabBtn, ...(activeMode === 'network' ? styles.tabBtnActive : {}) }}
             >
               <Brain size={16} />
-              Analyse Réseau
+              Synthèse Globale (Reduce)
             </button>
             <button 
               onClick={() => setActiveMode('opportunities')} 
               style={{ ...styles.tabBtn, ...(activeMode === 'opportunities' ? styles.tabBtnActive : {}) }}
             >
-              <Lightbulb size={16} />
-              Mes Opportunités
+              <Workflow size={16} />
+              Résultats par Lots (Map)
             </button>
             <button 
               onClick={() => setActiveMode('intros')} 
               style={{ ...styles.tabBtn, ...(activeMode === 'intros' ? styles.tabBtnActive : {}) }}
             >
-              <Send size={16} />
-              Warm Intros Finder
-            </button>
-            <button 
-              onClick={() => setActiveMode('radar')} 
-              style={{ ...styles.tabBtn, ...(activeMode === 'radar' ? styles.tabBtnActive : {}) }}
-            >
-              <Activity size={16} />
-              Radar & Réciprocité
+              <Target size={16} />
+              Warm Intros
             </button>
           </div>
 
-          {/* Main Area */}
-          <div style={styles.contentArea}>
-            {/* Pipeline Progress (shown when running) */}
+          <div style={styles.tabContentContainer}>
+            {/* PROGRESS OVERLAY */}
             {pipelineRunning && (
-              <NetworkAnalysisProgress
-                currentPass={pipelinePass}
-                passProgress={pipelineProgress}
-                isComplete={false}
-              />
+              <div style={styles.progressOverlay}>
+                <div style={styles.progressModal}>
+                  <div style={styles.spinnerWrapper}>
+                    <div style={styles.spinnerPulse}></div>
+                    <Brain size={32} color="var(--neon-blue)" style={{ position: 'relative', zIndex: 2 }} />
+                  </div>
+                  <h3 style={{ margin: '16px 0 8px 0' }}>Analyse Mistral Map-Reduce...</h3>
+                  <p style={{ color: 'var(--text-secondary)', marginBottom: 24, fontSize: '0.9rem', textAlign: 'center' }}>
+                    Le réseau est découpé en lots. Chaque lot est analysé, puis une synthèse globale est générée.
+                  </p>
+                  
+                  <div style={styles.progressBarBg}>
+                    <div style={{ ...styles.progressBarFill, width: `${pipelineProgress}%` }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    <span>Traitement</span>
+                    <span>{Math.round(pipelineProgress)}%</span>
+                  </div>
+                </div>
+              </div>
             )}
 
-            {!pipelineRunning && (
-              <>
-                {/* 1. NETWORK ANALYSIS TAB */}
-                {activeMode === 'network' && (
-                  <div style={styles.tabContent}>
-                    <div style={styles.controlsRow}>
-                      <div style={{ flex: 1 }}>
-                        <p style={styles.tabDescription}>
-                          L'Oracle V3 exécute une <strong>pipeline en 4 passes</strong> : extraction structurée → embeddings vectoriels → clustering & matrice offre/demande → analyse croisée avec votre profil.
-                        </p>
-                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 6 }}>
-                          📊 {contacts.length} contacts analysés | {v3Result ? `${v3Result.clusters.length} clusters détectés` : 'Analyse non lancée'}
-                        </p>
-                      </div>
-                      <div style={{ display: 'flex', gap: 8, flexDirection: 'column' }}>
-                        <button onClick={() => triggerV3Pipeline(false)} className="btn-primary" disabled={loading}>
-                          {v3Result ? 'Relancer l\'Analyse' : 'Lancer l\'Analyse Systémique'} 🚀
-                        </button>
-                        {v3Result && (
-                          <button 
-                            onClick={() => triggerV3Pipeline(true)} 
-                            style={{ background: 'none', border: '1px solid var(--border-glow)', color: 'var(--text-muted)', padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4 }}
-                          >
-                            <RefreshCw size={12} /> Forcer le recalcul
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {v3Result ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
-                        {/* Network Genome Section */}
-                        {v3Result.genome && (
-                          <div>
-                            <h3 style={{ color: 'var(--neon-purple)', marginBottom: 16, borderBottom: '1px solid rgba(168, 85, 247, 0.3)', paddingBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <Activity size={20} /> L'ADN de votre Réseau
-                            </h3>
-                            <div className="glass-card" style={{ padding: 24, borderColor: 'rgba(168, 85, 247, 0.4)', background: 'linear-gradient(135deg, rgba(20,15,30,0.8) 0%, rgba(30,20,50,0.8) 100%)' }}>
-                              <div style={{ textAlign: 'center', marginBottom: 20 }}>
-                                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700 }}>Votre Profil Réseau</span>
-                                <h2 style={{ color: '#fff', fontSize: '1.8rem', margin: '4px 0 0 0', textShadow: '0 0 10px rgba(168, 85, 247, 0.5)' }}>
-                                  {v3Result.genome.networkPersona}
-                                </h2>
-                              </div>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                                <div style={{ background: 'rgba(34, 197, 94, 0.05)', padding: 16, borderRadius: 12, border: '1px solid rgba(34, 197, 94, 0.2)' }}>
-                                  <h4 style={{ color: 'var(--neon-green)', margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: 6 }}><Award size={16} /> Top Forces</h4>
-                                  <ul style={{ margin: 0, paddingLeft: 20, color: 'var(--text-secondary)', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                    {v3Result.genome.topStrengths.map((strength, i) => (
-                                      <li key={i}>{strength}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                                <div style={{ background: 'rgba(239, 68, 68, 0.05)', padding: 16, borderRadius: 12, border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                                  <h4 style={{ color: 'var(--neon-red, #ef4444)', margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={16} /> Angles Morts</h4>
-                                  <ul style={{ margin: 0, paddingLeft: 20, color: 'var(--text-secondary)', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                    {v3Result.genome.blindSpots.map((spot, i) => (
-                                      <li key={i}>{spot}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Clusters Section */}
-                        <div>
-                          <h3 style={{ color: 'var(--neon-blue)', marginBottom: 16, borderBottom: '1px solid rgba(79, 142, 247, 0.3)', paddingBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <Network size={20} /> Clusters Détectés ({v3Result.clusters.length})
-                          </h3>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
-                            {v3Result.clusters.map((cluster, idx) => (
-                              <div key={idx} className="glass-card glow-active" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14, borderColor: 'rgba(79, 142, 247, 0.3)' }}>
-                                <div>
-                                  <h4 style={{ color: '#fff', fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>{cluster.clusterName}</h4>
-                                  <p style={{ color: 'var(--neon-blue)', fontSize: '0.8rem', margin: '4px 0 0 0' }}>{cluster.theme}</p>
-                                </div>
-
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                                  {cluster.members.map(m => (
-                                    <span key={m.id} style={{ background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: 6, fontSize: '0.78rem', color: '#fff' }}>
-                                      {m.name}
-                                    </span>
-                                  ))}
-                                </div>
-
-                                <div>
-                                  <span style={styles.boxTitle}>Besoins communs :</span>
-                                  <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-secondary)', fontSize: '0.82rem', lineHeight: 1.6 }}>
-                                    {cluster.commonNeeds.map((n, i) => <li key={i}>{n}</li>)}
-                                  </ul>
-                                </div>
-
-                                {cluster.commonSkills.length > 0 && (
-                                  <div>
-                                    <span style={styles.boxTitle}>Compétences partagées :</span>
-                                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                                      {cluster.commonSkills.map((s, i) => (
-                                        <span key={i} style={{ background: 'rgba(48, 192, 96, 0.1)', color: 'var(--neon-green)', padding: '2px 8px', borderRadius: 99, fontSize: '0.72rem' }}>{s}</span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Bridge Contacts */}
-                        {v3Result.bridgeContacts.length > 0 && (
-                          <div>
-                            <h3 style={{ color: 'var(--neon-purple)', marginBottom: 16, borderBottom: '1px solid rgba(138, 43, 226, 0.3)', paddingBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <Zap size={20} /> Super-Connecteurs ({v3Result.bridgeContacts.length})
-                            </h3>
-                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 12 }}>
-                              Ces contacts sont les "ponts" qui relient plusieurs communautés de votre réseau. Ce sont vos relais les plus stratégiques.
-                            </p>
-                            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                              {v3Result.bridgeContacts.map((bc, idx) => (
-                                <div key={idx} className="glass-card" style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 10, borderColor: 'rgba(138, 43, 226, 0.3)' }}>
-                                  <div style={{ background: 'linear-gradient(135deg, var(--neon-purple), var(--neon-blue))', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.8rem', color: '#fff' }}>
-                                    {idx + 1}
-                                  </div>
-                                  <div>
-                                    <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.9rem' }}>{bc.name}</span>
-                                    <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.72rem' }}>
-                                      Score de centralité : {bc.centralityScore}
-                                    </span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Strategic Introductions */}
-                        {v3Result.keyIntros && v3Result.keyIntros.length > 0 && (
-                          <div>
-                            <h3 style={{ color: 'var(--neon-yellow)', marginBottom: 16, borderBottom: '1px solid rgba(255, 214, 10, 0.3)', paddingBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <Handshake size={20} /> Introductions Stratégiques ({v3Result.keyIntros.length})
-                            </h3>
-                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 12 }}>
-                              Paires de contacts qui devraient se rencontrer — et ce que VOUS gagnez en orchestrant ces introductions.
-                            </p>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                              {v3Result.keyIntros.map((intro, idx) => (
-                                <div key={idx} className="glass-card" style={{ padding: 18, borderColor: 'rgba(255, 214, 10, 0.2)' }}>
-                                  {/* Pair Header */}
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                                    <div style={{ flex: 1, textAlign: 'center' }}>
-                                      <span style={{ color: '#fff', fontWeight: 700, fontSize: '0.95rem' }}>{intro.contactA?.name}</span>
-                                      <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.72rem' }}>{intro.contactA?.role} @ {intro.contactA?.company}</span>
-                                    </div>
-                                    <div style={{ background: 'linear-gradient(135deg, var(--neon-yellow), var(--neon-purple))', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                      <ArrowLeftRight size={16} color="#fff" />
-                                    </div>
-                                    <div style={{ flex: 1, textAlign: 'center' }}>
-                                      <span style={{ color: '#fff', fontWeight: 700, fontSize: '0.95rem' }}>{intro.contactB?.name}</span>
-                                      <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.72rem' }}>{intro.contactB?.role} @ {intro.contactB?.company}</span>
-                                    </div>
-                                  </div>
-                                  {/* Reason */}
-                                  <p style={{ color: 'var(--neon-yellow)', fontSize: '0.88rem', fontWeight: 600, margin: '0 0 10px 0', fontStyle: 'italic' }}>💡 {intro.reason}</p>
-                                  {/* Value grid */}
-                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                                    <div style={{ background: 'rgba(79, 142, 247, 0.08)', padding: 8, borderRadius: 6 }}>
-                                      <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>Valeur pour {intro.contactA?.name?.split(' ')[0]}</span>
-                                      <span style={{ fontSize: '0.78rem', color: 'var(--neon-blue)' }}>{intro.valueForA}</span>
-                                    </div>
-                                    <div style={{ background: 'rgba(138, 43, 226, 0.08)', padding: 8, borderRadius: 6 }}>
-                                      <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>Valeur pour {intro.contactB?.name?.split(' ')[0]}</span>
-                                      <span style={{ fontSize: '0.78rem', color: 'var(--neon-purple)' }}>{intro.valueForB}</span>
-                                    </div>
-                                    <div style={{ background: 'rgba(48, 192, 96, 0.08)', padding: 8, borderRadius: 6 }}>
-                                      <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>🎯 Ce que VOUS gagnez</span>
-                                      <span style={{ fontSize: '0.78rem', color: 'var(--neon-green)', fontWeight: 600 }}>{intro.valueForUser}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Supply/Demand Matrix */}
-                        <div>
-                          <h3 style={{ color: 'var(--neon-green)', marginBottom: 16, borderBottom: '1px solid rgba(48, 192, 96, 0.3)', paddingBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <TrendingUp size={20} /> Matrice Offre / Demande
-                          </h3>
-                          <SupplyDemandMatrix 
-                            data={v3Result.supplyDemand} 
-                            userName={userProfile?.name || 'Vous'} 
-                          />
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={styles.emptyResults}>
-                        <span>Cliquez sur le bouton ci-dessus pour lancer l'analyse réseau complète.</span>
-                      </div>
-                    )}
+            {/* 1. SYNTHESIS TAB */}
+            {activeMode === 'network' && (
+              <div style={styles.tabContent}>
+                {!v3Result ? (
+                  <div style={styles.emptyState}>
+                    <Workflow size={48} color="rgba(255,255,255,0.1)" />
+                    <h3>Aucune analyse Mistral V4</h3>
+                    <p>Cliquez sur "Lancer l'Analyse Globale" pour démarrer.</p>
                   </div>
-                )}
-
-                {/* 2. OPPORTUNITIES TAB */}
-                {activeMode === 'opportunities' && (
-                  <div style={styles.tabContent}>
-                    {!v3Result ? (
-                      <div style={styles.emptyResults}>
-                        <div style={{ textAlign: 'center' }}>
-                          <Brain size={40} color="var(--text-muted)" style={{ marginBottom: 12 }} />
-                          <p style={{ color: 'var(--text-muted)', marginBottom: 16 }}>L'analyse réseau doit être lancée d'abord.</p>
-                          <button onClick={() => { setActiveMode('network'); triggerV3Pipeline(false); }} className="btn-primary">
-                            Lancer l'Analyse Complète 🚀
-                          </button>
-                        </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+                    
+                    {/* Synthèse */}
+                    <div className="glass-card" style={{ padding: 32, background: 'linear-gradient(145deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.4) 100%)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+                        <Brain size={28} color="var(--neon-green)" />
+                        <h3 style={{ margin: 0, fontSize: '1.4rem' }}>Force du Réseau</h3>
                       </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                        {/* Valuation Banner */}
-                        {v3Result.genome && v3Result.genome.valuationScore > 0 && (
-                          <div className="glass-card glow-active" style={{ 
-                            padding: '24px 32px', 
-                            background: 'linear-gradient(135deg, rgba(255, 214, 10, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%)',
-                            borderColor: 'rgba(255, 214, 10, 0.4)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: 20
-                          }}>
-                            <div>
-                              <h2 style={{ color: 'var(--neon-yellow)', margin: '0 0 8px 0', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <Award size={24} /> Valeur de votre Réseau
-                              </h2>
-                              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>
-                                {v3Result.genome.valuationReasoning}
-                              </p>
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontSize: '2.5rem', fontWeight: 800, color: '#fff', textShadow: '0 0 15px rgba(255, 214, 10, 0.6)', lineHeight: 1 }}>
-                                {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v3Result.genome.valuationScore)}
-                              </div>
-                              <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: 1 }}>Potentiel Annuel</span>
-                              {valuationGrowth && (
-                                <div style={{ 
-                                  marginTop: 8,
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 4,
-                                  background: valuationGrowth.isPositive ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                                  color: valuationGrowth.isPositive ? '#4ade80' : '#f87171',
-                                  padding: '4px 10px',
-                                  borderRadius: 99,
-                                  fontSize: '0.8rem',
-                                  fontWeight: 600
-                                }}>
-                                  <TrendingUp size={14} style={{ transform: valuationGrowth.isPositive ? 'none' : 'rotate(180deg)' }} />
-                                  {valuationGrowth.label} depuis la 1ère analyse
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Category filter badges */}
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                          <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', marginRight: 8 }}>
-                            {v3Result.opportunities.length} opportunités détectées :
-                          </span>
-                          {Object.entries(
-                            v3Result.opportunities.reduce<Record<string, number>>((acc, o) => { acc[o.category] = (acc[o.category] || 0) + 1; return acc; }, {})
-                          ).map(([cat, count]) => (
-                            <span key={cat} style={{ background: `${CATEGORY_CONFIG[cat]?.color || '#fff'}15`, color: CATEGORY_CONFIG[cat]?.color || '#fff', padding: '4px 12px', borderRadius: 99, fontSize: '0.78rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                              {CATEGORY_CONFIG[cat]?.icon} {CATEGORY_CONFIG[cat]?.label}: {count}
-                            </span>
-                          ))}
-                        </div>
-
-                        {/* Opportunity Cards */}
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: 20 }}>
-                          {v3Result.opportunities.map((opp, idx) => (
-                            <OpportunityCard key={idx} opportunity={opp} />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* 3. WARM INTROS TAB */}
-                {activeMode === 'intros' && (
-                  <div style={styles.tabContent}>
-                    <div style={styles.introForm}>
-                      <p style={{ ...styles.tabDescription, marginBottom: 16 }}>
-                        Vous ciblez une entreprise spécifique ou un rôle ? Entrez les critères ci-dessous. L'IA va fouiller dans votre réseau fusionné pour trouver qui peut vous faire l'introduction et rédigera le message à envoyer.
+                      <p style={{ fontSize: '1.1rem', color: '#e2e8f0', lineHeight: 1.6 }}>
+                        {v3Result.synthesis.networkStrength}
                       </p>
-                      <div style={styles.formRow}>
-                        <div style={styles.formGroup}>
-                          <label style={styles.formLabel}>Entreprise Cible</label>
-                          <input
-                            type="text"
-                            value={targetCompany}
-                            onChange={(e) => setTargetCompany(e.target.value)}
-                            placeholder="Ex: Stripe, Google, LVMH..."
-                            style={styles.formInput}
-                          />
-                        </div>
-                        <div style={styles.formGroup}>
-                          <label style={styles.formLabel}>Poste recherché</label>
-                          <input
-                            type="text"
-                            value={targetRole}
-                            onChange={(e) => setTargetRole(e.target.value)}
-                            placeholder="Ex: CTO, Head of Product, CFO..."
-                            style={styles.formInput}
-                          />
-                        </div>
-                        <button 
-                          onClick={triggerWarmIntroSearch} 
-                          className="btn-primary"
-                          style={{ alignSelf: 'flex-end', height: 44, padding: '0 24px' }}
-                          disabled={loading}
-                        >
-                          Trouver le Chemin 🔍
-                        </button>
+                    </div>
+
+                    {/* Thèmes Globaux */}
+                    <div>
+                      <h3 style={{ color: 'var(--neon-blue)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Target size={20} /> Thèmes Dominants
+                      </h3>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                        {v3Result.synthesis.globalThemes.map((theme, i) => (
+                          <div key={i} style={{ padding: '8px 16px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: 24, color: '#38bdf8' }}>
+                            {theme}
+                          </div>
+                        ))}
                       </div>
                     </div>
 
-                    <div style={styles.introsList}>
-                      {intros.length === 0 ? (
-                        <div style={styles.emptyResults}>
-                          <span>Renseignez l'entreprise et le poste cible pour lancer la recherche de warm intros.</span>
-                        </div>
-                      ) : (
-                        intros.map((intro, idx) => (
-                          <div key={idx} className="glass-card" style={styles.introCard}>
-                            <div style={styles.introCardHeader}>
-                              <div>
-                                <h3 style={styles.introCardTitle}>
-                                  Introduction via <span className="text-gradient-purple-blue">{intro.connectorName}</span>
-                                </h3>
-                                <p style={styles.introReason}>{intro.reason}</p>
-                              </div>
-                              <div style={styles.closenessScore}>
-                                <span style={styles.scoreLabel}>Confiance</span>
-                                <div style={styles.stars}>
-                                  {Array.from({ length: 5 }).map((_, i) => (
-                                    <Sparkles 
-                                      key={i} 
-                                      size={12} 
-                                      color={i < intro.connectorCloseness ? 'var(--neon-yellow)' : 'var(--text-muted)'} 
-                                      style={{ marginRight: 2 }}
-                                    />
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-
-                            <div style={styles.emailContainer}>
-                              <div style={styles.emailHeader}>
-                                <span>Projet de mail d'introduction :</span>
-                                <button 
-                                  onClick={() => handleCopy(intro.introEmailDraft, idx)} 
-                                  style={styles.copyBtn}
-                                >
-                                  {copiedIndex === idx ? (
-                                    <>
-                                      <Check size={14} color="var(--neon-green)" />
-                                      Copié !
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Copy size={14} />
-                                      Copier
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-                              <pre style={styles.emailBody}>{intro.introEmailDraft}</pre>
+                    {/* Synergies Cross-Batch */}
+                    <div>
+                      <h3 style={{ color: 'var(--neon-yellow)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Zap size={20} /> Synergies Globales Croisées
+                      </h3>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+                        {v3Result.synthesis.crossBatchSynergies.map((syn, i) => (
+                          <div key={i} className="glass-card" style={{ padding: 20 }}>
+                            <h4 style={{ color: '#fff', marginBottom: 8, fontSize: '1.1rem' }}>{syn.theme}</h4>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 12 }}>{syn.description}</p>
+                            <div style={{ display: 'inline-block', background: 'rgba(250, 204, 21, 0.1)', color: '#facc15', padding: '4px 10px', borderRadius: 6, fontSize: '0.8rem', fontWeight: 600 }}>
+                              Impact : {syn.potentialImpact}
                             </div>
                           </div>
-                        ))
-                      )}
+                        ))}
+                      </div>
                     </div>
+
+                    {/* Plan d'action */}
+                    <div className="glass-card" style={{ padding: 24, borderColor: 'var(--neon-purple)' }}>
+                      <h3 style={{ color: 'var(--neon-purple)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Award size={20} /> Plan d'Action Recommandé
+                      </h3>
+                      <ul style={{ paddingLeft: 20, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                        {v3Result.synthesis.recommendedActionPlan.map((action, i) => (
+                          <li key={i} style={{ marginBottom: 8 }}>{action}</li>
+                        ))}
+                      </ul>
+                    </div>
+
                   </div>
                 )}
+              </div>
+            )}
 
-                {/* 4. RADAR & RECIPROCITE TAB */}
-                {activeMode === 'radar' && (
-                  <div style={styles.tabContent}>
-                    {!v3Result ? (
-                      <div style={styles.emptyResults}>
-                        <div style={{ textAlign: 'center' }}>
-                          <Activity size={40} color="var(--text-muted)" style={{ marginBottom: 12 }} />
-                          <p style={{ color: 'var(--text-muted)', marginBottom: 16 }}>Le Radar nécessite une analyse complète de vos contacts.</p>
-                          <button onClick={() => { setActiveMode('network'); triggerV3Pipeline(false); }} className="btn-primary">
-                            Lancer l'Analyse Complète 🚀
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+            {/* 2. BATCHES TAB */}
+            {activeMode === 'opportunities' && (
+              <div style={styles.tabContent}>
+                {!v3Result ? (
+                  <div style={styles.emptyState}>
+                    <Workflow size={48} color="rgba(255,255,255,0.1)" />
+                    <h3>Aucune analyse Mistral V4</h3>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                      L'algorithme a découpé votre réseau en {v3Result.batches.length} lots. Voici les détails extraits pour chaque groupe.
+                    </p>
+
+                    {v3Result.batches.map((batch, i) => (
+                      <div key={i} className="glass-card" style={{ padding: 24, borderLeft: '4px solid var(--neon-blue)' }}>
+                        <h3 style={{ margin: '0 0 16px 0', color: '#fff' }}>Lot d'Analyse #{i + 1}</h3>
                         
-                        {/* Section 0: Leaderboard des Connecteurs */}
-                        <div>
-                          <h3 style={{ color: 'var(--neon-yellow)', marginBottom: 16, borderBottom: '1px solid rgba(255, 214, 10, 0.3)', paddingBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <Award size={20} /> Top Connecteurs (Leaderboard)
-                          </h3>
-                          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 16 }}>
-                            Vos contacts les plus influents, classés par leur capacité à agir comme des "ponts" entre différents univers de votre réseau.
-                          </p>
-                          
-                          {(!v3Result.bridgeContacts || v3Result.bridgeContacts.length === 0) ? (
-                            <div className="glass-card" style={{ padding: 24, textAlign: 'center', borderColor: 'rgba(255,255,255,0.05)' }}>
-                              <p style={{ margin: 0, color: 'var(--text-muted)' }}>Pas assez de données pour établir un classement.</p>
-                            </div>
-                          ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                              {[...v3Result.bridgeContacts].sort((a,b) => b.centralityScore - a.centralityScore).slice(0, 5).map((bc, idx) => (
-                                <div key={idx} className="glass-card" style={{ 
-                                  padding: '16px 20px', 
-                                  display: 'flex', 
-                                  alignItems: 'center', 
-                                  justifyContent: 'space-between',
-                                  borderColor: idx === 0 ? 'rgba(255, 214, 10, 0.4)' : idx === 1 ? 'rgba(156, 163, 175, 0.4)' : idx === 2 ? 'rgba(180, 83, 9, 0.4)' : 'rgba(255,255,255,0.05)',
-                                  background: idx === 0 ? 'linear-gradient(90deg, rgba(255, 214, 10, 0.05), transparent)' : 'transparent'
-                                }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                                    <div style={{ 
-                                      width: 40, height: 40, borderRadius: '50%', 
-                                      display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                                      background: idx === 0 ? 'var(--neon-yellow)' : idx === 1 ? '#9ca3af' : idx === 2 ? '#cd7f32' : 'rgba(255,255,255,0.1)',
-                                      color: idx < 3 ? '#000' : '#fff',
-                                      fontWeight: 800, fontSize: '1.2rem'
-                                    }}>
-                                      #{idx + 1}
-                                    </div>
-                                    <div>
-                                      <div style={{ fontWeight: 600, color: '#fff', fontSize: '1.1rem' }}>{bc.name}</div>
-                                      <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: 2 }}>
-                                        Nœud stratégique
-                                      </div>
-                                    </div>
+                        <div style={{ marginBottom: 16 }}>
+                          <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700 }}>Besoins Récurrents</span>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                            {batch.recurrentNeeds.map((need, j) => (
+                              <span key={j} style={{ padding: '4px 8px', background: 'rgba(255,255,255,0.05)', borderRadius: 4, fontSize: '0.8rem' }}>{need}</span>
+                            ))}
+                          </div>
+                        </div>
+
+                        {batch.immediateSynergies && batch.immediateSynergies.length > 0 && (
+                          <div style={{ marginBottom: 16 }}>
+                            <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--neon-green)', fontWeight: 700 }}>Synergies Immédiates</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                              {batch.immediateSynergies.map((syn, j) => (
+                                <div key={j} style={{ padding: 12, background: 'rgba(34, 197, 94, 0.05)', borderRadius: 8, border: '1px solid rgba(34, 197, 94, 0.1)' }}>
+                                  <div style={{ fontWeight: 600, color: '#fff', marginBottom: 4 }}>
+                                    {syn.contactName1} <span style={{ color: 'var(--text-muted)' }}>&</span> {syn.contactName2}
                                   </div>
-                                  <div style={{ textAlign: 'right' }}>
-                                    <div style={{ color: 'var(--neon-blue)', fontWeight: 700, fontSize: '1.2rem' }}>
-                                      {Math.round(bc.centralityScore * 100)} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>pts</span>
-                                    </div>
-                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', textTransform: 'uppercase' }}>Centralité</div>
-                                  </div>
+                                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{syn.reason}</div>
                                 </div>
                               ))}
                             </div>
-                          )}
-                        </div>
+                          </div>
+                        )}
 
-                        {/* Section 1: Moteur de Réciprocité */}
                         <div>
-                          <h3 style={{ color: 'var(--neon-purple)', marginBottom: 16, borderBottom: '1px solid rgba(168, 85, 247, 0.3)', paddingBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <Handshake size={20} /> Moteur de Réciprocité
-                          </h3>
-                          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 16 }}>
-                            Le réseau fonctionne sur l'échange de valeur. Voici les déséquilibres relationnels détectés dans vos notes.
-                          </p>
-                          
-                          {(!v3Result.reciprocity || v3Result.reciprocity.length === 0) ? (
-                            <div className="glass-card" style={{ padding: 24, textAlign: 'center', borderColor: 'rgba(255,255,255,0.05)' }}>
-                              <p style={{ margin: 0, color: 'var(--text-muted)' }}>Aucun déséquilibre relationnel majeur détecté pour le moment.</p>
-                            </div>
-                          ) : (
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: 16 }}>
-                              {v3Result.reciprocity.map((item, idx) => (
-                                <div key={idx} className="glass-card" style={{ 
-                                  padding: 16, 
-                                  borderColor: item.status === 'user_owes_them' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.3)',
-                                  background: item.status === 'user_owes_them' ? 'rgba(239, 68, 68, 0.05)' : 'rgba(34, 197, 94, 0.05)'
-                                }}>
-                                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                                    <div>
-                                      <h4 style={{ margin: '0 0 4px 0', color: '#fff', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                        {item.contactName}
-                                      </h4>
-                                      <span style={{ 
-                                        fontSize: '0.75rem', 
-                                        padding: '2px 8px', 
-                                        borderRadius: 4, 
-                                        fontWeight: 600,
-                                        background: item.status === 'user_owes_them' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
-                                        color: item.status === 'user_owes_them' ? 'var(--neon-red, #ef4444)' : 'var(--neon-green)'
-                                      }}>
-                                        {item.status === 'user_owes_them' ? '⚠️ Vous lui devez un service' : '🟢 Il/Elle vous doit un service'}
-                                      </span>
-                                    </div>
-                                  </div>
-                                  <div style={{ marginTop: 12 }}>
-                                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '0 0 8px 0' }}>
-                                      <strong>Pourquoi :</strong> {item.reason}
-                                    </p>
-                                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
-                                      <strong>Action reco :</strong> {item.recommendedAction}
-                                    </p>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Section 2: Deal Flow Radar */}
-                        <div>
-                          <h3 style={{ color: 'var(--neon-blue)', marginBottom: 16, borderBottom: '1px solid rgba(79, 142, 247, 0.3)', paddingBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <TrendingUp size={20} /> Deal Flow Radar
-                          </h3>
-                          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 16 }}>
-                            Signaux d'achat et intentions d'affaires détectés récemment chez vos contacts.
-                          </p>
-                          
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                            {v3Result.profiles
-                              .filter(p => (p.buyingSignals && p.buyingSignals.length > 0) || p.businessIntent)
-                              .map((p, idx) => (
-                              <div key={idx} className="glass-card glow-active" style={{ padding: 16, display: 'flex', gap: 16, alignItems: 'center' }}>
-                                <div style={{ minWidth: 200 }}>
-                                  <h4 style={{ margin: '0 0 4px 0', color: '#fff', fontSize: '1.05rem' }}>{p.name}</h4>
-                                  <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.8rem' }}>{p.roleCategory} • {p.sector}</p>
-                                </div>
-                                <div style={{ width: 1, background: 'rgba(255,255,255,0.1)', height: '100%', alignSelf: 'stretch' }} />
-                                <div style={{ flex: 1 }}>
-                                  {p.businessIntent && (
-                                    <div style={{ marginBottom: 6 }}>
-                                      <span style={{ fontSize: '0.7rem', color: 'var(--neon-purple)', fontWeight: 700, textTransform: 'uppercase' }}>Objectif</span>
-                                      <p style={{ margin: '2px 0 0 0', color: '#fff', fontSize: '0.85rem' }}>{p.businessIntent}</p>
-                                    </div>
-                                  )}
-                                  {p.buyingSignals && p.buyingSignals.length > 0 && (
-                                    <div>
-                                      <span style={{ fontSize: '0.7rem', color: 'var(--neon-green)', fontWeight: 700, textTransform: 'uppercase' }}>Signaux</span>
-                                      <ul style={{ margin: '2px 0 0 0', paddingLeft: 16, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                                        {p.buyingSignals.map((sig, i) => (
-                                          <li key={i}>{sig}</li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
+                          <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700 }}>Mots-Clés</span>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                            {batch.keyCompetencies.map((comp, j) => (
+                              <span key={j} style={{ color: 'var(--neon-purple)', fontSize: '0.8rem' }}>#{comp}</span>
                             ))}
                           </div>
                         </div>
 
                       </div>
-                    )}
+                    ))}
                   </div>
                 )}
-              </>
+              </div>
+            )}
+
+            {/* 3. WARM INTROS TAB */}
+            {activeMode === 'intros' && (
+              <div style={styles.tabContent}>
+                <div className="glass-card" style={styles.searchCard}>
+                  <h3 style={{ marginBottom: 16 }}>Recherche d'Introduction (Warm Intro)</h3>
+                  <div style={styles.searchForm}>
+                    <input 
+                      type="text" 
+                      placeholder="Entreprise cible (ex: Stripe)" 
+                      value={targetCompany}
+                      onChange={e => setTargetCompany(e.target.value)}
+                      style={styles.searchInput}
+                    />
+                    <input 
+                      type="text" 
+                      placeholder="Poste cible (ex: CTO, Marketing Director)" 
+                      value={targetRole}
+                      onChange={e => setTargetRole(e.target.value)}
+                      style={styles.searchInput}
+                    />
+                    <button 
+                      className="glow-button" 
+                      onClick={triggerWarmIntroSearch}
+                      disabled={loading || contacts.length === 0}
+                      style={{ padding: '0 24px' }}
+                    >
+                      {loading ? 'Recherche...' : 'Trouver un chemin'}
+                    </button>
+                  </div>
+                </div>
+
+                {intros.length > 0 && (
+                  <div style={styles.resultsGrid}>
+                    {intros.map((intro, idx) => (
+                      <div key={idx} className="glass-card" style={styles.introCard}>
+                        <div style={styles.introHeader}>
+                          <div style={styles.connectorAvatar}>
+                            {intro.connectorName.charAt(0)}
+                          </div>
+                          <div>
+                            <div style={styles.connectorName}>{intro.connectorName}</div>
+                            <div style={styles.introTarget}>Cible: {intro.targetName} ({intro.targetCompany})</div>
+                          </div>
+                          <div style={styles.closenessBadge}>Force: {intro.connectorCloseness}/5</div>
+                        </div>
+                        <p style={styles.introReason}>{intro.reason}</p>
+                        
+                        <div style={styles.emailContainer}>
+                          <div style={styles.emailHeader}>
+                            <span>Brouillon d'e-mail d'intro</span>
+                            <button onClick={() => handleCopyEmail(intro.introEmailDraft, idx)} style={styles.copyBtn}>
+                              {copiedIndex === idx ? <Check size={14} /> : <Copy size={14} />}
+                              {copiedIndex === idx ? 'Copié' : 'Copier'}
+                            </button>
+                          </div>
+                          <div style={styles.emailBody}>
+                            {intro.introEmailDraft}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </>
       )}
 
-      {/* API Cost Tracker (Tier 5) */}
-      {v3Result && v3Result.tokenUsage && (
+      {/* API Cost Tracker */}
+      {v3Result && v3Result.synthesis && v3Result.synthesis.tokenUsage && (
         <div style={{ marginTop: 32, padding: 12, borderRadius: 8, background: 'rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, border: '1px solid rgba(255,255,255,0.05)' }}>
           <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-            ⚡ <b>Consommation API (Gemini Flash) :</b> {v3Result.tokenUsage.totalTokens.toLocaleString()} jetons
+            ⚡ <b>Consommation API (Mistral Small) :</b> {v3Result.synthesis.tokenUsage.totalTokens.toLocaleString()} jetons
           </div>
           <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>|</div>
           <div style={{ color: 'var(--neon-green)', fontSize: '0.8rem', fontWeight: 600 }}>
-            Coût estimé : ${(v3Result.tokenUsage.totalTokens / 1000000 * 0.35).toFixed(4)}
+            Coût estimé : ${(v3Result.synthesis.tokenUsage.totalTokens / 1000000 * 0.2).toFixed(4)}
           </div>
         </div>
       )}
@@ -885,7 +424,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
         <UserProfilePopup 
           userId={user?.id || 'default'} 
           onClose={() => setShowProfilePopup(false)} 
-          onSave={(p) => setUserProfile(p)} 
+          onSave={() => {}} 
         />
       )}
     </div>
@@ -893,309 +432,176 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
 };
 
 // =========================================================================
-// Sub-component: Opportunity Card
-// =========================================================================
-const OpportunityCard: React.FC<{ opportunity: DeepOpportunity }> = ({ opportunity: opp }) => {
-  const config = CATEGORY_CONFIG[opp.category] || CATEGORY_CONFIG.service;
-  
-  return (
-    <div className="glass-card glow-active" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 14, borderColor: `${config.color}30` }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-            <span style={{ background: `${config.color}20`, color: config.color, padding: '3px 10px', borderRadius: 99, fontSize: '0.72rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, textTransform: 'uppercase' }}>
-              {config.icon} {config.label}
-            </span>
-            {opp.urgency && (
-              <span style={{ 
-                background: opp.urgency === 'immediate' ? 'rgba(255, 59, 48, 0.15)' : opp.urgency === 'short-term' ? 'rgba(255, 159, 10, 0.15)' : 'rgba(255,255,255,0.05)',
-                color: opp.urgency === 'immediate' ? '#ff3b30' : opp.urgency === 'short-term' ? '#ff9f0a' : 'var(--text-muted)',
-                padding: '3px 10px', borderRadius: 99, fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase'
-              }}>
-                {opp.urgency === 'immediate' ? '🔥 Urgent' : opp.urgency === 'short-term' ? '⚡ Court terme' : '📅 Moyen terme'}
-              </span>
-            )}
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-              Cluster : {opp.targetCluster}
-            </span>
-          </div>
-          <h4 style={{ color: '#fff', fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>{opp.title}</h4>
-        </div>
-      </div>
-
-      {/* Revenue Section */}
-      {(opp.revenueModel || opp.estimatedRevenue) && (
-        <div style={{ background: 'linear-gradient(135deg, rgba(48, 192, 96, 0.08), rgba(79, 142, 247, 0.08))', border: '1px solid rgba(48, 192, 96, 0.2)', borderRadius: 10, padding: 14, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-          {opp.estimatedRevenue && (
-            <div>
-              <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block', marginBottom: 2 }}>Revenu estimé</span>
-              <span style={{ fontSize: '1rem', color: 'var(--neon-green)', fontWeight: 800 }}>{opp.estimatedRevenue}</span>
-            </div>
-          )}
-          {opp.revenueModel && (
-            <div>
-              <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block', marginBottom: 2 }}>Modèle</span>
-              <span style={{ fontSize: '0.82rem', color: 'var(--neon-blue)', fontWeight: 600 }}>{opp.revenueModel}</span>
-            </div>
-          )}
-          {opp.timeToRevenue && (
-            <div>
-              <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block', marginBottom: 2 }}>Délai</span>
-              <span style={{ fontSize: '0.82rem', color: 'var(--neon-yellow)', fontWeight: 600 }}>{opp.timeToRevenue}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Scores */}
-      <div style={{ display: 'flex', gap: 16 }}>
-        <div style={{ flex: 1 }}>
-          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block', marginBottom: 4 }}>Demande</span>
-          <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 4, height: 6, overflow: 'hidden' }}>
-            <div style={{ width: `${opp.demandScore * 10}%`, height: '100%', background: `linear-gradient(90deg, ${config.color}, ${config.color}80)`, borderRadius: 4 }} />
-          </div>
-          <span style={{ fontSize: '0.7rem', color: config.color, fontWeight: 600 }}>{opp.demandScore}/10</span>
-        </div>
-        <div style={{ flex: 1 }}>
-          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block', marginBottom: 4 }}>Faisabilité</span>
-          <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 4, height: 6, overflow: 'hidden' }}>
-            <div style={{ width: `${opp.feasibilityScore * 10}%`, height: '100%', background: 'linear-gradient(90deg, var(--neon-green), rgba(48,192,96,0.5))', borderRadius: 4 }} />
-          </div>
-          <span style={{ fontSize: '0.7rem', color: 'var(--neon-green)', fontWeight: 600 }}>{opp.feasibilityScore}/10</span>
-        </div>
-      </div>
-
-      {/* Description */}
-      <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.5, margin: 0 }}>{opp.description}</p>
-
-      {/* Relevant Contacts */}
-      {opp.relevantContacts && opp.relevantContacts.length > 0 && (
-        <div>
-          <span style={cardStyles.sectionTitle}>Contacts pertinents :</span>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
-            {opp.relevantContacts.map((c, i) => (
-              <div key={i} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-glow)', borderRadius: 6, padding: '6px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.82rem' }}>{c.name}</span>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginLeft: 8 }}>{c.role} @ {c.company}</span>
-                </div>
-                <span style={{ color: config.color, fontSize: '0.72rem', fontWeight: 500, maxWidth: '40%', textAlign: 'right' }}>{c.reason}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Action Plan */}
-      {opp.actionPlan && opp.actionPlan.length > 0 && (
-        <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid var(--border-glow)', borderRadius: 8, padding: 12 }}>
-          <span style={cardStyles.sectionTitle}>Plan d'action :</span>
-          <ol style={{ margin: '6px 0 0 0', paddingLeft: 18, color: 'var(--text-secondary)', fontSize: '0.82rem', lineHeight: 1.6 }}>
-            {opp.actionPlan.map((step, i) => <li key={i}>{step}</li>)}
-          </ol>
-        </div>
-      )}
-
-      {/* Estimated Impact */}
-      {opp.estimatedImpact && (
-        <div style={{ borderTop: '1px solid var(--border-glow)', paddingTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Star size={14} color="var(--neon-yellow)" />
-          <span style={{ fontSize: '0.8rem', color: 'var(--neon-yellow)', fontWeight: 500 }}>{opp.estimatedImpact}</span>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const cardStyles: Record<string, React.CSSProperties> = {
-  sectionTitle: {
-    fontSize: '0.72rem',
-    fontWeight: 700,
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-  },
-};
-
-// =========================================================================
-// Main Styles
+// Styles
 // =========================================================================
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    padding: '30px',
-    height: '100%',
-    overflowY: 'auto',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 24,
-    position: 'relative',
+    padding: '24px 0',
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 32,
+    background: 'rgba(255,255,255,0.02)',
+    padding: 24,
+    borderRadius: 16,
+    border: '1px solid rgba(255,255,255,0.05)',
   },
-  title: {
-    fontSize: '2.25rem',
-    fontWeight: 800,
-    color: '#fff',
-    marginBottom: 6,
-  },
-  subtitle: {
-    fontSize: '0.95rem',
-    color: 'var(--text-secondary)',
-  },
-  apiBadge: {
-    background: 'rgba(159, 97, 232, 0.1)',
-    border: '1px solid rgba(159, 97, 232, 0.2)',
-    padding: '8px 14px',
-    borderRadius: 99,
+  titleContainer: {
     display: 'flex',
     alignItems: 'center',
-    gap: 8,
+    gap: 16,
   },
-  apiBadgeText: {
-    fontSize: '0.8rem',
-    fontWeight: 600,
-    color: 'var(--neon-purple)',
+  iconWrapper: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    background: 'var(--neon-blue)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 0 20px rgba(0, 240, 255, 0.3)',
+  },
+  title: {
+    margin: 0,
+    fontSize: '1.5rem',
+    fontWeight: 700,
+    color: '#fff',
+  },
+  subtitle: {
+    margin: '4px 0 0 0',
+    color: 'var(--text-secondary)',
+    fontSize: '0.9rem',
   },
   setupCard: {
     padding: 40,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
     textAlign: 'center',
     maxWidth: 600,
-    alignSelf: 'center',
-    marginTop: 40,
+    margin: '40px auto',
+    background: 'linear-gradient(145deg, rgba(30,30,30,0.8), rgba(20,20,20,0.8))',
   },
   setupDesc: {
-    fontSize: '0.95rem',
     color: 'var(--text-secondary)',
     lineHeight: 1.6,
     marginBottom: 24,
   },
   setupInstructions: {
     textAlign: 'left',
-    background: 'rgba(0, 0, 0, 0.2)',
-    padding: 20,
-    borderRadius: 12,
-    border: '1px solid var(--border-glow)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 12,
-    fontSize: '0.875rem',
-    width: '100%',
+    background: 'rgba(0,0,0,0.3)',
+    padding: 24,
+    borderRadius: 8,
+    color: 'var(--text-secondary)',
+    lineHeight: 1.8,
   },
   tabsNav: {
     display: 'flex',
     gap: 12,
-    borderBottom: '1px solid var(--border-glow)',
-    paddingBottom: 12,
+    marginBottom: 24,
+    borderBottom: '1px solid rgba(255,255,255,0.1)',
+    paddingBottom: 16,
   },
   tabBtn: {
-    background: 'none',
+    background: 'transparent',
     border: 'none',
     color: 'var(--text-secondary)',
-    padding: '10px 16px',
-    borderRadius: 8,
-    cursor: 'pointer',
-    fontSize: '0.9rem',
+    padding: '8px 16px',
+    fontSize: '0.95rem',
     fontWeight: 600,
+    cursor: 'pointer',
+    borderRadius: 8,
     display: 'flex',
     alignItems: 'center',
     gap: 8,
-    transition: 'var(--transition-smooth)',
+    transition: 'all 0.2s ease',
   },
   tabBtnActive: {
-    background: 'rgba(255, 255, 255, 0.05)',
-    color: '#fff',
-    boxShadow: '0 0 10px rgba(255,255,255,0.02)',
+    background: 'rgba(0, 240, 255, 0.1)',
+    color: 'var(--neon-blue)',
   },
-  contentArea: {
-    flexGrow: 1,
+  tabContentContainer: {
+    position: 'relative',
+    minHeight: 400,
+  },
+  progressOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    background: 'rgba(10, 10, 15, 0.8)',
+    backdropFilter: 'blur(10px)',
+    zIndex: 10,
     display: 'flex',
-    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+  },
+  progressModal: {
+    background: 'var(--bg-secondary)',
+    border: '1px solid var(--border-glow)',
+    padding: 32,
+    borderRadius: 16,
+    width: 400,
+    textAlign: 'center',
+    boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+  },
+  spinnerWrapper: {
+    position: 'relative',
+    width: 64,
+    height: 64,
+    margin: '0 auto',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  spinnerPulse: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    borderRadius: '50%',
+    border: '2px solid var(--neon-blue)',
+    animation: 'ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite',
+  },
+  progressBarBg: {
+    height: 6,
+    background: 'rgba(255,255,255,0.1)',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    background: 'var(--neon-blue)',
+    transition: 'width 0.3s ease',
   },
   tabContent: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 24,
+    animation: 'fadeIn 0.3s ease',
   },
-  controlsRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  emptyState: {
+    padding: 80,
+    textAlign: 'center',
+    color: 'var(--text-muted)',
     background: 'rgba(255,255,255,0.01)',
-    border: '1px solid var(--border-glow)',
-    padding: 20,
-    borderRadius: 12,
-    gap: 20,
-  },
-  tabDescription: {
-    fontSize: '0.9rem',
-    color: 'var(--text-secondary)',
-    lineHeight: 1.5,
-    flexGrow: 1,
-    maxWidth: '70%',
-  },
-  emptyResults: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: '250px',
-    border: '1.5px dashed var(--border-glow)',
     borderRadius: 16,
-    color: 'var(--text-muted)',
-    fontSize: '0.9rem',
+    border: '1px dashed rgba(255,255,255,0.1)',
   },
-  boxTitle: {
-    fontSize: '0.72rem',
-    fontWeight: 700,
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-    display: 'block',
-    marginBottom: 4,
+  searchCard: {
+    padding: 24,
+    marginBottom: 24,
   },
-  introForm: {
-    background: 'rgba(255,255,255,0.01)',
-    border: '1px solid var(--border-glow)',
-    padding: 20,
-    borderRadius: 12,
-  },
-  formRow: {
+  searchForm: {
     display: 'flex',
     gap: 16,
-    flexWrap: 'wrap',
   },
-  formGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 6,
-    flexGrow: 1,
-    minWidth: 200,
-  },
-  formLabel: {
-    fontSize: '0.75rem',
-    fontWeight: 700,
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-  },
-  formInput: {
-    background: 'rgba(0,0,0,0.2)',
-    border: '1px solid var(--border-glow)',
+  searchInput: {
+    flex: 1,
+    background: 'rgba(0,0,0,0.3)',
+    border: '1px solid rgba(255,255,255,0.1)',
+    padding: '12px 16px',
     borderRadius: 8,
-    padding: '10px 14px',
     color: '#fff',
-    fontSize: '0.9rem',
-    outline: 'none',
+    fontSize: '0.95rem',
   },
-  introsList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 20,
+  resultsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))',
+    gap: 24,
   },
   introCard: {
     padding: 24,
@@ -1203,37 +609,46 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: 16,
   },
-  introCardHeader: {
+  introHeader: {
     display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    borderBottom: '1px solid var(--border-glow)',
-    paddingBottom: 12,
+    alignItems: 'center',
+    gap: 16,
   },
-  introCardTitle: {
+  connectorAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: '50%',
+    background: 'var(--neon-purple)',
+    color: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     fontSize: '1.2rem',
     fontWeight: 700,
-    color: '#fff',
   },
-  introReason: {
-    fontSize: '0.85rem',
+  connectorName: {
+    color: '#fff',
+    fontWeight: 600,
+    fontSize: '1.1rem',
+  },
+  introTarget: {
     color: 'var(--text-secondary)',
+    fontSize: '0.85rem',
     marginTop: 4,
   },
-  closenessScore: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-end',
-    gap: 4,
+  closenessBadge: {
+    marginLeft: 'auto',
+    background: 'rgba(168, 85, 247, 0.1)',
+    color: '#a855f7',
+    padding: '4px 12px',
+    borderRadius: 20,
+    fontSize: '0.8rem',
+    fontWeight: 600,
   },
-  scoreLabel: {
-    fontSize: '0.65rem',
-    fontWeight: 800,
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-  },
-  stars: {
-    display: 'flex',
+  introReason: {
+    color: 'var(--text-primary)',
+    lineHeight: 1.6,
+    fontSize: '0.95rem',
   },
   emailContainer: {
     background: 'rgba(0,0,0,0.3)',

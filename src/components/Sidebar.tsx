@@ -216,7 +216,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span style={styles.userName}>
               {user?.user_metadata?.full_name || user?.email?.split('@')[0]}
             </span>
-            <span style={styles.userPlan}>Compte Pro Gemini</span>
+            <span style={styles.userPlan}>Compte Pro Mistral</span>
           </div>
         </div>
         <button onClick={onLogout} style={styles.logoutBtn} title="Se déconnecter">

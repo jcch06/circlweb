@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Sparkles, User, Briefcase, Target, Lightbulb, Save } from 'lucide-react';
-import { autoEnrichUserProfile, isPerplexityConfigured } from '../lib/gemini';
+import { autoEnrichUserProfile, isPerplexityConfigured } from '../lib/mistral';
 
 interface UserProfile {
   name: string;

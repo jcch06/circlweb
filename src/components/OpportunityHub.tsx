@@ -1,16 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  detectSynergies, 
-  detectGroupSynergies,
-  brainstormUserOpportunities,
   suggestWarmIntros,
+  runOracleV3Pipeline,
   isGeminiConfigured
 } from '../lib/gemini';
 import type {
-  SynergyResult,
-  GroupSynergyResult,
-  UserOpportunityResult,
-  WarmIntroSuggestion
+  WarmIntroSuggestion,
+  OracleV3Result,
+  DeepOpportunity
 } from '../lib/gemini';
 import { 
   Sparkles, 
@@ -20,10 +17,20 @@ import {
   Key, 
   Copy, 
   Check, 
-  ArrowRight,
-  User
+  User,
+  Brain,
+  Network,
+  Target,
+  Star,
+  Briefcase,
+  Link2,
+  Calendar,
+  RefreshCw,
+  TrendingUp
 } from 'lucide-react';
 import { UserProfilePopup } from './UserProfilePopup';
+import { NetworkAnalysisProgress } from './NetworkAnalysisProgress';
+import { SupplyDemandMatrix } from './SupplyDemandMatrix';
 
 interface OpportunityHubProps {
   contacts: any[];
@@ -34,10 +41,17 @@ interface OpportunityHubProps {
   user: any;
 }
 
-type Mode = 'synergies' | 'opportunities' | 'intros';
+type Mode = 'network' | 'opportunities' | 'intros';
 
-export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes, tags: _tags, spaces = [], selectedSpaceId = null, user }) => {
-  const [activeMode, setActiveMode] = useState<Mode>('synergies');
+const CATEGORY_CONFIG: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
+  service: { icon: <Briefcase size={16} />, color: 'var(--neon-purple)', label: 'Service' },
+  product: { icon: <Target size={16} />, color: 'var(--neon-blue)', label: 'Produit' },
+  connection: { icon: <Link2 size={16} />, color: 'var(--neon-green)', label: 'Connexion' },
+  event: { icon: <Calendar size={16} />, color: 'var(--neon-yellow)', label: 'Événement' },
+};
+
+export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes, tags: _tags, user }) => {
+  const [activeMode, setActiveMode] = useState<Mode>('network');
   const [loading, setLoading] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
@@ -45,13 +59,14 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
   const [showProfilePopup, setShowProfilePopup] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
 
-  // State for AI results
-  const [synergies, setSynergies] = useState<SynergyResult[]>([]);
-  const [groupSynergies, setGroupSynergies] = useState<GroupSynergyResult[]>([]);
-  const [opportunities, setOpportunities] = useState<UserOpportunityResult[]>([]);
-  const [intros, setIntros] = useState<WarmIntroSuggestion[]>([]);
+  // V3 Pipeline State
+  const [v3Result, setV3Result] = useState<OracleV3Result | null>(null);
+  const [pipelinePass, setPipelinePass] = useState(0);
+  const [pipelineProgress, setPipelineProgress] = useState(0);
+  const [pipelineRunning, setPipelineRunning] = useState(false);
 
-  // Inputs for Warm Intros
+  // Legacy: Warm Intros (kept as a separate targeted feature)
+  const [intros, setIntros] = useState<WarmIntroSuggestion[]>([]);
   const [targetCompany, setTargetCompany] = useState('');
   const [targetRole, setTargetRole] = useState('');
 
@@ -63,49 +78,53 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
       if (saved) {
         setUserProfile(JSON.parse(saved));
       } else {
-        setShowProfilePopup(true); // Auto-prompt
+        setShowProfilePopup(true);
       }
     }
   }, [user]);
 
-  const triggerSynergyDetection = async () => {
-    setLoading(true);
-    try {
-      const [synRes, groupRes] = await Promise.all([
-        detectSynergies(contacts, notes),
-        detectGroupSynergies(contacts, notes)
-      ]);
-      setSynergies(synRes);
-      setGroupSynergies(groupRes);
-    } catch (err) {
-      console.error(err);
-      alert("Erreur lors de la détection des synergies. Vérifiez votre clé API.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const triggerUserOpportunitiesBrainstorm = async () => {
+  // V3 Pipeline trigger
+  const triggerV3Pipeline = async (forceRefresh = false) => {
     if (!userProfile || !userProfile.name) {
       alert("Veuillez d'abord remplir votre profil (Bouton 'Mon Profil' en haut) !");
       setShowProfilePopup(true);
       return;
     }
+
+    setPipelineRunning(true);
+    setPipelinePass(0);
+    setPipelineProgress(0);
     setLoading(true);
+
+    // Clear cache if forced
+    if (forceRefresh) {
+      const keys = Object.keys(localStorage).filter(k => k.startsWith('circl_oracle_v3_'));
+      keys.forEach(k => localStorage.removeItem(k));
+    }
+
     try {
-      const res = await brainstormUserOpportunities(userProfile, contacts, notes);
-      setOpportunities(res);
+      const result = await runOracleV3Pipeline(
+        contacts,
+        notes,
+        userProfile,
+        (pass, progress) => {
+          setPipelinePass(pass);
+          setPipelineProgress(progress);
+        }
+      );
+      setV3Result(result);
     } catch (err) {
       console.error(err);
-      alert("Erreur lors du brainstorming. Vérifiez votre clé API.");
+      alert("Erreur lors de l'analyse Oracle V3. Vérifiez votre clé API.");
     } finally {
+      setPipelineRunning(false);
       setLoading(false);
     }
   };
 
   const triggerWarmIntroSearch = async () => {
     if (!targetCompany.trim() || !targetRole.trim()) {
-      alert("Veuillez renseigner l'entreprise et le poste ciblé.");
+      alert("Renseignez l'entreprise et le poste cible.");
       return;
     }
     setLoading(true);
@@ -114,41 +133,29 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
       setIntros(res);
     } catch (err) {
       console.error(err);
-      alert("Erreur lors de la recherche de connexions. Vérifiez votre clé API.");
+      alert("Erreur lors de la recherche de Warm Intros.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCopy = (text: string, index: number) => {
+  const handleCopy = (text: string, idx: number) => {
     navigator.clipboard.writeText(text);
-    setCopiedIndex(index);
+    setCopiedIndex(idx);
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
-  const activeSpaceName = selectedSpaceId 
-    ? spaces.find(s => s.id === selectedSpaceId)?.name || 'Espace Inconnu'
-    : 'Toutes les Galaxies (Fusion Globale)';
-
   return (
     <div style={styles.container}>
-      {/* Background space elements */}
-      <div className="bg-grid"></div>
-      <div className="bg-stars"></div>
-
       {/* Header */}
       <div style={styles.header}>
         <div>
-          <h1 style={styles.title}>L'Oracle IA</h1>
-          <p style={styles.subtitle}>Générez de la valeur et trouvez des synergies dans vos galaxies de réseaux</p>
-          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: '0.8rem', color: 'var(--neon-blue)', fontWeight: 600, background: 'rgba(79, 142, 247, 0.1)', padding: '4px 10px', borderRadius: 99 }}>
-              Espace actif : {activeSpaceName}
-            </span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              ({contacts.length} contacts analysables)
-            </span>
-          </div>
+          <h1 style={styles.title}>
+            L'Oracle <span className="text-gradient-purple-blue">IA V3</span>
+          </h1>
+          <span style={styles.subtitle}>
+            Pipeline d'intelligence réseau multi-couches — Analyse profonde de votre constellation de contacts
+          </span>
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <button 
@@ -171,7 +178,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
           </button>
           <div style={styles.apiBadge}>
             <Sparkles size={14} color="var(--neon-purple)" />
-            <span style={styles.apiBadgeText}>Gemini Pro Connecté</span>
+            <span style={styles.apiBadgeText}>Oracle V3 Actif</span>
           </div>
         </div>
       </div>
@@ -199,18 +206,18 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
           {/* Tabs Nav */}
           <div style={styles.tabsNav}>
             <button 
-              onClick={() => setActiveMode('synergies')} 
-              style={{ ...styles.tabBtn, ...(activeMode === 'synergies' ? styles.tabBtnActive : {}) }}
+              onClick={() => setActiveMode('network')} 
+              style={{ ...styles.tabBtn, ...(activeMode === 'network' ? styles.tabBtnActive : {}) }}
             >
-              <Zap size={16} />
-              Synergies Croisées
+              <Brain size={16} />
+              Analyse Réseau
             </button>
             <button 
               onClick={() => setActiveMode('opportunities')} 
               style={{ ...styles.tabBtn, ...(activeMode === 'opportunities' ? styles.tabBtnActive : {}) }}
             >
               <Lightbulb size={16} />
-              Mes Services & Projets
+              Mes Opportunités
             </button>
             <button 
               onClick={() => setActiveMode('intros')} 
@@ -223,207 +230,172 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
 
           {/* Main Area */}
           <div style={styles.contentArea}>
-            {loading ? (
-              <div style={styles.loadingContainer}>
-                <div className="orbit-spinner"></div>
-                <span style={styles.loadingText}>L'IA Oracle interroge vos constellations de contacts...</span>
-              </div>
-            ) : (
+            {/* Pipeline Progress (shown when running) */}
+            {pipelineRunning && (
+              <NetworkAnalysisProgress
+                currentPass={pipelinePass}
+                passProgress={pipelineProgress}
+                isComplete={false}
+              />
+            )}
+
+            {!pipelineRunning && (
               <>
-                {/* 1. SYNERGIES TAB */}
-                {activeMode === 'synergies' && (
+                {/* 1. NETWORK ANALYSIS TAB */}
+                {activeMode === 'network' && (
                   <div style={styles.tabContent}>
                     <div style={styles.controlsRow}>
-                      <p style={styles.tabDescription}>
-                        L'IA analyse les profils et les notes de vos contacts pour détecter des groupes d'intérêts et des connexions 1-à-1 croisées.
-                      </p>
-                      <button onClick={triggerSynergyDetection} className="btn-primary">
-                        Lancer l'Analyse Systémique 🚀
-                      </button>
+                      <div style={{ flex: 1 }}>
+                        <p style={styles.tabDescription}>
+                          L'Oracle V3 exécute une <strong>pipeline en 4 passes</strong> : extraction structurée → embeddings vectoriels → clustering & matrice offre/demande → analyse croisée avec votre profil.
+                        </p>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 6 }}>
+                          📊 {contacts.length} contacts analysés | {v3Result ? `${v3Result.clusters.length} clusters détectés` : 'Analyse non lancée'}
+                        </p>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexDirection: 'column' }}>
+                        <button onClick={() => triggerV3Pipeline(false)} className="btn-primary" disabled={loading}>
+                          {v3Result ? 'Relancer l\'Analyse' : 'Lancer l\'Analyse Systémique'} 🚀
+                        </button>
+                        {v3Result && (
+                          <button 
+                            onClick={() => triggerV3Pipeline(true)} 
+                            style={{ background: 'none', border: '1px solid var(--border-glow)', color: 'var(--text-muted)', padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4 }}
+                          >
+                            <RefreshCw size={12} /> Forcer le recalcul
+                          </button>
+                        )}
+                      </div>
                     </div>
 
-                    <div style={styles.resultsGrid}>
-                      {synergies.length === 0 && groupSynergies.length === 0 ? (
-                        <div style={styles.emptyResults}>
-                          <span>Cliquez sur le bouton ci-dessus pour lancer la détection.</span>
+                    {v3Result ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+                        {/* Clusters Section */}
+                        <div>
+                          <h3 style={{ color: 'var(--neon-blue)', marginBottom: 16, borderBottom: '1px solid rgba(79, 142, 247, 0.3)', paddingBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Network size={20} /> Clusters Détectés ({v3Result.clusters.length})
+                          </h3>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
+                            {v3Result.clusters.map((cluster, idx) => (
+                              <div key={idx} className="glass-card glow-active" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14, borderColor: 'rgba(79, 142, 247, 0.3)' }}>
+                                <div>
+                                  <h4 style={{ color: '#fff', fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>{cluster.clusterName}</h4>
+                                  <p style={{ color: 'var(--neon-blue)', fontSize: '0.8rem', margin: '4px 0 0 0' }}>{cluster.theme}</p>
+                                </div>
+
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                  {cluster.members.map(m => (
+                                    <span key={m.id} style={{ background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: 6, fontSize: '0.78rem', color: '#fff' }}>
+                                      {m.name}
+                                    </span>
+                                  ))}
+                                </div>
+
+                                <div>
+                                  <span style={styles.boxTitle}>Besoins communs :</span>
+                                  <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-secondary)', fontSize: '0.82rem', lineHeight: 1.6 }}>
+                                    {cluster.commonNeeds.map((n, i) => <li key={i}>{n}</li>)}
+                                  </ul>
+                                </div>
+
+                                {cluster.commonSkills.length > 0 && (
+                                  <div>
+                                    <span style={styles.boxTitle}>Compétences partagées :</span>
+                                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                                      {cluster.commonSkills.map((s, i) => (
+                                        <span key={i} style={{ background: 'rgba(48, 192, 96, 0.1)', color: 'var(--neon-green)', padding: '2px 8px', borderRadius: 99, fontSize: '0.72rem' }}>{s}</span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      ) : (
-                        <>
-                          {groupSynergies.length > 0 && (
-                            <div style={{ gridColumn: '1 / -1', marginBottom: 24 }}>
-                              <h3 style={{ color: 'var(--neon-blue)', marginBottom: 16, borderBottom: '1px solid rgba(79, 142, 247, 0.3)', paddingBottom: 8 }}>
-                                🌌 Clusters & Synergies de Groupe
-                              </h3>
-                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
-                                {groupSynergies.map((group, idx) => (
-                                  <div key={idx} className="glass-card glow-active" style={{ ...styles.synergyCard, borderColor: 'rgba(79, 142, 247, 0.3)' }}>
-                                    <h3 style={styles.cardHeaderTitle}>{group.clusterName}</h3>
-                                    
-                                    <div style={{ marginTop: 12 }}>
-                                      <span style={styles.boxTitle}>Besoins Partagés :</span>
-                                      <ul style={{ margin: 0, paddingLeft: 20, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                                        {group.commonNeeds.map((need, i) => <li key={i}>{need}</li>)}
-                                      </ul>
-                                    </div>
 
-                                    <div style={styles.matchVisualizer}>
-                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                                        {group.members.map(m => (
-                                          <div key={m.id} style={{ background: 'rgba(255,255,255,0.05)', padding: '6px 10px', borderRadius: 6, fontSize: '0.8rem' }}>
-                                            <span style={{ color: '#fff', fontWeight: 500 }}>{m.name}</span>
-                                            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.7rem' }}>{m.role}</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-
-                                    <div style={styles.reasonBox}>
-                                      <span style={styles.boxTitle}>Pourquoi ce groupe ?</span>
-                                      <p style={styles.boxText}>{group.matchReason}</p>
-                                    </div>
-
-                                    <div style={styles.introBox}>
-                                      <span style={styles.boxTitle}>Service / Produit Potentiel :</span>
-                                      <p style={{ ...styles.boxText, color: 'var(--neon-green)', fontSize: '0.85rem', fontWeight: 500 }}>
-                                        {group.potentialService}
-                                      </p>
-                                    </div>
+                        {/* Bridge Contacts */}
+                        {v3Result.bridgeContacts.length > 0 && (
+                          <div>
+                            <h3 style={{ color: 'var(--neon-purple)', marginBottom: 16, borderBottom: '1px solid rgba(138, 43, 226, 0.3)', paddingBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <Zap size={20} /> Super-Connecteurs ({v3Result.bridgeContacts.length})
+                            </h3>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 12 }}>
+                              Ces contacts sont les "ponts" qui relient plusieurs communautés de votre réseau. Ce sont vos relais les plus stratégiques.
+                            </p>
+                            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                              {v3Result.bridgeContacts.map((bc, idx) => (
+                                <div key={idx} className="glass-card" style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 10, borderColor: 'rgba(138, 43, 226, 0.3)' }}>
+                                  <div style={{ background: 'linear-gradient(135deg, var(--neon-purple), var(--neon-blue))', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.8rem', color: '#fff' }}>
+                                    {idx + 1}
                                   </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {synergies.length > 0 && (
-                            <div style={{ gridColumn: '1 / -1' }}>
-                              <h3 style={{ color: 'var(--neon-purple)', marginBottom: 16, borderBottom: '1px solid rgba(138, 43, 226, 0.3)', paddingBottom: 8 }}>
-                                ⚡ Connexions 1-à-1 Directes
-                              </h3>
-                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
-                                {synergies.map((syn, idx) => (
-                                  <div key={idx} className="glass-card" style={styles.synergyCard}>
-                                    <h3 style={styles.cardHeaderTitle}>{syn.title}</h3>
-                                    <p style={styles.cardDescription}>{syn.description}</p>
-                                    
-                                    <div style={styles.matchVisualizer}>
-                                      <div style={styles.matchParty}>
-                                        <span style={styles.partyLabel}>A BESOIN</span>
-                                        <span style={styles.partyName}>{syn.sourceContact.name}</span>
-                                        <span style={styles.partyMeta}>{syn.sourceContact.role} @ {syn.sourceContact.company}</span>
-                                      </div>
-                                      <ArrowRight size={18} color="var(--neon-purple)" />
-                                      <div style={styles.matchParty}>
-                                        <span style={{ ...styles.partyLabel, color: 'var(--neon-green)' }}>A LA SOLUTION</span>
-                                        <span style={styles.partyName}>{syn.targetContact.name}</span>
-                                        <span style={styles.partyMeta}>{syn.targetContact.role} @ {syn.targetContact.company}</span>
-                                      </div>
-                                    </div>
-
-                                    <div style={styles.reasonBox}>
-                                      <span style={styles.boxTitle}>Pourquoi ils doivent se connecter :</span>
-                                      <p style={styles.boxText}>{syn.matchReason}</p>
-                                    </div>
-
-                                    <div style={styles.introBox}>
-                                      <span style={styles.boxTitle}>Action recommandée :</span>
-                                      <p style={{ ...styles.boxText, color: 'var(--neon-blue)', fontSize: '0.825rem' }}>
-                                        {syn.recommendedIntroPath}
-                                      </p>
-                                    </div>
+                                  <div>
+                                    <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.9rem' }}>{bc.name}</span>
+                                    <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                                      Score de centralité : {bc.centralityScore}
+                                    </span>
                                   </div>
-                                ))}
-                              </div>
+                                </div>
+                              ))}
                             </div>
-                          )}
-                        </>
-                      )}
-                    </div>
+                          </div>
+                        )}
+
+                        {/* Supply/Demand Matrix */}
+                        <div>
+                          <h3 style={{ color: 'var(--neon-green)', marginBottom: 16, borderBottom: '1px solid rgba(48, 192, 96, 0.3)', paddingBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <TrendingUp size={20} /> Matrice Offre / Demande
+                          </h3>
+                          <SupplyDemandMatrix 
+                            data={v3Result.supplyDemand} 
+                            userName={userProfile?.name || 'Vous'} 
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={styles.emptyResults}>
+                        <span>Cliquez sur le bouton ci-dessus pour lancer l'analyse réseau complète.</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* 2. OPPORTUNITIES TAB */}
                 {activeMode === 'opportunities' && (
                   <div style={styles.tabContent}>
-                    <div style={styles.brainstormHeader}>
-                      <div style={styles.skillsConfig}>
-                        <h4 style={styles.configTitle}>1. Mon Profil Oracle</h4>
-                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 8 }}>
-                          L'IA va croiser vos compétences avec les besoins cachés de votre réseau.
-                        </p>
-                        {userProfile ? (
-                          <div style={{ background: 'rgba(255,255,255,0.05)', padding: 12, borderRadius: 8 }}>
-                            <span style={{ color: '#fff', fontWeight: 600 }}>{userProfile.name}</span>
-                            <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginLeft: 8 }}>{userProfile.role}</span>
-                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                              {userProfile.skills?.map((s: string) => (
-                                <span key={s} style={{ background: 'rgba(138, 43, 226, 0.2)', color: 'var(--neon-purple)', padding: '2px 8px', borderRadius: 99, fontSize: '0.75rem' }}>{s}</span>
-                              ))}
-                            </div>
-                            <button onClick={() => setShowProfilePopup(true)} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '4px 8px', borderRadius: 4, marginTop: 12, cursor: 'pointer', fontSize: '0.75rem' }}>
-                              Modifier le profil
-                            </button>
-                          </div>
-                        ) : (
-                          <button onClick={() => setShowProfilePopup(true)} style={{ background: 'var(--neon-purple)', border: 'none', color: '#fff', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontSize: '0.85rem' }}>
-                            Remplir mon profil
+                    {!v3Result ? (
+                      <div style={styles.emptyResults}>
+                        <div style={{ textAlign: 'center' }}>
+                          <Brain size={40} color="var(--text-muted)" style={{ marginBottom: 12 }} />
+                          <p style={{ color: 'var(--text-muted)', marginBottom: 16 }}>L'analyse réseau doit être lancée d'abord.</p>
+                          <button onClick={() => { setActiveMode('network'); triggerV3Pipeline(false); }} className="btn-primary">
+                            Lancer l'Analyse Complète 🚀
                           </button>
-                        )}
-                      </div>
-                      <div style={styles.brainstormAction}>
-                        <h4 style={styles.configTitle}>2. Générer mes Opportunités</h4>
-                        <button onClick={triggerUserOpportunitiesBrainstorm} className="btn-primary" style={{ width: '100%' }}>
-                          Lancer l'Analyse 💡
-                        </button>
-                      </div>
-                    </div>
-
-                    <div style={styles.resultsGrid}>
-                      {opportunities.length === 0 ? (
-                        <div style={styles.emptyResults}>
-                          <span>Générez des idées pour voir les services ou projets que vous devriez lancer.</span>
                         </div>
-                      ) : (
-                        opportunities.map((opp, idx) => (
-                          <div key={idx} className="glass-card glow-active" style={{ ...styles.projectCard, borderColor: 'rgba(48, 192, 96, 0.3)' }}>
-                            <div style={styles.projectHeader}>
-                              <div>
-                                <h3 style={{ ...styles.projectTitle, color: 'var(--neon-green)' }}>{opp.opportunityTitle}</h3>
-                                <span style={styles.projectTagline}>Cible : {opp.targetAudience}</span>
-                              </div>
-                            </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                        {/* Category filter badges */}
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', marginRight: 8 }}>
+                            {v3Result.opportunities.length} opportunités détectées :
+                          </span>
+                          {Object.entries(
+                            v3Result.opportunities.reduce<Record<string, number>>((acc, o) => { acc[o.category] = (acc[o.category] || 0) + 1; return acc; }, {})
+                          ).map(([cat, count]) => (
+                            <span key={cat} style={{ background: `${CATEGORY_CONFIG[cat]?.color || '#fff'}15`, color: CATEGORY_CONFIG[cat]?.color || '#fff', padding: '4px 12px', borderRadius: 99, fontSize: '0.78rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              {CATEGORY_CONFIG[cat]?.icon} {CATEGORY_CONFIG[cat]?.label}: {count}
+                            </span>
+                          ))}
+                        </div>
 
-                            <div style={styles.projSection}>
-                              <span style={styles.sectionHeaderTitle}>Le Problème Résolu :</span>
-                              <p style={styles.projText}>{opp.problemSolved}</p>
-                            </div>
-
-                            <div style={styles.projSection}>
-                              <span style={styles.sectionHeaderTitle}>Votre Solution (Basée sur votre profil) :</span>
-                              <p style={styles.projText}>{opp.proposedSolution}</p>
-                            </div>
-
-                            <div style={styles.teamSection}>
-                              <span style={styles.sectionHeaderTitle}>Vos Premiers Prospects / Partenaires :</span>
-                              <div style={styles.teamList}>
-                                {opp.relevantContacts.map((c, cIdx) => (
-                                  <div key={cIdx} style={{ ...styles.teamMemberCard, borderLeft: '2px solid var(--neon-green)' }}>
-                                    <div style={styles.teamMemberHeader}>
-                                      <span style={styles.memberName}>{c.name}</span>
-                                      <span style={styles.memberContribution}>{c.role} @ {c.company}</span>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-
-                            <div style={styles.reasonBox}>
-                              <span style={styles.boxTitle}>Plan d'Action :</span>
-                              <p style={{ ...styles.boxText, color: 'var(--text-secondary)' }}>{opp.actionPlan}</p>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
+                        {/* Opportunity Cards */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: 20 }}>
+                          {v3Result.opportunities.map((opp, idx) => (
+                            <OpportunityCard key={idx} opportunity={opp} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -432,7 +404,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                   <div style={styles.tabContent}>
                     <div style={styles.introForm}>
                       <p style={{ ...styles.tabDescription, marginBottom: 16 }}>
-                        Vous ciblez une entreprise spécifique ou un rôle ? Entrez les critères ci-dessous. Gemini va fouiller dans votre réseau fusionné pour trouver qui peut vous faire l'introduction et rédigera le message à envoyer.
+                        Vous ciblez une entreprise spécifique ou un rôle ? Entrez les critères ci-dessous. L'IA va fouiller dans votre réseau fusionné pour trouver qui peut vous faire l'introduction et rédigera le message à envoyer.
                       </p>
                       <div style={styles.formRow}>
                         <div style={styles.formGroup}>
@@ -459,6 +431,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                           onClick={triggerWarmIntroSearch} 
                           className="btn-primary"
                           style={{ alignSelf: 'flex-end', height: 44, padding: '0 24px' }}
+                          disabled={loading}
                         >
                           Trouver le Chemin 🔍
                         </button>
@@ -505,7 +478,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                                   {copiedIndex === idx ? (
                                     <>
                                       <Check size={14} color="var(--neon-green)" />
-                                      Copie !
+                                      Copié !
                                     </>
                                   ) : (
                                     <>
@@ -540,6 +513,102 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
   );
 };
 
+// =========================================================================
+// Sub-component: Opportunity Card
+// =========================================================================
+const OpportunityCard: React.FC<{ opportunity: DeepOpportunity }> = ({ opportunity: opp }) => {
+  const config = CATEGORY_CONFIG[opp.category] || CATEGORY_CONFIG.service;
+  
+  return (
+    <div className="glass-card glow-active" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 14, borderColor: `${config.color}30` }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span style={{ background: `${config.color}20`, color: config.color, padding: '3px 10px', borderRadius: 99, fontSize: '0.72rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, textTransform: 'uppercase' }}>
+              {config.icon} {config.label}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+              Cluster : {opp.targetCluster}
+            </span>
+          </div>
+          <h4 style={{ color: '#fff', fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>{opp.title}</h4>
+        </div>
+      </div>
+
+      {/* Scores */}
+      <div style={{ display: 'flex', gap: 16 }}>
+        <div style={{ flex: 1 }}>
+          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block', marginBottom: 4 }}>Demande</span>
+          <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 4, height: 6, overflow: 'hidden' }}>
+            <div style={{ width: `${opp.demandScore * 10}%`, height: '100%', background: `linear-gradient(90deg, ${config.color}, ${config.color}80)`, borderRadius: 4 }} />
+          </div>
+          <span style={{ fontSize: '0.7rem', color: config.color, fontWeight: 600 }}>{opp.demandScore}/10</span>
+        </div>
+        <div style={{ flex: 1 }}>
+          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block', marginBottom: 4 }}>Faisabilité</span>
+          <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 4, height: 6, overflow: 'hidden' }}>
+            <div style={{ width: `${opp.feasibilityScore * 10}%`, height: '100%', background: 'linear-gradient(90deg, var(--neon-green), rgba(48,192,96,0.5))', borderRadius: 4 }} />
+          </div>
+          <span style={{ fontSize: '0.7rem', color: 'var(--neon-green)', fontWeight: 600 }}>{opp.feasibilityScore}/10</span>
+        </div>
+      </div>
+
+      {/* Description */}
+      <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.5, margin: 0 }}>{opp.description}</p>
+
+      {/* Relevant Contacts */}
+      {opp.relevantContacts && opp.relevantContacts.length > 0 && (
+        <div>
+          <span style={cardStyles.sectionTitle}>Contacts pertinents :</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+            {opp.relevantContacts.map((c, i) => (
+              <div key={i} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-glow)', borderRadius: 6, padding: '6px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.82rem' }}>{c.name}</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginLeft: 8 }}>{c.role} @ {c.company}</span>
+                </div>
+                <span style={{ color: config.color, fontSize: '0.72rem', fontWeight: 500, maxWidth: '40%', textAlign: 'right' }}>{c.reason}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Action Plan */}
+      {opp.actionPlan && opp.actionPlan.length > 0 && (
+        <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid var(--border-glow)', borderRadius: 8, padding: 12 }}>
+          <span style={cardStyles.sectionTitle}>Plan d'action :</span>
+          <ol style={{ margin: '6px 0 0 0', paddingLeft: 18, color: 'var(--text-secondary)', fontSize: '0.82rem', lineHeight: 1.6 }}>
+            {opp.actionPlan.map((step, i) => <li key={i}>{step}</li>)}
+          </ol>
+        </div>
+      )}
+
+      {/* Estimated Impact */}
+      {opp.estimatedImpact && (
+        <div style={{ borderTop: '1px solid var(--border-glow)', paddingTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Star size={14} color="var(--neon-yellow)" />
+          <span style={{ fontSize: '0.8rem', color: 'var(--neon-yellow)', fontWeight: 500 }}>{opp.estimatedImpact}</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const cardStyles: Record<string, React.CSSProperties> = {
+  sectionTitle: {
+    fontSize: '0.72rem',
+    fontWeight: 700,
+    color: 'var(--text-muted)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+  },
+};
+
+// =========================================================================
+// Main Styles
+// =========================================================================
 const styles: Record<string, React.CSSProperties> = {
   container: {
     padding: '30px',
@@ -637,18 +706,6 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
   },
-  loadingContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: '300px',
-    gap: 16,
-  },
-  loadingText: {
-    fontSize: '0.9rem',
-    color: 'var(--text-secondary)',
-  },
   tabContent: {
     display: 'flex',
     flexDirection: 'column',
@@ -671,269 +728,24 @@ const styles: Record<string, React.CSSProperties> = {
     flexGrow: 1,
     maxWidth: '70%',
   },
-  resultsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-    gap: 24,
-  },
   emptyResults: {
-    gridColumn: '1 / -1',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
-    height: '200px',
+    height: '250px',
     border: '1.5px dashed var(--border-glow)',
     borderRadius: 16,
     color: 'var(--text-muted)',
     fontSize: '0.9rem',
   },
-  synergyCard: {
-    padding: 24,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 16,
-  },
-  cardHeaderTitle: {
-    fontSize: '1.2rem',
-    fontWeight: 700,
-    color: '#fff',
-  },
-  cardDescription: {
-    fontSize: '0.85rem',
-    color: 'var(--text-secondary)',
-    lineHeight: 1.4,
-  },
-  matchVisualizer: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    background: 'rgba(0, 0, 0, 0.15)',
-    border: '1px solid var(--border-glow)',
-    padding: 14,
-    borderRadius: 10,
-    gap: 10,
-  },
-  matchParty: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 4,
-    width: '45%',
-  },
-  partyLabel: {
-    fontSize: '0.65rem',
-    fontWeight: 800,
-    color: 'var(--neon-purple)',
-    letterSpacing: '0.05em',
-  },
-  partyName: {
-    fontSize: '0.85rem',
-    fontWeight: 700,
-    color: '#fff',
-  },
-  partyMeta: {
-    fontSize: '0.725rem',
-    color: 'var(--text-muted)',
-    whiteSpace: 'nowrap',
-    textOverflow: 'ellipsis',
-    overflow: 'hidden',
-  },
-  reasonBox: {
-    background: 'rgba(255, 255, 255, 0.02)',
-    padding: 12,
-    borderRadius: 8,
-    borderLeft: '3px solid var(--neon-purple)',
-  },
-  introBox: {
-    background: 'rgba(79, 142, 247, 0.05)',
-    padding: 12,
-    borderRadius: 8,
-    borderLeft: '3px solid var(--neon-blue)',
-  },
   boxTitle: {
-    fontSize: '0.75rem',
+    fontSize: '0.72rem',
     fontWeight: 700,
     color: 'var(--text-muted)',
     textTransform: 'uppercase',
-    letterSpacing: '0.05em',
+    letterSpacing: '0.04em',
     display: 'block',
     marginBottom: 4,
-  },
-  boxText: {
-    fontSize: '0.825rem',
-    color: 'var(--text-secondary)',
-    lineHeight: 1.4,
-  },
-  brainstormHeader: {
-    display: 'grid',
-    gridTemplateColumns: '3fr 1fr',
-    gap: 20,
-    background: 'rgba(255,255,255,0.01)',
-    border: '1px solid var(--border-glow)',
-    padding: 20,
-    borderRadius: 12,
-    alignItems: 'end',
-  },
-  skillsConfig: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 10,
-  },
-  configTitle: {
-    fontSize: '0.85rem',
-    fontWeight: 700,
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
-  skillsWrapper: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: 8,
-    alignItems: 'center',
-  },
-  skillBadge: {
-    background: 'rgba(159, 97, 232, 0.1)',
-    border: '1px solid rgba(159, 97, 232, 0.2)',
-    color: 'var(--neon-purple)',
-    padding: '6px 12px',
-    borderRadius: 99,
-    fontSize: '0.8rem',
-    fontWeight: 600,
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 6,
-  },
-  removeSkillBtn: {
-    background: 'none',
-    border: 'none',
-    color: 'var(--neon-purple)',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-  },
-  addSkillInputWrapper: {
-    display: 'flex',
-    alignItems: 'center',
-    background: 'rgba(0,0,0,0.2)',
-    border: '1px solid var(--border-glow)',
-    borderRadius: 99,
-    padding: '2px 8px 2px 14px',
-    height: 32,
-  },
-  addSkillInput: {
-    background: 'none',
-    border: 'none',
-    color: '#fff',
-    fontSize: '0.8rem',
-    outline: 'none',
-    width: 140,
-  },
-  addSkillBtn: {
-    background: 'rgba(255, 255, 255, 0.05)',
-    border: 'none',
-    color: 'var(--text-secondary)',
-    borderRadius: '50%',
-    width: 22,
-    height: 22,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-  },
-  brainstormAction: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 10,
-  },
-  projectCard: {
-    padding: 24,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 16,
-  },
-  projectHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    borderBottom: '1px solid var(--border-glow)',
-    paddingBottom: 12,
-  },
-  projectTitle: {
-    fontSize: '1.25rem',
-    fontWeight: 700,
-    color: '#fff',
-  },
-  projectTagline: {
-    fontSize: '0.8rem',
-    color: 'var(--neon-purple)',
-    fontWeight: 500,
-  },
-  difficultyBadge: {
-    padding: '4px 10px',
-    borderRadius: 6,
-    fontSize: '0.75rem',
-    fontWeight: 600,
-  },
-  projSection: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 4,
-  },
-  sectionHeaderTitle: {
-    fontSize: '0.75rem',
-    fontWeight: 700,
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-  },
-  projText: {
-    fontSize: '0.85rem',
-    color: 'var(--text-secondary)',
-    lineHeight: 1.5,
-  },
-  techStack: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  techBadge: {
-    background: 'rgba(255,255,255,0.03)',
-    border: '1px solid var(--border-glow)',
-    padding: '4px 8px',
-    borderRadius: 4,
-    fontSize: '0.75rem',
-    color: 'var(--text-secondary)',
-  },
-  teamSection: {
-    marginTop: 8,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-  },
-  teamList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-  },
-  teamMemberCard: {
-    background: 'rgba(255, 255, 255, 0.01)',
-    border: '1px solid var(--border-glow)',
-    borderRadius: 8,
-    padding: 10,
-  },
-  teamMemberHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  memberName: {
-    fontSize: '0.825rem',
-    fontWeight: 600,
-    color: '#fff',
-  },
-  memberContribution: {
-    fontSize: '0.75rem',
-    color: 'var(--neon-blue)',
-    fontWeight: 500,
   },
   introForm: {
     background: 'rgba(255,255,255,0.01)',
@@ -1048,5 +860,3 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.5,
   },
 };
-
-

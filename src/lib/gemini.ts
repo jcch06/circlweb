@@ -662,3 +662,569 @@ Retourne UNIQUEMENT un objet JSON valide avec cette structure exacte :
     return { skills: [], currentProjects: "", needs: "" };
   }
 }
+
+// ============================================================================
+// ORACLE IA V3 — Multi-Pass Intelligence Pipeline
+// ============================================================================
+
+/**
+ * Normalized profile structure extracted by Passe 1
+ */
+export interface NormalizedProfile {
+  contactId: string;
+  name: string;
+  sector: string;
+  roleCategory: string;
+  seniority: string;
+  explicitNeeds: string[];
+  inferredNeeds: string[];
+  skillsOffered: string[];
+  painPoints: string[];
+  collaborationOpenness: number;
+  topicsOfInterest: string[];
+}
+
+/**
+ * Supply/Demand matrix entry
+ */
+export interface SupplyDemandEntry {
+  need: string;
+  demanders: { id: string; name: string }[];
+  suppliers: { id: string; name: string }[];
+  gapLevel: 'covered' | 'partial' | 'opportunity';
+  opportunityForUser: boolean;
+}
+
+/**
+ * Network cluster result
+ */
+export interface NetworkCluster {
+  clusterId: number;
+  clusterName: string;
+  theme: string;
+  members: { id: string; name: string; role: string; company: string }[];
+  commonNeeds: string[];
+  commonSkills: string[];
+  bridgeContacts: string[]; // IDs of contacts that bridge this cluster with others
+}
+
+/**
+ * Deep opportunity result (Passe 4)
+ */
+export interface DeepOpportunity {
+  category: 'service' | 'product' | 'connection' | 'event';
+  title: string;
+  description: string;
+  targetCluster: string;
+  demandScore: number; // 1-10: how many people need this
+  feasibilityScore: number; // 1-10: how feasible based on user skills
+  relevantContacts: { id: string; name: string; role: string; company: string; reason: string }[];
+  actionPlan: string[];
+  estimatedImpact: string;
+}
+
+/**
+ * Full pipeline result
+ */
+export interface OracleV3Result {
+  profiles: NormalizedProfile[];
+  clusters: NetworkCluster[];
+  supplyDemand: SupplyDemandEntry[];
+  opportunities: DeepOpportunity[];
+  bridgeContacts: { id: string; name: string; centralityScore: number }[];
+  timestamp: number;
+}
+
+// Helper to parse Gemini JSON responses safely
+function safeParseGeminiJSON(text: string): any {
+  let cleaned = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    // Try to fix common issues
+    cleaned = cleaned.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
+    const start = cleaned.indexOf('[') !== -1 && (cleaned.indexOf('{') === -1 || cleaned.indexOf('[') < cleaned.indexOf('{'))
+      ? cleaned.indexOf('[')
+      : cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf(']') !== -1 && cleaned.lastIndexOf(']') > cleaned.lastIndexOf('}')
+      ? cleaned.lastIndexOf(']')
+      : cleaned.lastIndexOf('}');
+    if (start !== -1 && end !== -1) {
+      return JSON.parse(cleaned.substring(start, end + 1));
+    }
+    throw new Error('Could not parse Gemini response as JSON');
+  }
+}
+
+/**
+ * PASSE 1 — Extract Normalized Profiles
+ * Processes contacts in batches to extract structured profile data
+ */
+export async function extractNormalizedProfiles(
+  contacts: any[],
+  notes: any[],
+  onProgress?: (pct: number) => void
+): Promise<NormalizedProfile[]> {
+  const genAI = getGeminiClient();
+  if (!genAI) throw new Error("Gemini API key is not configured");
+
+  const model = genAI.getGenerativeModel({
+    model: "gemini-3.5-flash",
+    generationConfig: { responseMimeType: "application/json" }
+  });
+
+  const allProfiles: NormalizedProfile[] = [];
+  const batchSize = 8;
+  const batches: any[][] = [];
+
+  // Prepare batches
+  for (let i = 0; i < contacts.length; i += batchSize) {
+    batches.push(contacts.slice(i, i + batchSize));
+  }
+
+  for (let bIdx = 0; bIdx < batches.length; bIdx++) {
+    const batch = batches[bIdx];
+    const batchData = batch.map(c => {
+      const contactNotes = notes
+        .filter(n => n.contact_id === c.id)
+        .map(n => n.content)
+        .join(" | ");
+      return {
+        id: c.id,
+        name: `${c.first_name} ${c.last_name}`,
+        company: c.company || '',
+        job_title: c.job_title || '',
+        industry: c.industry || '',
+        bio: c.bio || '',
+        skills: c.skills || [],
+        inferred_needs: c.inferred_needs || [],
+        notes: contactNotes
+      };
+    });
+
+    const prompt = `Tu es un algorithme d'extraction de données. Pour chaque contact ci-dessous, extrais un profil normalisé.
+
+Contacts à analyser :
+${JSON.stringify(batchData, null, 2)}
+
+Pour CHAQUE contact, extrais les informations suivantes. Si une donnée n'est pas disponible, déduis-la intelligemment du poste, secteur et contexte.
+
+Retourne un tableau JSON avec cette structure exacte pour chaque contact :
+[
+  {
+    "contactId": "l'ID du contact",
+    "name": "Nom complet",
+    "sector": "Secteur d'activité normalisé (ex: FinTech, EdTech, SaaS, Immobilier, Santé, Consulting, etc.)",
+    "roleCategory": "Catégorie de rôle : Décideur | Technique | Commercial | Créatif | Opérationnel | Support",
+    "seniority": "Junior | Mid | Senior | C-Level | Fondateur",
+    "explicitNeeds": ["Besoins EXPLICITEMENT mentionnés dans les notes ou bio"],
+    "inferredNeeds": ["Besoins DÉDUITS du poste et secteur (ex: un CTO a besoin de recrutement tech, un CEO de levée de fonds)"],
+    "skillsOffered": ["Ce que cette personne PEUT offrir à d'autres (compétences, réseau, expertise)"],
+    "painPoints": ["Frustrations ou problèmes probables vu le contexte"],
+    "collaborationOpenness": 3,
+    "topicsOfInterest": ["Sujets qui les passionnent, déduits du profil"]
+  }
+]`;
+
+    try {
+      const result = await model.generateContent(prompt);
+      const parsed = safeParseGeminiJSON(result.response.text());
+      if (Array.isArray(parsed)) {
+        allProfiles.push(...parsed);
+      }
+    } catch (err) {
+      console.error(`Passe 1 batch ${bIdx} error:`, err);
+      // Continue with remaining batches
+    }
+
+    onProgress?.(Math.round(((bIdx + 1) / batches.length) * 100));
+  }
+
+  return allProfiles;
+}
+
+/**
+ * PASSE 2 — Compute Embeddings for each profile
+ * Uses Gemini Embedding API to create vector representations
+ */
+export async function computeContactEmbeddings(
+  profiles: NormalizedProfile[],
+  onProgress?: (pct: number) => void
+): Promise<{ contactId: string; embedding: number[] }[]> {
+  const genAI = getGeminiClient();
+  if (!genAI) throw new Error("Gemini API key is not configured");
+
+  const model = genAI.getGenerativeModel({ model: "gemini-embedding-2" });
+  const results: { contactId: string; embedding: number[] }[] = [];
+  const batchSize = 5;
+
+  for (let i = 0; i < profiles.length; i += batchSize) {
+    const batch = profiles.slice(i, i + batchSize);
+    
+    const embedPromises = batch.map(async (profile) => {
+      const text = [
+        `Secteur: ${profile.sector}`,
+        `Rôle: ${profile.roleCategory} (${profile.seniority})`,
+        `Compétences: ${profile.skillsOffered.join(', ')}`,
+        `Besoins: ${[...profile.explicitNeeds, ...profile.inferredNeeds].join(', ')}`,
+        `Pain points: ${profile.painPoints.join(', ')}`,
+        `Intérêts: ${profile.topicsOfInterest.join(', ')}`
+      ].join('. ');
+
+      try {
+        const result = await model.embedContent(text);
+        return {
+          contactId: profile.contactId,
+          embedding: result.embedding.values
+        };
+      } catch (err) {
+        console.error(`Embedding error for ${profile.name}:`, err);
+        return null;
+      }
+    });
+
+    const batchResults = await Promise.all(embedPromises);
+    results.push(...batchResults.filter((r): r is NonNullable<typeof r> => r !== null));
+
+    onProgress?.(Math.round(((i + batch.length) / profiles.length) * 100));
+  }
+
+  return results;
+}
+
+/**
+ * PASSE 3 — Build Supply/Demand Matrix
+ * Analyzes all profiles to find what's needed vs what's available
+ */
+export async function buildSupplyDemandAnalysis(
+  profiles: NormalizedProfile[],
+  clusters: NetworkCluster[],
+  userProfile: any,
+  onProgress?: (pct: number) => void
+): Promise<SupplyDemandEntry[]> {
+  const genAI = getGeminiClient();
+  if (!genAI) throw new Error("Gemini API key is not configured");
+
+  const model = genAI.getGenerativeModel({
+    model: "gemini-3.5-flash",
+    generationConfig: { responseMimeType: "application/json" }
+  });
+
+  onProgress?.(10);
+
+  // Build condensed data for the prompt
+  const profilesSummary = profiles.map(p => ({
+    id: p.contactId,
+    name: p.name,
+    needs: [...p.explicitNeeds, ...p.inferredNeeds],
+    skills: p.skillsOffered,
+    sector: p.sector
+  }));
+
+  const prompt = `Tu es un analyste de réseau expert. Ton rôle est de construire une MATRICE OFFRE/DEMANDE complète à partir de ce réseau professionnel.
+
+Profils du réseau :
+${JSON.stringify(profilesSummary, null, 2)}
+
+Clusters détectés :
+${JSON.stringify(clusters.map(c => ({ name: c.clusterName, theme: c.theme, members: c.members.map(m => m.name) })), null, 2)}
+
+Profil de l'utilisateur (propriétaire du réseau) :
+${JSON.stringify(userProfile, null, 2)}
+
+INSTRUCTIONS :
+1. Identifie TOUS les besoins majeurs exprimés ou déduits dans le réseau (jusqu'à 15 besoins)
+2. Pour chaque besoin, liste QUI en a besoin (demandeurs) et QUI peut y répondre (fournisseurs)
+3. Évalue le niveau de couverture : "covered" (offre >= demande), "partial" (quelques fournisseurs mais pas assez), "opportunity" (forte demande, pas d'offre interne)
+4. Indique si l'utilisateur pourrait combler ce gap avec ses compétences (opportunityForUser)
+
+Retourne UNIQUEMENT un tableau JSON avec cette structure :
+[
+  {
+    "need": "Description du besoin (ex: Expertise en IA générative)",
+    "demanders": [{ "id": "ID contact", "name": "Nom" }],
+    "suppliers": [{ "id": "ID contact", "name": "Nom" }],
+    "gapLevel": "covered" | "partial" | "opportunity",
+    "opportunityForUser": true | false
+  }
+]
+
+Trie les résultats par importance : les "opportunity" d'abord, puis "partial", puis "covered".`;
+
+  onProgress?.(30);
+
+  const result = await model.generateContent(prompt);
+  const entries = safeParseGeminiJSON(result.response.text());
+
+  onProgress?.(100);
+  return entries;
+}
+
+/**
+ * PASSE 3b — Name clusters using Gemini
+ * Takes raw cluster assignments and generates meaningful names/themes
+ */
+export async function nameClusters(
+  profiles: NormalizedProfile[],
+  clusterAssignments: number[],
+  bridgeScores: number[]
+): Promise<NetworkCluster[]> {
+  const genAI = getGeminiClient();
+  if (!genAI) throw new Error("Gemini API key is not configured");
+
+  const model = genAI.getGenerativeModel({
+    model: "gemini-3.5-flash",
+    generationConfig: { responseMimeType: "application/json" }
+  });
+
+  // Group profiles by cluster
+  const clusterMap = new Map<number, NormalizedProfile[]>();
+  clusterAssignments.forEach((clusterId, idx) => {
+    if (!clusterMap.has(clusterId)) clusterMap.set(clusterId, []);
+    clusterMap.get(clusterId)!.push(profiles[idx]);
+  });
+
+  // Find bridge contacts (top 20% centrality)
+  const sortedScores = [...bridgeScores].sort((a, b) => b - a);
+  const bridgeThreshold = sortedScores[Math.max(0, Math.floor(sortedScores.length * 0.2) - 1)] || 0;
+
+  const clustersData = Array.from(clusterMap.entries()).map(([clusterId, members]) => ({
+    clusterId,
+    members: members.map(m => ({
+      id: m.contactId,
+      name: m.name,
+      sector: m.sector,
+      role: m.roleCategory,
+      needs: [...m.explicitNeeds, ...m.inferredNeeds],
+      skills: m.skillsOffered,
+      interests: m.topicsOfInterest
+    })),
+    bridgeContactIds: members
+      .filter((_, idx) => {
+        const globalIdx = profiles.findIndex(p => p.contactId === members[idx]?.contactId);
+        return globalIdx !== -1 && bridgeScores[globalIdx] >= bridgeThreshold && bridgeThreshold > 0;
+      })
+      .map(m => m.contactId)
+  }));
+
+  const prompt = `Tu es un expert en analyse de communautés. Voici des groupes de personnes regroupées automatiquement par proximité sémantique (besoins, compétences, secteurs similaires).
+
+Pour chaque cluster, donne-lui un nom accrocheur et identifie son thème principal, ses besoins communs et ses compétences partagées.
+
+Clusters :
+${JSON.stringify(clustersData, null, 2)}
+
+Retourne un tableau JSON avec cette structure exacte :
+[
+  {
+    "clusterId": 0,
+    "clusterName": "Nom accrocheur du groupe (ex: Les Architectes du Digital)",
+    "theme": "Thème principal en une phrase (ex: Transformation digitale et innovation produit)",
+    "members": [{ "id": "ID", "name": "Nom", "role": "Rôle", "company": "Entreprise" }],
+    "commonNeeds": ["Besoin partagé 1", "Besoin partagé 2"],
+    "commonSkills": ["Compétence commune 1", "Compétence commune 2"],
+    "bridgeContacts": ["IDs des contacts qui font le pont avec d'autres clusters"]
+  }
+]`;
+
+  const result = await model.generateContent(prompt);
+  return safeParseGeminiJSON(result.response.text());
+}
+
+/**
+ * PASSE 4 — Deep User Opportunity Analysis
+ * Crosses user profile with supply/demand gaps and clusters to find opportunities
+ */
+export async function deepUserOpportunityAnalysis(
+  userProfile: any,
+  profiles: NormalizedProfile[],
+  clusters: NetworkCluster[],
+  supplyDemand: SupplyDemandEntry[],
+  onProgress?: (pct: number) => void
+): Promise<DeepOpportunity[]> {
+  const genAI = getGeminiClient();
+  if (!genAI) throw new Error("Gemini API key is not configured");
+
+  const model = genAI.getGenerativeModel({
+    model: "gemini-3.5-flash",
+    generationConfig: { responseMimeType: "application/json" }
+  });
+
+  onProgress?.(10);
+
+  // Filter to the most interesting supply/demand entries
+  const gaps = supplyDemand.filter(sd => sd.gapLevel === 'opportunity' || sd.gapLevel === 'partial');
+  const userOpportunities = supplyDemand.filter(sd => sd.opportunityForUser);
+
+  const prompt = `Tu es un Business Strategist de haut niveau. Tu dois analyser en profondeur les opportunités que l'utilisateur peut saisir dans son réseau professionnel.
+
+## PROFIL DE L'UTILISATEUR (celui qui possède le réseau)
+${JSON.stringify(userProfile, null, 2)}
+
+## CLUSTERS DÉTECTÉS DANS LE RÉSEAU
+${JSON.stringify(clusters.map(c => ({
+    name: c.clusterName,
+    theme: c.theme,
+    members: c.members.length,
+    commonNeeds: c.commonNeeds,
+    commonSkills: c.commonSkills
+  })), null, 2)}
+
+## GAPS IDENTIFIÉS (Besoins non couverts)
+${JSON.stringify(gaps, null, 2)}
+
+## OPPORTUNITÉS SPÉCIFIQUES POUR L'UTILISATEUR
+${JSON.stringify(userOpportunities, null, 2)}
+
+## PROFILS DÉTAILLÉS DES CONTACTS
+${JSON.stringify(profiles.map(p => ({
+    name: p.name,
+    sector: p.sector,
+    needs: [...p.explicitNeeds, ...p.inferredNeeds].slice(0, 3),
+    skills: p.skillsOffered.slice(0, 3)
+  })), null, 2)}
+
+ANALYSE EN PROFONDEUR et génère jusqu'à 8 opportunités concrètes réparties en 4 catégories :
+
+1. **"service"** : Prestations de consulting, formation, ou accompagnement que l'utilisateur peut vendre à son réseau
+2. **"product"** : Produits numériques (SaaS, templates, outils) à créer pour répondre à un besoin récurrent
+3. **"connection"** : Introductions stratégiques à orchestrer entre contacts (l'utilisateur joue le rôle de connecteur)
+4. **"event"** : Événements, masterclasses ou cercles de réflexion à organiser pour fédérer des clusters
+
+Pour chaque opportunité, sois TRÈS CONCRET et ACTIONNABLE. Pas de généralités.
+
+Retourne UNIQUEMENT un tableau JSON :
+[
+  {
+    "category": "service" | "product" | "connection" | "event",
+    "title": "Nom concret de l'opportunité",
+    "description": "Description détaillée en 2-3 phrases",
+    "targetCluster": "Nom du cluster ciblé",
+    "demandScore": 8,
+    "feasibilityScore": 7,
+    "relevantContacts": [
+      { "id": "ID", "name": "Nom", "role": "Poste", "company": "Entreprise", "reason": "Pourquoi ce contact est pertinent (prospect, partenaire, ambassadeur)" }
+    ],
+    "actionPlan": ["Étape 1 concrète", "Étape 2 concrète", "Étape 3 concrète"],
+    "estimatedImpact": "Impact estimé (ex: 5 clients potentiels, 3 partenariats, revenus récurrents possibles)"
+  }
+]`;
+
+  onProgress?.(50);
+
+  const result = await model.generateContent(prompt);
+  const opportunities = safeParseGeminiJSON(result.response.text());
+
+  onProgress?.(100);
+  return opportunities;
+}
+
+/**
+ * MASTER ORCHESTRATOR — Runs the full 4-pass pipeline
+ */
+export async function runOracleV3Pipeline(
+  contacts: any[],
+  notes: any[],
+  userProfile: any,
+  onPassChange?: (pass: number, progress: number) => void
+): Promise<OracleV3Result> {
+  // Check cache first
+  const cacheKey = `circl_oracle_v3_${contacts.length}_${contacts.map(c => c.id).sort().join(',').substring(0, 100)}`;
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    try {
+      const parsed = JSON.parse(cached);
+      // Cache valid for 1 hour
+      if (parsed.timestamp && Date.now() - parsed.timestamp < 3600000) {
+        return parsed;
+      }
+    } catch { /* ignore invalid cache */ }
+  }
+
+  // Import vectorMath dynamically to keep the module lightweight
+  const { buildSimilarityMatrix, kMeansClustering, findOptimalK, computeBetweennessCentrality } = await import('./vectorMath');
+
+  // === PASSE 1: Extract Normalized Profiles ===
+  onPassChange?.(1, 0);
+  const profiles = await extractNormalizedProfiles(contacts, notes, (pct) => onPassChange?.(1, pct));
+
+  if (profiles.length === 0) {
+    throw new Error("Aucun profil n'a pu être extrait. Vérifiez vos contacts.");
+  }
+
+  // === PASSE 2: Compute Embeddings ===
+  onPassChange?.(2, 0);
+  const embeddings = await computeContactEmbeddings(profiles, (pct) => onPassChange?.(2, pct));
+
+  // Build similarity matrix and clustering
+  onPassChange?.(2, 90);
+  let clusters: NetworkCluster[] = [];
+  let bridgeContacts: { id: string; name: string; centralityScore: number }[] = [];
+
+  if (embeddings.length >= 4) {
+    const vectors = embeddings.map(e => e.embedding);
+    const simMatrix = buildSimilarityMatrix(vectors);
+    
+    // Find optimal K and cluster
+    const optimalK = findOptimalK(vectors);
+    const { clusters: assignments } = kMeansClustering(vectors, optimalK);
+    
+    // Compute bridge contacts
+    const centrality = computeBetweennessCentrality(simMatrix, 0.4);
+    
+    // Match embeddings back to profiles
+    const embeddingProfiles = embeddings.map(e => profiles.find(p => p.contactId === e.contactId)!).filter(Boolean);
+
+    // === PASSE 3a: Name clusters ===
+    onPassChange?.(3, 0);
+    clusters = await nameClusters(embeddingProfiles, assignments, centrality);
+
+    // Top bridge contacts
+    const contactsWithCentrality = embeddings.map((e, idx) => ({
+      id: e.contactId,
+      name: profiles.find(p => p.contactId === e.contactId)?.name || 'Inconnu',
+      centralityScore: Math.round(centrality[idx] * 100) / 100
+    }));
+    bridgeContacts = contactsWithCentrality
+      .sort((a, b) => b.centralityScore - a.centralityScore)
+      .slice(0, Math.max(3, Math.floor(contacts.length * 0.2)));
+  } else {
+    // Not enough contacts for clustering — use Gemini directly
+    onPassChange?.(3, 0);
+    const groupResults = await detectGroupSynergies(contacts, notes);
+    clusters = groupResults.map((g, idx) => ({
+      clusterId: idx,
+      clusterName: g.clusterName,
+      theme: g.matchReason,
+      members: g.members,
+      commonNeeds: g.commonNeeds,
+      commonSkills: [],
+      bridgeContacts: []
+    }));
+  }
+
+  // === PASSE 3b: Build Supply/Demand Matrix ===
+  onPassChange?.(3, 50);
+  const supplyDemand = await buildSupplyDemandAnalysis(profiles, clusters, userProfile, (pct) => onPassChange?.(3, 50 + pct / 2));
+
+  // === PASSE 4: Deep User Opportunity Analysis ===
+  onPassChange?.(4, 0);
+  const opportunities = await deepUserOpportunityAnalysis(userProfile, profiles, clusters, supplyDemand, (pct) => onPassChange?.(4, pct));
+
+  const result: OracleV3Result = {
+    profiles,
+    clusters,
+    supplyDemand,
+    opportunities,
+    bridgeContacts,
+    timestamp: Date.now()
+  };
+
+  // Cache result
+  try {
+    localStorage.setItem(cacheKey, JSON.stringify(result));
+  } catch { /* localStorage full, ignore */ }
+
+  return result;
+}
+

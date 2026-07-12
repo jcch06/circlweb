@@ -250,35 +250,55 @@ Si aucun contact n'est présent, retourne {"contacts": []}. Réponds uniquement 
     setLoading(true);
     const targetSpace = getTargetSpaceId();
 
+    let successCount = 0;
+    let errorCount = 0;
+
+    // Helper to clean up false values to actual nulls
+    const cleanToNull = (val: string | null | undefined) => {
+      if (!val) return null;
+      const clean = val.trim().toLowerCase();
+      if (clean === '' || clean === 'null' || clean === 'n/a' || clean === 'non renseigné' || clean === 'inconnu') return null;
+      return val.trim();
+    };
+
     try {
-      const insertedRows = results.contacts.map((c: any) => ({
-        space_id: targetSpace,
-        owner_id: user.id,
-        first_name: c.first_name,
-        last_name: c.last_name,
-        email: c.email || null,
-        phone: c.phone || null,
-        company: c.company || null,
-        job_title: c.job_title || null,
-        location: c.location || null,
-        industry: c.industry || 'Tech',
-        bio: c.bio || '',
-        source: 'enrichment'
-      }));
+      for (const c of results.contacts) {
+        const row = {
+          space_id: targetSpace,
+          owner_id: user.id,
+          first_name: c.first_name,
+          last_name: c.last_name,
+          email: cleanToNull(c.email),
+          phone: cleanToNull(c.phone),
+          company: cleanToNull(c.company),
+          job_title: cleanToNull(c.job_title),
+          location: cleanToNull(c.location),
+          industry: cleanToNull(c.industry) || 'Tech',
+          bio: cleanToNull(c.bio) || '',
+          source: 'enrichment'
+        };
 
-      const { error } = await supabase
-        .from('contacts')
-        .insert(insertedRows);
+        const { error } = await supabase.from('contacts').insert(row);
+        
+        if (error) {
+          console.error(`Erreur d'insertion pour ${c.first_name} ${c.last_name}:`, error.message);
+          errorCount++;
+        } else {
+          successCount++;
+        }
+      }
 
-      if (error) throw error;
-
-      alert(`${insertedRows.length} contact(s) ajouté(s) avec succès !`);
-      setResults(null);
-      setInputText('');
-      await onRefreshData();
+      if (successCount > 0) {
+        alert(`${successCount} contact(s) ajouté(s) avec succès ! ${errorCount > 0 ? `(${errorCount} ignorés car doublons)` : ''}`);
+        setResults(null);
+        setInputText('');
+        await onRefreshData();
+      } else {
+        alert(`Aucun contact ajouté. Il se peut qu'ils existent déjà (doublons).`);
+      }
     } catch (err: any) {
       console.error(err);
-      alert("Erreur lors de la sauvegarde : " + err.message);
+      alert("Erreur critique lors de la sauvegarde : " + err.message);
     } finally {
       setLoading(false);
     }

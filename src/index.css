@@ -143,6 +143,16 @@ button, input, textarea, select {
   animation: pulse-glow 3s infinite ease-in-out;
 }
 
+.pulse-anim {
+  animation: mic-pulse 1s infinite alternate;
+  color: var(--neon-pink) !important;
+}
+
+@keyframes mic-pulse {
+  from { transform: scale(1); opacity: 1; }
+  to { transform: scale(1.2); opacity: 0.6; }
+}
+
 /* Gradients text */
 .text-gradient-purple-blue {
   background: linear-gradient(135deg, var(--neon-purple), var(--neon-blue));

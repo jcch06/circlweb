@@ -20,7 +20,10 @@ import {
   ArrowRight,
   Clock,
   Globe,
-  Layers
+  Layers,
+  Edit2,
+  Check,
+  Mic
 } from 'lucide-react';
 
 interface ContactsPageProps {
@@ -45,9 +48,33 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
   onRefreshData
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'enriched' | 'not_enriched' | 'invalid'>('all');
   const [showAddForm, setShowAddForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+
+  // Reset edit modes when contact changes
+  useEffect(() => {
+    setEditingField(null);
+    setIsEditingContact(false);
+  }, [selectedContactId]);
+
+  // Compute Selected Contact details
+  const contactDetails = useMemo(() => {
+    if (!selectedContactId) return null;
+    const contact = contacts.find(c => c.id === selectedContactId);
+    if (!contact) return null;
+
+    const contactNotes = notes.filter(n => n.contact_id === contact.id);
+    const contactTagsRows = contactTags.filter(ct => ct.contact_id === contact.id);
+    const contactTagsList = tags.filter(t => contactTagsRows.some(ctr => ctr.tag_id === t.id));
+    
+    return {
+      ...contact,
+      notes: contactNotes,
+      tags: contactTagsList
+    };
+  }, [selectedContactId, contacts, notes, tags, contactTags]);
 
   // Form Fields for New Contact
   const [firstName, setFirstName] = useState('');
@@ -86,10 +113,27 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
   const [selectedSpaces, setSelectedSpaces] = useState<string[]>([]);
   const [updatingSpaces, setUpdatingSpaces] = useState(false);
 
+  // Inline Edit States
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState<string>('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  
+  // Full Edit Mode States
+  const [isEditingContact, setIsEditingContact] = useState(false);
+  const [fullEditData, setFullEditData] = useState<any>({});
+  const [savingFullEdit, setSavingFullEdit] = useState(false);
+
+  // Dictation State
+  const [isDictating, setIsDictating] = useState(false);
+  const recognitionRef = React.useRef<any>(null);
+
   // Bulk Assignment States
   const [bulkSelectedIds, setBulkSelectedIds] = useState<string[]>([]);
   const [bulkTargetSpaceId, setBulkTargetSpaceId] = useState('');
   const [bulkLoading, setBulkLoading] = useState(false);
+
+  // Single Auto-Enrich State
+  const [autoEnrichingSingle, setAutoEnrichingSingle] = useState(false);
 
   const handleBulkAddToSpace = async () => {
     if (!bulkTargetSpaceId) {
@@ -305,47 +349,63 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
       setUpdatingSpaces(false);
     }
   };
-  // Compute Selected Contact details
-  const contactDetails = useMemo(() => {
-    if (!selectedContactId) return null;
-    const contact = contacts.find(c => c.id === selectedContactId);
-    if (!contact) return null;
 
-    const contactNotes = notes.filter(n => n.contact_id === contact.id);
-    const contactTagsRows = contactTags.filter(ct => ct.contact_id === contact.id);
-    const contactTagsList = tags.filter(t => contactTagsRows.some(ctr => ctr.tag_id === t.id));
-    
-    return {
-      ...contact,
-      notes: contactNotes,
-      tags: contactTagsList
-    };
-  }, [selectedContactId, contacts, notes, tags, contactTags]);
+  // Helper: score contact by richness of available data (for prioritization)
+  const contactRichnessScore = (c: any): number => {
+    let score = 0;
+    const fn = (c.first_name || '').trim();
+    const ln = (c.last_name || '').trim();
+    // Must have both valid first name and last name
+    if (!fn || !ln) return -1;
+    // Reject phone numbers, emails, all-caps abbreviations as first name
+    if (/^[+\d\s\-().]{6,}$/.test(fn)) return -1;
+    if (fn.includes('@')) return -1;
+    if (ln.length < 2) return -1;
+    if (fn === fn.toUpperCase() && fn.length > 3) return -1;
+    // Score by richness: more fields = higher priority
+    if (c.company && c.company.trim()) score += 3;
+    if (c.job_title && c.job_title.trim()) score += 3;
+    if (c.location && c.location.trim()) score += 1;
+    if (c.industry && c.industry.trim()) score += 1;
+    if (c.email && c.email.trim()) score += 1;
+    return score;
+  };
 
-  // Bulk enrich contacts via Gemini AI directly (no Edge Function needed)
+  // Bulk enrich contacts via Gemini AI with Google Search grounding
   const handleBulkEnrich = async () => {
     // Filter by selected space if specified, otherwise all contacts
     const pool = bulkEnrichSpaceId
       ? contacts.filter(c => c.space_id === bulkEnrichSpaceId)
       : contacts;
 
-    // Only enrich contacts that haven't been enriched yet
-    const toEnrich = pool.filter(c => !c.ai_context && !c.bio);
+    // Step 1: Keep only contacts with valid first+last name AND not yet enriched
+    const validAndUnenriched = pool
+      .map(c => ({ c, score: contactRichnessScore(c) }))
+      .filter(({ c, score }) => score >= 0 && !c.ai_context && !c.bio)
+      // Step 2: Sort by richness score — richest data first (best enrichment quality)
+      .sort((a, b) => b.score - a.score)
+      .map(({ c }) => c);
 
-    if (toEnrich.length === 0) {
-      alert('Tous les contacts de cette sélection ont déjà été enrichis !');
+    if (validAndUnenriched.length === 0) {
+      const invalidCount = pool.filter(c => contactRichnessScore(c) < 0).length;
+      const alreadyDoneCount = pool.filter(c => contactRichnessScore(c) >= 0 && (c.ai_context || c.bio)).length;
+      alert(
+        `Aucun contact à enrichir dans cette sélection.\n` +
+        `• ${alreadyDoneCount} déjà enrichi(s)\n` +
+        `• ${invalidCount} ignoré(s) (données invalides : sans nom complet valide)`
+      );
       return;
     }
 
     setBulkEnriching(true);
-    setBulkProgress({ done: 0, total: toEnrich.length, current: '', errors: 0 });
+    setBulkProgress({ done: 0, total: validAndUnenriched.length, current: '', errors: 0 });
 
     let errorCount = 0;
     let successCount = 0;
 
-    for (let i = 0; i < toEnrich.length; i++) {
-      const c = toEnrich[i];
-      setBulkProgress({ done: i, total: toEnrich.length, current: `${c.first_name} ${c.last_name}`, errors: errorCount });
+    for (let i = 0; i < validAndUnenriched.length; i++) {
+      const c = validAndUnenriched[i];
+      setBulkProgress({ done: i, total: validAndUnenriched.length, current: `${c.first_name} ${c.last_name}`, errors: errorCount });
       try {
         const result = await autoEnrichContact({
           first_name: c.first_name,
@@ -357,34 +417,140 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
           location: c.location
         });
 
-        // Save enrichment results back to Supabase
-        await supabase.from('contacts').update({
-          industry: result.industry || c.industry,
-          bio: result.bio || c.bio,
-          ai_context: result.aiContext,
+        // Only save if we got real data (not null values)
+        const updateData: Record<string, string> = {
           enriched_at: new Date().toISOString()
-        }).eq('id', c.id);
+        };
+        if (result.industry && result.industry !== 'null') updateData.industry = result.industry;
+        if (result.bio && result.bio !== 'null') updateData.bio = result.bio;
+        if (result.aiContext && result.aiContext !== 'null') updateData.ai_context = result.aiContext;
 
+        await supabase.from('contacts').update(updateData).eq('id', c.id);
         successCount++;
       } catch (err) {
         errorCount++;
-        console.warn(`Enrichissement échoué pour ${c.first_name} ${c.last_name}:`, err);
+        console.warn(`Enrichissement ignoré pour ${c.first_name} ${c.last_name}:`, err);
       }
       // Delay between calls to respect Gemini rate limits
       await new Promise(resolve => setTimeout(resolve, 1500));
     }
 
-    setBulkProgress({ done: toEnrich.length, total: toEnrich.length, current: '', errors: errorCount });
+    setBulkProgress({ done: validAndUnenriched.length, total: validAndUnenriched.length, current: '', errors: errorCount });
     await onRefreshData();
     setBulkEnriching(false);
-    alert(`✅ Enrichissement terminé !\n${successCount} contact(s) enrichis.${errorCount > 0 ? `\n⚠️ ${errorCount} échec(s).` : ''}`);
+    alert(`✅ Enrichissement terminé !\n${successCount} contact(s) enrichis.${errorCount > 0 ? `\n⚠️ ${errorCount} ignoré(s) (données insuffisantes).` : ''}`);
   };
 
   // Filter contacts by active space & search term
+
+  const handleInlineEditSave = async (contactId: string, field: string) => {
+    setSavingEdit(true);
+    try {
+      if (isDictating && recognitionRef.current) {
+        recognitionRef.current.stop();
+        setIsDictating(false);
+      }
+      const { error } = await supabase.from('contacts').update({
+        [field]: editValue
+      }).eq('id', contactId);
+      
+      if (error) throw error;
+      
+      await onRefreshData();
+      setEditingField(null);
+    } catch (err) {
+      console.error('Error saving edit:', err);
+      alert('Erreur lors de la sauvegarde.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const toggleDictation = () => {
+    if (isDictating) {
+      if (recognitionRef.current) recognitionRef.current.stop();
+      setIsDictating(false);
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Votre navigateur ne supporte pas la dictée vocale (utilisez Chrome ou Edge).");
+      return;
+    }
+
+    if (editingField !== 'bio') {
+      setEditingField('bio');
+      setEditValue(contactDetails.bio || '');
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'fr-FR';
+    recognition.continuous = true;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => setIsDictating(true);
+    
+    recognition.onresult = (event: any) => {
+      let finalTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript + ' ';
+        }
+      }
+      if (finalTranscript) {
+        setEditValue(prev => (prev ? prev.trim() + ' ' : '') + finalTranscript.trim());
+      }
+    };
+
+    recognition.onerror = (e: any) => { console.error('Dictation error:', e); setIsDictating(false); };
+    recognition.onend = () => setIsDictating(false);
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
+
+  const handleFullEditSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingFullEdit(true);
+    try {
+      const { error } = await supabase.from('contacts').update({
+        first_name: fullEditData.first_name,
+        last_name: fullEditData.last_name,
+        company: fullEditData.company,
+        job_title: fullEditData.job_title,
+        industry: fullEditData.industry,
+        location: fullEditData.location,
+        email: fullEditData.email,
+        phone: fullEditData.phone,
+        linkedin: fullEditData.linkedin
+      }).eq('id', contactDetails.id);
+
+      if (error) throw error;
+      await onRefreshData();
+      setIsEditingContact(false);
+      alert('Fiche mise à jour avec succès !');
+    } catch (err) {
+      console.error(err);
+      alert('Erreur lors de la sauvegarde.');
+    } finally {
+      setSavingFullEdit(false);
+    }
+  };
+
   const filteredContacts = useMemo(() => {
     let list = selectedSpaceId
       ? contacts.filter(c => c.space_id === selectedSpaceId)
       : contacts;
+
+    // Apply quick filters
+    if (filterType === 'enriched') {
+      list = list.filter(c => c.ai_context || c.bio);
+    } else if (filterType === 'not_enriched') {
+      list = list.filter(c => !c.ai_context && !c.bio && contactRichnessScore(c) >= 0);
+    } else if (filterType === 'invalid') {
+      list = list.filter(c => contactRichnessScore(c) < 0);
+    }
 
     if (searchTerm.trim() !== '') {
       const term = searchTerm.toLowerCase();
@@ -396,10 +562,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
       );
     }
     return list;
-  }, [contacts, selectedSpaceId, searchTerm]);
-
-
-
+  }, [contacts, selectedSpaceId, searchTerm, filterType]);
 
   // Calculate direct network connections for the selected contact (sharing company or tags)
   const directConnections = useMemo(() => {
@@ -446,6 +609,36 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
       })
       .filter(item => item !== null) as { contact: any; reason: string; type: string }[];
   }, [contactDetails, contacts, contactTags, tags]);
+
+  const handleAutoEnrichSingle = async () => {
+    if (!contactDetails) return;
+    if (!isGeminiConfigured()) {
+      alert("Clé Gemini requise pour la recherche web automatique.");
+      return;
+    }
+
+    setAutoEnrichingSingle(true);
+    try {
+      const enrichedData = await autoEnrichContact(contactDetails);
+      
+      const { error } = await supabase.from('contacts').update({
+        bio: enrichedData.bio,
+        ai_context: enrichedData.aiContext,
+        industry: enrichedData.industry,
+        enriched_at: new Date().toISOString()
+      }).eq('id', contactDetails.id);
+
+      if (error) throw error;
+
+      alert("Recherche web terminée avec succès !");
+      await onRefreshData();
+    } catch (err: any) {
+      console.error(err);
+      alert(`Erreur d'enrichissement: ${err.message}`);
+    } finally {
+      setAutoEnrichingSingle(false);
+    }
+  };
 
   const handleFetchSynergies = async () => {
     if (!contactDetails) return;
@@ -764,15 +957,27 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
             </button>
           </form>
         )}
-        <div className="glass-card" style={styles.searchBlock}>
-          <Search size={18} color="var(--text-secondary)" style={{ marginRight: 10 }} />
-          <input 
-            type="text" 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Rechercher par nom, entreprise, poste..." 
-            style={styles.searchInput}
-          />
+        <div className="glass-card" style={{ ...styles.searchBlock, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flex: 1, alignItems: 'center', background: 'transparent', minWidth: 200 }}>
+            <Search size={18} color="var(--text-secondary)" style={{ marginRight: 10 }} />
+            <input 
+              type="text" 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Rechercher par nom, entreprise, poste..." 
+              style={{ ...styles.searchInput, flex: 1 }}
+            />
+          </div>
+          <select 
+            value={filterType} 
+            onChange={(e) => setFilterType(e.target.value as any)}
+            style={{ ...styles.input, width: 'auto', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glow)', minWidth: 220 }}
+          >
+            <option value="all" style={{ background: '#1a1a2e' }}>Tous les contacts</option>
+            <option value="enriched" style={{ background: '#1a1a2e' }}>✨ Déjà enrichis</option>
+            <option value="not_enriched" style={{ background: '#1a1a2e' }}>❌ Non enrichis (données valides)</option>
+            <option value="invalid" style={{ background: '#1a1a2e' }}>⚠️ Données insuffisantes (à corriger)</option>
+          </select>
         </div>
 
         {/* Selection & Info Bar */}
@@ -927,19 +1132,87 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
       {contactDetails && (
         <div className="glass-sidebar" style={styles.drawer}>
           <div style={styles.drawerHeader}>
-            <span style={styles.drawerTitle}>Fiche Contact</span>
-            <button onClick={() => setSelectedContactId(null)} style={styles.closeBtn}>
-              <X size={18} />
-            </button>
+            <span style={styles.drawerTitle}>
+              {isEditingContact ? 'Modifier la fiche' : 'Fiche Contact'}
+            </span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {!isEditingContact && (
+                <button 
+                  onClick={() => {
+                    setFullEditData({ ...contactDetails });
+                    setIsEditingContact(true);
+                  }} 
+                  style={{ ...styles.closeBtn, color: 'var(--neon-purple)' }}
+                  title="Modifier les infos principales"
+                >
+                  <Edit2 size={16} />
+                </button>
+              )}
+              <button onClick={() => { setSelectedContactId(null); setIsEditingContact(false); }} style={styles.closeBtn}>
+                <X size={18} />
+              </button>
+            </div>
           </div>
 
           <div style={styles.drawerContent}>
-            {/* Summary Card */}
-            <div style={styles.profileSection}>
-              <div style={styles.avatarBig}>
-                {contactDetails.first_name.charAt(0).toUpperCase()}{contactDetails.last_name.charAt(0).toUpperCase()}
-              </div>
-              <h2 style={styles.profileName}>{contactDetails.first_name} {contactDetails.last_name}</h2>
+            {isEditingContact ? (
+              <form onSubmit={handleFullEditSave} style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 20 }}>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Prénom</label>
+                    <input type="text" value={fullEditData.first_name || ''} onChange={e => setFullEditData({...fullEditData, first_name: e.target.value})} required style={styles.input} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Nom</label>
+                    <input type="text" value={fullEditData.last_name || ''} onChange={e => setFullEditData({...fullEditData, last_name: e.target.value})} required style={styles.input} />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Entreprise</label>
+                  <input type="text" value={fullEditData.company || ''} onChange={e => setFullEditData({...fullEditData, company: e.target.value})} style={styles.input} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Poste</label>
+                  <input type="text" value={fullEditData.job_title || ''} onChange={e => setFullEditData({...fullEditData, job_title: e.target.value})} style={styles.input} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Secteur (Industry)</label>
+                  <input type="text" value={fullEditData.industry || ''} onChange={e => setFullEditData({...fullEditData, industry: e.target.value})} style={styles.input} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Localisation</label>
+                  <input type="text" value={fullEditData.location || ''} onChange={e => setFullEditData({...fullEditData, location: e.target.value})} style={styles.input} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Email</label>
+                  <input type="email" value={fullEditData.email || ''} onChange={e => setFullEditData({...fullEditData, email: e.target.value})} style={styles.input} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Téléphone</label>
+                  <input type="text" value={fullEditData.phone || ''} onChange={e => setFullEditData({...fullEditData, phone: e.target.value})} style={styles.input} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>LinkedIn (URL)</label>
+                  <input type="url" value={fullEditData.linkedin || ''} onChange={e => setFullEditData({...fullEditData, linkedin: e.target.value})} style={styles.input} />
+                </div>
+                <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+                  <button type="button" onClick={() => setIsEditingContact(false)} className="btn-secondary" style={{ flex: 1, padding: 8 }}>
+                    Annuler
+                  </button>
+                  <button type="submit" disabled={savingFullEdit} className="btn-primary" style={{ flex: 1, padding: 8 }}>
+                    {savingFullEdit ? 'Enregistrement...' : 'Enregistrer'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <>
+                {/* Summary Card */}
+                <div style={styles.profileSection}>
+                  <div style={styles.avatarBig}>
+                    {contactDetails.first_name.charAt(0).toUpperCase()}{contactDetails.last_name.charAt(0).toUpperCase()}
+                  </div>
+                  <h2 style={styles.profileName}>{contactDetails.first_name} {contactDetails.last_name}</h2>
+
               {contactDetails.job_title && (
                 <div style={styles.profileRole}>
                   <Briefcase size={14} style={{ marginRight: 6 }} />
@@ -982,20 +1255,91 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
 
             {/* Description */}
             <div style={styles.infoBlock}>
-              <h4 style={styles.blockTitle}>Description / Bio</h4>
-              <p style={styles.drawerBioText}>
-                {contactDetails.bio || "Pas de description renseignée."}
-              </p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <h4 style={{ ...styles.blockTitle, marginBottom: 0 }}>Description / Bio</h4>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button 
+                    onClick={toggleDictation}
+                    style={{ background: 'none', border: 'none', color: isDictating ? 'var(--neon-pink)' : 'var(--text-muted)', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center', gap: 4 }}
+                    title={isDictating ? "Arrêter la dictée" : "Dicter vocalement"}
+                  >
+                    <Mic size={14} className={isDictating ? 'pulse-anim' : ''} />
+                    {isDictating && <span style={{ fontSize: '0.7rem', color: 'var(--neon-pink)' }}>Écoute...</span>}
+                  </button>
+                  
+                  {editingField !== 'bio' ? (
+                    <button 
+                      onClick={() => { setEditingField('bio'); setEditValue(contactDetails.bio || ''); }}
+                      style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}
+                      title="Modifier la bio"
+                    >
+                      <Edit2 size={14} />
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => handleInlineEditSave(contactDetails.id, 'bio')}
+                      disabled={savingEdit}
+                      style={{ background: 'none', border: 'none', color: 'var(--neon-green)', cursor: 'pointer', padding: 4 }}
+                      title="Enregistrer"
+                    >
+                      <Check size={16} />
+                    </button>
+                  )}
+                </div>
+              </div>
+              {editingField === 'bio' ? (
+                <textarea
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  style={{ ...styles.input, minHeight: '80px', width: '100%', fontSize: '0.85rem' }}
+                  placeholder="Écrivez une description..."
+                  autoFocus
+                />
+              ) : (
+                <p style={styles.drawerBioText}>
+                  {contactDetails.bio || "Pas de description renseignée."}
+                </p>
+              )}
             </div>
 
             {/* AI Summary Context */}
-            {contactDetails.ai_context && (
+            {(contactDetails.ai_context || editingField === 'ai_context') && (
               <div className="glow-active" style={styles.aiContextBlock}>
-                <div style={styles.aiContextTitle}>
-                  <Sparkles size={14} color="var(--neon-purple)" />
-                  <span>Synthèse IA (Gemini)</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={styles.aiContextTitle}>
+                    <Sparkles size={14} color="var(--neon-purple)" />
+                    <span>Synthèse IA (Gemini)</span>
+                  </div>
+                  {editingField !== 'ai_context' ? (
+                    <button 
+                      onClick={() => { setEditingField('ai_context'); setEditValue(contactDetails.ai_context || ''); }}
+                      style={{ background: 'none', border: 'none', color: 'var(--neon-purple)', cursor: 'pointer', padding: 4, opacity: 0.8 }}
+                      title="Modifier la synthèse"
+                    >
+                      <Edit2 size={14} />
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => handleInlineEditSave(contactDetails.id, 'ai_context')}
+                      disabled={savingEdit}
+                      style={{ background: 'none', border: 'none', color: 'var(--neon-green)', cursor: 'pointer', padding: 4 }}
+                      title="Enregistrer"
+                    >
+                      <Check size={16} />
+                    </button>
+                  )}
                 </div>
-                <p style={styles.aiContextText}>{contactDetails.ai_context}</p>
+                {editingField === 'ai_context' ? (
+                  <textarea
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    style={{ ...styles.input, minHeight: '80px', width: '100%', fontSize: '0.85rem', marginTop: 8 }}
+                    placeholder="Synthèse de l'IA..."
+                    autoFocus
+                  />
+                ) : (
+                  <p style={styles.aiContextText}>{contactDetails.ai_context}</p>
+                )}
               </div>
             )}
 
@@ -1064,7 +1408,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                   className="btn-primary"
                   style={{ fontSize: '0.75rem', padding: '8px 12px', marginTop: 4 }}
                 >
-                  {updatingSpaces ? "Enregistrement..." : "Valider l'Appartenance 🤝"}
+                  {updatingSpaces ? "Mise à jour..." : "Sauvegarder les Galaxies"}
                 </button>
               </div>
             </div>
@@ -1252,15 +1596,26 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
 
             {/* Public Web Ingestion & Enrichment */}
             <div style={styles.enrichmentBlock}>
-              {!showEnrichForm ? (
+              <div style={{ display: 'flex', gap: 8, marginBottom: showEnrichForm ? 12 : 0 }}>
                 <button 
-                  onClick={() => setShowEnrichForm(true)} 
-                  className="btn-secondary"
-                  style={{ width: '100%', fontSize: '0.8rem', padding: '8px 12px' }}
+                  onClick={handleAutoEnrichSingle}
+                  disabled={autoEnrichingSingle}
+                  className="btn-primary"
+                  style={{ flex: 1, fontSize: '0.75rem', padding: '8px 12px', opacity: autoEnrichingSingle ? 0.7 : 1 }}
                 >
-                  ✨ Enrichir via Scraping Web (IA)
+                  {autoEnrichingSingle ? 'Recherche en cours...' : '✨ Auto-Enrichir (Google)'}
                 </button>
-              ) : (
+                {!showEnrichForm && (
+                  <button 
+                    onClick={() => setShowEnrichForm(true)} 
+                    className="btn-secondary"
+                    style={{ flex: 1, fontSize: '0.75rem', padding: '8px 12px' }}
+                  >
+                    ✨ Scraping Manuel
+                  </button>
+                )}
+              </div>
+              {showEnrichForm && (
                 <div className="glass-card" style={styles.enrichForm}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                     <h5 style={{ margin: 0, fontSize: '0.8rem', color: '#fff' }}>Données Web à analyser</h5>
@@ -1322,7 +1677,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                 )}
               </div>
             </div>
-
+            </>
+            )}
           </div>
         </div>
       )}

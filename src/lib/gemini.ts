@@ -352,9 +352,40 @@ Règle absolue : Ne propose que des synergies réalistes basées sur les donnée
 }
 
 /**
- * 6. Auto Enrichment (Batch-safe)
- * Generates an enriched profile directly from known contact data (no scraped text needed).
- * Perfect for bulk enrichment runs.
+ * Validates that a contact has real usable identifying data for enrichment.
+ * Returns false for phone numbers as names, single-word entries, company names as contacts, etc.
+ */
+function isValidContactForEnrichment(contact: {
+  first_name: string;
+  last_name: string;
+  company?: string;
+}): boolean {
+  const fn = (contact.first_name || '').trim();
+  const ln = (contact.last_name || '').trim();
+
+  // Must have both first and last name
+  if (!fn || !ln) return false;
+
+  // Reject entries where first_name looks like a phone number
+  if (/^[+\d\s\-().]{6,}$/.test(fn)) return false;
+
+  // Reject entries where first_name looks like an email
+  if (fn.includes('@')) return false;
+
+  // Reject very short or clearly invalid last names (single char)
+  if (ln.length < 2) return false;
+
+  // Reject if first_name is all uppercase (likely a company abbreviation)
+  if (fn === fn.toUpperCase() && fn.length > 3) return false;
+
+  return true;
+}
+
+/**
+ * 6. Auto Enrichment (Batch-safe) — with Google Search grounding via REST API.
+ * Uses the Gemini REST API directly (same as Edge Function) so Google Search
+ * is available in the browser without needing a backend.
+ * Skips contacts with invalid/insufficient identifying data to avoid hallucinations.
  */
 export async function autoEnrichContact(contact: {
   first_name: string;
@@ -365,69 +396,71 @@ export async function autoEnrichContact(contact: {
   bio?: string;
   location?: string;
 }): Promise<EnrichmentResult> {
-  const genAI = getGeminiClient();
-  if (!genAI) throw new Error("Gemini API key is not configured in .env.local");
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'YOUR_GEMINI_API_KEY_HERE') {
+    throw new Error("Gemini API key is not configured");
+  }
 
-  const model = genAI.getGenerativeModel({
-    model: "gemini-3.5-flash",
-    generationConfig: { responseMimeType: "application/json" }
-  });
+  // Validate before even calling the API
+  if (!isValidContactForEnrichment(contact)) {
+    throw new Error(`Données insuffisantes ou invalides pour enrichir "${contact.first_name} ${contact.last_name}"`);
+  }
 
-  const prompt = `Tu es un agent d'intelligence commerciale spécialisé dans l'enrichissement de fiches contacts B2B.
-À partir des informations connues sur ce professionnel, génère une fiche enrichie détaillée et réaliste.
+  const prompt = `Tu es un assistant d'enrichissement de contacts professionnels B2B.
+Recherche sur le web des informations RÉELLES et VÉRIFIABLES sur ce contact professionnel.
 
-Nom : ${contact.first_name} ${contact.last_name}
-Poste : ${contact.job_title || 'Inconnu'}
-Entreprise : ${contact.company || 'Inconnue'}
-Secteur : ${contact.industry || 'Non renseigné'}
-Ville/Pays : ${contact.location || 'Non renseigné'}
-Bio actuelle : ${contact.bio || 'Aucune'}
+Nom complet : ${contact.first_name} ${contact.last_name}
+Poste : ${contact.job_title || 'Non renseigné'}
+Entreprise : ${contact.company || 'Non renseignée'}
+Secteur déclaré : ${contact.industry || 'Non renseigné'}
+Localisation : ${contact.location || 'Non renseignée'}
 
-Retourne STRICTEMENT ce JSON :
+RÈGLE ABSOLUE : Si tu n'as pas assez d'informations vérifiables, mets "null" plutôt qu'inventer.
+Ne génère JAMAIS de bio générique comme "professionnel chevronné" ou "experte en marketing digital".
+La bio doit être SPÉCIFIQUE à cette personne et cette entreprise.
+
+Retourne ce JSON :
 {
-  "industry": "secteur d'activité précis (ex: FinTech, SaaS B2B, Santé Numérique)",
-  "companySize": "Taille estimée (ex: 1-10, 11-50, 51-200, 201-1000, 1000+)",
-  "bio": "Résumé professionnel en 2 phrases percutantes en français",
-  "skills": ["3 à 5 compétences clés probables pour ce profil"],
-  "inferredNeeds": ["2 à 3 besoins ou défis probables dans son secteur/poste"],
-  "aiContext": "Un conseil stratégique en 2-3 phrases pour l'utilisateur : comment aborder ce contact, quels sujets mentionner, quelle valeur lui apporter"
+  "industry": "secteur précis ou null si inconnu",
+  "companySize": "taille estimée (1-10 | 11-50 | 51-200 | 201-1000 | 1000+) ou null",
+  "bio": "bio SPÉCIFIQUE et VÉRIFIABLE en 1-2 phrases, ou null si pas assez d'info",
+  "skills": ["compétences spécifiques au poste/secteur"],
+  "inferredNeeds": ["défis spécifiques à ce type de rôle dans ce secteur"],
+  "aiContext": "conseil concret et personnalisé sur comment aborder ce contact, ou null si pas assez d'info"
 }`;
 
-  const result = await model.generateContent(prompt);
-  let text = result.response.text();
-  
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        tools: [{ googleSearch: {} }],
+        generationConfig: { responseMimeType: 'application/json' },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Gemini API error: ${response.status} — ${err}`);
+  }
+
+  const data = await response.json();
+  let text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+
+  // Sanitize markdown wrappers if present
+  text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
+
   try {
-    // Sanitize text: remove markdown code block formatting if present
-    if (text.includes('```')) {
-      text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
-    }
-    
-    // Fallback for truncated JSON
-    text = text.trim();
-    if (text.startsWith('{') && !text.endsWith('}')) {
-      if (text.endsWith('"')) {
-        text += '\n}';
-      }
-    }
-    
     return JSON.parse(text);
-  } catch (err) {
-    try {
-      // Second attempt: aggressive cleanup for common LLM JSON syntax errors
-      // Fix stray quotes before closing brace: "\n"\n} -> "}
-      let cleaned = text.replace(/"\s*"\s*}/g, '"}');
-      // Fix trailing commas: ,} -> }
-      cleaned = cleaned.replace(/,\s*}/g, '}');
-      // Extract only the JSON object
-      const startIdx = cleaned.indexOf('{');
-      const endIdx = cleaned.lastIndexOf('}');
-      if (startIdx !== -1 && endIdx !== -1) {
-        cleaned = cleaned.substring(startIdx, endIdx + 1);
-      }
-      return JSON.parse(cleaned);
-    } catch (finalErr) {
-      console.error("Gemini JSON Parse Error. Raw text:", text);
-      throw new Error("Failed to parse Gemini response: " + finalErr);
-    }
+  } catch {
+    // Cleanup common LLM JSON issues: trailing commas, etc.
+    let cleaned = text.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start !== -1 && end !== -1) cleaned = cleaned.substring(start, end + 1);
+    return JSON.parse(cleaned);
   }
 }

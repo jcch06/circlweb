@@ -18,8 +18,6 @@ import {
   Lightbulb, 
   Send, 
   Key, 
-  Plus, 
-  X, 
   Copy, 
   Check, 
   ArrowRight,

@@ -684,9 +684,13 @@ export interface NormalizedProfile {
   topicsOfInterest: string[];
   // Business-oriented fields
   budgetAuthority: 'none' | 'influencer' | 'decision-maker' | 'budget-holder';
-  businessIntent: string; // What are they actively trying to achieve (deal, hire, raise, sell...)
+  businessIntent: string;
   networkValue: 'connector' | 'influencer' | 'specialist' | 'dormant';
-  buyingSignals: string[]; // Signs they might pay for services or solutions
+  buyingSignals: string[];
+  // Relationship quality
+  relationshipStrength: 'cold' | 'warm' | 'hot' | 'strategic';
+  whatUserCanDoForThem: string; // Concrete value the user can bring
+  whatTheyCanDoForUser: string; // Concrete value they can bring to user
 }
 
 /**
@@ -742,7 +746,22 @@ export interface OracleV3Result {
   supplyDemand: SupplyDemandEntry[];
   opportunities: DeepOpportunity[];
   bridgeContacts: { id: string; name: string; centralityScore: number }[];
+  keyIntros: StrategicIntro[];
   timestamp: number;
+}
+
+/**
+ * Strategic introduction between two contacts
+ */
+export interface StrategicIntro {
+  contactA: { id: string; name: string; role: string; company: string };
+  contactB: { id: string; name: string; role: string; company: string };
+  reason: string;
+  valueForA: string;
+  valueForB: string;
+  valueForUser: string;
+  urgency: 'immediate' | 'short-term' | 'medium-term';
+  similarityScore: number;
 }
 
 // Helper to parse Gemini JSON responses safely
@@ -881,7 +900,10 @@ Retourne un tableau JSON avec cette structure exacte pour chaque contact :
     "budgetAuthority": "none | influencer | decision-maker | budget-holder",
     "businessIntent": "Que cherche activement cette personne ? (recruter, vendre, lever des fonds, trouver des partenaires, se former, pivoter, etc.)",
     "networkValue": "connector | influencer | specialist | dormant",
-    "buyingSignals": ["Signaux d'achat : cherche un prestataire, recrute, lève des fonds, lance un nouveau projet, change de poste, croissance rapide"]
+    "buyingSignals": ["Signaux d'achat concrets : cherche un prestataire, recrute, lève des fonds, lance un projet, change de poste, croissance rapide"],
+    "relationshipStrength": "cold | warm | hot | strategic (basé sur la quantité de notes/détails disponibles : beaucoup d'info = hot/strategic, peu = cold/warm)",
+    "whatUserCanDoForThem": "Une phrase CONCRÈTE décrivant ce que l'utilisateur pourrait apporter à cette personne (ex: 'Lui présenter 3 investisseurs de son réseau', 'Lui fournir un dev React pour son projet')",
+    "whatTheyCanDoForUser": "Une phrase CONCRÈTE décrivant ce que cette personne pourrait apporter à l'utilisateur (ex: 'Ouvrir la porte chez L'Oréal', 'Devenir client pour du consulting growth')"
   }
 ]`;
 
@@ -921,17 +943,24 @@ export async function computeContactEmbeddings(
     const batch = profiles.slice(i, i + batchSize);
     
     const embedPromises = batch.map(async (profile) => {
-      const text = [
-        `Secteur: ${profile.sector}`,
-        `Rôle: ${profile.roleCategory} (${profile.seniority})`,
-        `Compétences: ${profile.skillsOffered.join(', ')}`,
-        `Besoins: ${[...profile.explicitNeeds, ...profile.inferredNeeds].join(', ')}`,
-        `Pain points: ${profile.painPoints.join(', ')}`,
-        `Intérêts: ${profile.topicsOfInterest.join(', ')}`
-      ].join('. ');
+      // Build a rich semantic text for high-quality embeddings
+      const parts = [
+        `${profile.name} travaille dans le secteur ${profile.sector} en tant que ${profile.roleCategory} (${profile.seniority}).`,
+        profile.skillsOffered.length > 0 ? `Expertise : ${profile.skillsOffered.join(', ')}.` : '',
+        profile.explicitNeeds.length > 0 ? `Besoins explicites : ${profile.explicitNeeds.join(', ')}.` : '',
+        profile.inferredNeeds.length > 0 ? `Besoins déduits : ${profile.inferredNeeds.join(', ')}.` : '',
+        profile.painPoints.length > 0 ? `Problèmes business : ${profile.painPoints.join(', ')}.` : '',
+        profile.businessIntent ? `Objectif actuel : ${profile.businessIntent}.` : '',
+        profile.buyingSignals && profile.buyingSignals.length > 0 ? `Signaux d'achat : ${profile.buyingSignals.join(', ')}.` : '',
+        profile.budgetAuthority && profile.budgetAuthority !== 'none' ? `Pouvoir de décision : ${profile.budgetAuthority}.` : '',
+        profile.networkValue ? `Valeur réseau : ${profile.networkValue}.` : '',
+        profile.topicsOfInterest.length > 0 ? `Centres d'intérêt : ${profile.topicsOfInterest.join(', ')}.` : '',
+        profile.whatUserCanDoForThem ? `Ce qu'on peut lui apporter : ${profile.whatUserCanDoForThem}.` : '',
+        profile.whatTheyCanDoForUser ? `Ce qu'il/elle peut nous apporter : ${profile.whatTheyCanDoForUser}.` : ''
+      ].filter(Boolean).join(' ');
 
       try {
-        const result = await model.embedContent(text);
+        const result = await model.embedContent(parts);
         return {
           contactId: profile.contactId,
           embedding: result.embedding.values
@@ -1341,7 +1370,16 @@ export async function runOracleV3Pipeline(
 
   // === PASSE 4: Deep User Opportunity Analysis ===
   onPassChange?.(4, 0);
-  const opportunities = await deepUserOpportunityAnalysis(userProfile, profiles, clusters, supplyDemand, (pct) => onPassChange?.(4, pct));
+  const opportunities = await deepUserOpportunityAnalysis(userProfile, profiles, clusters, supplyDemand, (pct) => onPassChange?.(4, pct * 0.6));
+
+  // === PASSE 4b: Strategic Pairwise Introductions ===
+  onPassChange?.(4, 60);
+  let keyIntros: StrategicIntro[] = [];
+  if (embeddings.length >= 4) {
+    const { cosineSimilarity } = await import('./vectorMath');
+    keyIntros = await detectStrategicIntros(profiles, embeddings, clusters, userProfile, cosineSimilarity);
+  }
+  onPassChange?.(4, 100);
 
   const result: OracleV3Result = {
     profiles,
@@ -1349,6 +1387,7 @@ export async function runOracleV3Pipeline(
     supplyDemand,
     opportunities,
     bridgeContacts,
+    keyIntros,
     timestamp: Date.now()
   };
 
@@ -1358,5 +1397,114 @@ export async function runOracleV3Pipeline(
   } catch { /* localStorage full, ignore */ }
 
   return result;
+}
+
+/**
+ * PASSE 4b — Detect Strategic Pairwise Introductions
+ * Uses similarity scores + supply/demand matching to find high-value intros
+ */
+async function detectStrategicIntros(
+  profiles: NormalizedProfile[],
+  embeddings: { contactId: string; embedding: number[] }[],
+  clusters: NetworkCluster[],
+  userProfile: any,
+  cosineSimilarity: (a: number[], b: number[]) => number
+): Promise<StrategicIntro[]> {
+  const genAI = getGeminiClient();
+  if (!genAI) return [];
+
+  // Find cross-cluster pairs with complementary needs/skills
+  const candidates: { a: NormalizedProfile; b: NormalizedProfile; sim: number; crossCluster: boolean }[] = [];
+  
+  for (let i = 0; i < profiles.length; i++) {
+    for (let j = i + 1; j < profiles.length; j++) {
+      const a = profiles[i];
+      const b = profiles[j];
+      
+      // Check if they're in different clusters
+      const clusterA = clusters.find(c => c.members.some(m => m.id === a.contactId));
+      const clusterB = clusters.find(c => c.members.some(m => m.id === b.contactId));
+      const crossCluster = clusterA !== clusterB;
+      
+      // Check complementarity: A's skills match B's needs or vice versa
+      const aSkills = new Set(a.skillsOffered.map(s => s.toLowerCase()));
+      const bSkills = new Set(b.skillsOffered.map(s => s.toLowerCase()));
+      const aNeeds = [...a.explicitNeeds, ...a.inferredNeeds].map(n => n.toLowerCase());
+      const bNeeds = [...b.explicitNeeds, ...b.inferredNeeds].map(n => n.toLowerCase());
+      
+      const aCanHelpB = aNeeds.some(need => [...bSkills].some(skill => need.includes(skill) || skill.includes(need)));
+      const bCanHelpA = bNeeds.some(need => [...aSkills].some(skill => need.includes(skill) || skill.includes(need)));
+      
+      // Calculate similarity from embeddings
+      const embA = embeddings.find(e => e.contactId === a.contactId);
+      const embB = embeddings.find(e => e.contactId === b.contactId);
+      const sim = embA && embB ? cosineSimilarity(embA.embedding, embB.embedding) : 0;
+      
+      // Score: cross-cluster pairs with complementary needs score highest
+      const complementaryBoost = (aCanHelpB || bCanHelpA) ? 0.3 : 0;
+      const crossClusterBoost = crossCluster ? 0.2 : 0;
+      const score = sim + complementaryBoost + crossClusterBoost;
+      
+      if (score > 0.4) {
+        candidates.push({ a, b, sim: Math.round(score * 100) / 100, crossCluster });
+      }
+    }
+  }
+  
+  // Take top 8 candidates
+  const topCandidates = candidates
+    .sort((x, y) => y.sim - x.sim)
+    .slice(0, 8);
+  
+  if (topCandidates.length === 0) return [];
+
+  const model = genAI.getGenerativeModel({
+    model: "gemini-3.5-flash",
+    generationConfig: { responseMimeType: "application/json" }
+  });
+
+  const prompt = `Tu es un expert en mise en relation stratégique. Voici des paires de contacts qui pourraient bénéficier d'une introduction.
+
+${buildUserContext(userProfile)}
+
+Paires candidates (triées par score de compatibilité) :
+${JSON.stringify(topCandidates.map(c => ({
+    contactA: { name: c.a.name, sector: c.a.sector, role: c.a.roleCategory, seniority: c.a.seniority, needs: [...c.a.explicitNeeds, ...c.a.inferredNeeds].slice(0, 3), skills: c.a.skillsOffered.slice(0, 3), intent: c.a.businessIntent },
+    contactB: { name: c.b.name, sector: c.b.sector, role: c.b.roleCategory, seniority: c.b.seniority, needs: [...c.b.explicitNeeds, ...c.b.inferredNeeds].slice(0, 3), skills: c.b.skillsOffered.slice(0, 3), intent: c.b.businessIntent },
+    score: c.sim,
+    crossCluster: c.crossCluster
+  })), null, 2)}
+
+Pour chaque paire, évalue si l'introduction a du SENS BUSINESS. Élimine les paires sans vraie valeur ajoutée.
+Pour les paires retenues, explique CONCRÈTEMENT :
+- Pourquoi ils devraient se rencontrer
+- Ce que A gagne
+- Ce que B gagne
+- Ce que l'UTILISATEUR gagne en orchestrant cette intro (commission, positionnement, réciprocité)
+
+Retourne UNIQUEMENT un tableau JSON :
+[
+  {
+    "contactA": { "id": "", "name": "Nom A", "role": "Rôle", "company": "Entreprise" },
+    "contactB": { "id": "", "name": "Nom B", "role": "Rôle", "company": "Entreprise" },
+    "reason": "Phrase d'accroche pour l'introduction (ex: 'Marie a exactement le profil d'investisseur que Paul recherche pour sa série A')",
+    "valueForA": "Ce que A gagne concrètement",
+    "valueForB": "Ce que B gagne concrètement",
+    "valueForUser": "Ce que l'utilisateur gagne en faisant cette intro",
+    "urgency": "immediate | short-term | medium-term",
+    "similarityScore": 0.85
+  }
+]
+
+Retourne entre 3 et 6 introductions les plus stratégiques.`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const intros = safeParseGeminiJSON(result.response.text());
+    return Array.isArray(intros) ? intros : [];
+  } catch (err) {
+    console.error('Strategic intros error:', err);
+    return [];
+  }
 }
 

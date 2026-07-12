@@ -27,7 +27,9 @@ import {
   Link2,
   Calendar,
   RefreshCw,
-  TrendingUp
+  TrendingUp,
+  Handshake,
+  ArrowLeftRight
 } from 'lucide-react';
 import { UserProfilePopup } from './UserProfilePopup';
 import { NetworkAnalysisProgress } from './NetworkAnalysisProgress';
@@ -344,6 +346,55 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                                     <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.72rem' }}>
                                       Score de centralité : {bc.centralityScore}
                                     </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Strategic Introductions */}
+                        {v3Result.keyIntros && v3Result.keyIntros.length > 0 && (
+                          <div>
+                            <h3 style={{ color: 'var(--neon-yellow)', marginBottom: 16, borderBottom: '1px solid rgba(255, 214, 10, 0.3)', paddingBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <Handshake size={20} /> Introductions Stratégiques ({v3Result.keyIntros.length})
+                            </h3>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 12 }}>
+                              Paires de contacts qui devraient se rencontrer — et ce que VOUS gagnez en orchestrant ces introductions.
+                            </p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                              {v3Result.keyIntros.map((intro, idx) => (
+                                <div key={idx} className="glass-card" style={{ padding: 18, borderColor: 'rgba(255, 214, 10, 0.2)' }}>
+                                  {/* Pair Header */}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                                    <div style={{ flex: 1, textAlign: 'center' }}>
+                                      <span style={{ color: '#fff', fontWeight: 700, fontSize: '0.95rem' }}>{intro.contactA?.name}</span>
+                                      <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.72rem' }}>{intro.contactA?.role} @ {intro.contactA?.company}</span>
+                                    </div>
+                                    <div style={{ background: 'linear-gradient(135deg, var(--neon-yellow), var(--neon-purple))', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                      <ArrowLeftRight size={16} color="#fff" />
+                                    </div>
+                                    <div style={{ flex: 1, textAlign: 'center' }}>
+                                      <span style={{ color: '#fff', fontWeight: 700, fontSize: '0.95rem' }}>{intro.contactB?.name}</span>
+                                      <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.72rem' }}>{intro.contactB?.role} @ {intro.contactB?.company}</span>
+                                    </div>
+                                  </div>
+                                  {/* Reason */}
+                                  <p style={{ color: 'var(--neon-yellow)', fontSize: '0.88rem', fontWeight: 600, margin: '0 0 10px 0', fontStyle: 'italic' }}>💡 {intro.reason}</p>
+                                  {/* Value grid */}
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                                    <div style={{ background: 'rgba(79, 142, 247, 0.08)', padding: 8, borderRadius: 6 }}>
+                                      <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>Valeur pour {intro.contactA?.name?.split(' ')[0]}</span>
+                                      <span style={{ fontSize: '0.78rem', color: 'var(--neon-blue)' }}>{intro.valueForA}</span>
+                                    </div>
+                                    <div style={{ background: 'rgba(138, 43, 226, 0.08)', padding: 8, borderRadius: 6 }}>
+                                      <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>Valeur pour {intro.contactB?.name?.split(' ')[0]}</span>
+                                      <span style={{ fontSize: '0.78rem', color: 'var(--neon-purple)' }}>{intro.valueForB}</span>
+                                    </div>
+                                    <div style={{ background: 'rgba(48, 192, 96, 0.08)', padding: 8, borderRadius: 6 }}>
+                                      <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>🎯 Ce que VOUS gagnez</span>
+                                      <span style={{ fontSize: '0.78rem', color: 'var(--neon-green)', fontWeight: 600 }}>{intro.valueForUser}</span>
+                                    </div>
                                   </div>
                                 </div>
                               ))}

@@ -767,12 +767,52 @@ function safeParseGeminiJSON(text: string): any {
 }
 
 /**
+ * Build a dynamic user context string for prompts based on the user's bio/profile
+ */
+function buildUserContext(userProfile: any): string {
+  const bio = userProfile?.bio || userProfile?.description || '';
+  const skills = userProfile?.skills || [];
+  const name = userProfile?.name || 'Utilisateur';
+  const title = userProfile?.title || userProfile?.job_title || '';
+  
+  // Always-included generic monetization angles
+  const genericAngles = [
+    'mise en relation / apport d\'affaires (commission)',
+    'consulting & conseil stratégique',
+    'freelance & prestations de service',
+    'levée de fonds & recherche d\'investisseurs',
+    'événementiel & networking (dîners privés, masterclasses)',
+    'vente de formations & coaching',
+    'création de produits numériques (SaaS, outils, templates)',
+    'lobbying & influence politique',
+    'recrutement & chasse de talents',
+    'partenariats commerciaux & co-entreprises',
+    'affiliation & recommandation rémunérée',
+    'management de communauté & cercles premium',
+    'courtage immobilier & investissement',
+    'gestion de patrimoine & conseil financier',
+    'relations presse & personal branding'
+  ];
+
+  return `## PROFIL DE L'UTILISATEUR — ${name}
+${title ? `Poste : ${title}` : ''}
+${bio ? `Bio : ${bio}` : ''}
+${skills.length > 0 ? `Compétences : ${skills.join(', ')}` : ''}
+
+L'utilisateur veut MONÉTISER son réseau. Voici les angles de monétisation à explorer en priorité :
+${genericAngles.map((a, i) => `${i + 1}. ${a}`).join('\n')}
+
+ADAPTE ton analyse au profil spécifique de l'utilisateur ci-dessus. Si sa bio mentionne un domaine précis (ex: "architecte" → opportunités dans l'immobilier/urbanisme, "développeur" → consulting tech, "avocat" → conseil juridique), priorise les opportunités ALIGNÉES avec son expertise.`;
+}
+
+/**
  * PASSE 1 — Extract Normalized Profiles
  * Processes contacts in batches to extract structured profile data
  */
 export async function extractNormalizedProfiles(
   contacts: any[],
   notes: any[],
+  userProfile: any,
   onProgress?: (pct: number) => void
 ): Promise<NormalizedProfile[]> {
   const genAI = getGeminiClient();
@@ -783,6 +823,7 @@ export async function extractNormalizedProfiles(
     generationConfig: { responseMimeType: "application/json" }
   });
 
+  const userContext = buildUserContext(userProfile);
   const allProfiles: NormalizedProfile[] = [];
   const batchSize = 8;
   const batches: any[][] = [];
@@ -814,7 +855,9 @@ export async function extractNormalizedProfiles(
 
     const prompt = `Tu es un analyste d'intelligence commerciale (Business Intelligence). Pour chaque contact ci-dessous, extrais un profil orienté BUSINESS et MONÉTISATION.
 
-Contexte : L'utilisateur de ce réseau est un professionnel qui veut monétiser ses connexions (mise en relation, consulting, freelance, levée de fonds, politique, événementiel). Ton but est d'extraire les signaux COMMERCIAUX de chaque profil.
+${userContext}
+
+Ton but : extraire les signaux COMMERCIAUX de chaque profil en pensant à comment L'UTILISATEUR CI-DESSUS pourrait en tirer profit (vente, partenariat, commission, influence, etc.).
 
 Contacts à analyser :
 ${JSON.stringify(batchData, null, 2)}
@@ -1090,9 +1133,11 @@ export async function deepUserOpportunityAnalysis(
   const gaps = supplyDemand.filter(sd => sd.gapLevel === 'opportunity' || sd.gapLevel === 'partial');
   const userOpportunities = supplyDemand.filter(sd => sd.opportunityForUser);
 
-  const prompt = `Tu es un Business Strategist et Deal Maker de haut niveau. Tu conseilles des professionnels qui monétisent leur réseau : consultants, freelances, connecteurs, entrepreneurs, lobbyistes, leveurs de fonds, organisateurs d'événements.
+  const prompt = `Tu es un Business Strategist et Deal Maker de haut niveau.
 
-Ton but : trouver les DEALS CACHÉS dans ce réseau. Pas des idées vagues — des opportunités concrètes avec un modèle de revenu clair.
+${buildUserContext(userProfile)}
+
+Ton but : trouver les DEALS CACHÉS dans ce réseau. Pas des idées vagues — des opportunités concrètes avec un modèle de revenu clair, ADAPTÉES AU PROFIL SPÉCIFIQUE de l'utilisateur ci-dessus.
 
 ## PROFIL DE L'UTILISATEUR (celui qui possède le réseau)
 ${JSON.stringify(userProfile, null, 2)}
@@ -1217,7 +1262,7 @@ export async function runOracleV3Pipeline(
 
   // === PASSE 1: Extract Normalized Profiles ===
   onPassChange?.(1, 0);
-  const profiles = await extractNormalizedProfiles(contacts, notes, (pct) => onPassChange?.(1, pct));
+  const profiles = await extractNormalizedProfiles(contacts, notes, userProfile, (pct) => onPassChange?.(1, pct));
 
   if (profiles.length === 0) {
     throw new Error("Aucun profil n'a pu être extrait. Vérifiez vos contacts.");

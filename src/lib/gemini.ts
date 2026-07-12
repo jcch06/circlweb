@@ -748,7 +748,19 @@ export interface OracleV3Result {
   bridgeContacts: { id: string; name: string; centralityScore: number }[];
   keyIntros: StrategicIntro[];
   genome?: NetworkGenome;
+  reciprocity?: ReciprocityImbalance[];
   timestamp: number;
+}
+
+/**
+ * Reciprocity Imbalance (Giver/Taker CRM)
+ */
+export interface ReciprocityImbalance {
+  contactId: string;
+  contactName: string;
+  status: 'user_owes_them' | 'they_owe_user';
+  reason: string;
+  recommendedAction: string;
 }
 
 /**
@@ -1398,6 +1410,11 @@ export async function runOracleV3Pipeline(
   const genome = await analyzeNetworkGenome(userProfile, profiles, opportunities, keyIntros);
   onPassChange?.(5, 100);
 
+  // === PASSE 6: Reciprocity Engine ===
+  onPassChange?.(6, 0);
+  const reciprocity = await analyzeReciprocity(profiles, notes);
+  onPassChange?.(6, 100);
+
   const result: OracleV3Result = {
     profiles,
     clusters,
@@ -1406,6 +1423,7 @@ export async function runOracleV3Pipeline(
     bridgeContacts,
     keyIntros,
     genome,
+    reciprocity,
     timestamp: Date.now()
   };
 
@@ -1601,3 +1619,61 @@ Retourne un objet JSON avec la structure exacte suivante :
   }
 }
 
+/**
+ * PASSE 6 — Analyze Reciprocity Engine
+ */
+async function analyzeReciprocity(
+  profiles: NormalizedProfile[],
+  notes: any[]
+): Promise<ReciprocityImbalance[]> {
+  const genAI = getGeminiClient();
+  if (!genAI) return [];
+
+  const model = genAI.getGenerativeModel({
+    model: "gemini-3.5-flash",
+    generationConfig: { responseMimeType: "application/json" }
+  });
+
+  // Ne prendre que les contacts avec des notes pour l'analyse
+  const contactsWithNotes = profiles.filter(p => notes.some(n => n.contact_id === p.contactId));
+  
+  if (contactsWithNotes.length === 0) return [];
+
+  const contactData = contactsWithNotes.map(p => {
+    const contactNotes = notes.filter(n => n.contact_id === p.contactId).map(n => n.content);
+    return {
+      id: p.contactId,
+      name: p.name,
+      notes: contactNotes
+    };
+  });
+
+  const prompt = `Tu es un expert en intelligence relationnelle.
+Voici des contacts et les notes prises par l'utilisateur à leur sujet.
+Ton but est de détecter les "Déséquilibres de Réciprocité" (Reciprocity Imbalance) — c'est-à-dire les relations où l'une des parties a rendu un service significatif à l'autre, et où un retour d'ascenseur est attendu ou recommandé.
+
+Données des contacts :
+${JSON.stringify(contactData, null, 2)}
+
+Pour chaque contact, détermine s'il y a un déséquilibre clair basé sur les mots utilisés dans les notes (ex: "m'a présenté à", "je l'ai aidé sur", "redevable", "a fait une intro"). S'il n'y en a pas, ignore-le.
+
+Retourne UNIQUEMENT un tableau JSON :
+[
+  {
+    "contactId": "ID du contact",
+    "contactName": "Nom du contact",
+    "status": "user_owes_them" (l'utilisateur leur doit un service) OU "they_owe_user" (ils doivent un service à l'utilisateur),
+    "reason": "Phrase courte expliquant pourquoi (ex: 'Pierre vous a mis en relation avec le CTO de LVMH')",
+    "recommendedAction": "Action concrète recommandée (ex: 'Invitez-le à déjeuner', 'Envoyez-lui un prospect')"
+  }
+]`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const parsed = safeParseGeminiJSON(result.response.text());
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.error('Reciprocity engine error:', err);
+    return [];
+  }
+}

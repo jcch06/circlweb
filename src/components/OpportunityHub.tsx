@@ -47,7 +47,7 @@ interface OpportunityHubProps {
   user: any;
 }
 
-type Mode = 'network' | 'opportunities' | 'intros';
+type Mode = 'network' | 'opportunities' | 'intros' | 'radar';
 
 const CATEGORY_CONFIG: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
   service: { icon: <Briefcase size={16} />, color: 'var(--neon-purple)', label: 'Service' },
@@ -241,6 +241,13 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
             >
               <Send size={16} />
               Warm Intros Finder
+            </button>
+            <button 
+              onClick={() => setActiveMode('radar')} 
+              style={{ ...styles.tabBtn, ...(activeMode === 'radar' ? styles.tabBtnActive : {}) }}
+            >
+              <Activity size={16} />
+              Radar & Réciprocité
             </button>
           </div>
 
@@ -622,6 +629,121 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                         ))
                       )}
                     </div>
+                  </div>
+                )}
+
+                {/* 4. RADAR & RECIPROCITE TAB */}
+                {activeMode === 'radar' && (
+                  <div style={styles.tabContent}>
+                    {!v3Result ? (
+                      <div style={styles.emptyResults}>
+                        <div style={{ textAlign: 'center' }}>
+                          <Activity size={40} color="var(--text-muted)" style={{ marginBottom: 12 }} />
+                          <p style={{ color: 'var(--text-muted)', marginBottom: 16 }}>Le Radar nécessite une analyse complète de vos contacts.</p>
+                          <button onClick={() => { setActiveMode('network'); triggerV3Pipeline(false); }} className="btn-primary">
+                            Lancer l'Analyse Complète 🚀
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+                        
+                        {/* Section 1: Moteur de Réciprocité */}
+                        <div>
+                          <h3 style={{ color: 'var(--neon-purple)', marginBottom: 16, borderBottom: '1px solid rgba(168, 85, 247, 0.3)', paddingBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Handshake size={20} /> Moteur de Réciprocité
+                          </h3>
+                          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 16 }}>
+                            Le réseau fonctionne sur l'échange de valeur. Voici les déséquilibres relationnels détectés dans vos notes.
+                          </p>
+                          
+                          {(!v3Result.reciprocity || v3Result.reciprocity.length === 0) ? (
+                            <div className="glass-card" style={{ padding: 24, textAlign: 'center', borderColor: 'rgba(255,255,255,0.05)' }}>
+                              <p style={{ margin: 0, color: 'var(--text-muted)' }}>Aucun déséquilibre relationnel majeur détecté pour le moment.</p>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: 16 }}>
+                              {v3Result.reciprocity.map((item, idx) => (
+                                <div key={idx} className="glass-card" style={{ 
+                                  padding: 16, 
+                                  borderColor: item.status === 'user_owes_them' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.3)',
+                                  background: item.status === 'user_owes_them' ? 'rgba(239, 68, 68, 0.05)' : 'rgba(34, 197, 94, 0.05)'
+                                }}>
+                                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                                    <div>
+                                      <h4 style={{ margin: '0 0 4px 0', color: '#fff', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        {item.contactName}
+                                      </h4>
+                                      <span style={{ 
+                                        fontSize: '0.75rem', 
+                                        padding: '2px 8px', 
+                                        borderRadius: 4, 
+                                        fontWeight: 600,
+                                        background: item.status === 'user_owes_them' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+                                        color: item.status === 'user_owes_them' ? 'var(--neon-red, #ef4444)' : 'var(--neon-green)'
+                                      }}>
+                                        {item.status === 'user_owes_them' ? '⚠️ Vous lui devez un service' : '🟢 Il/Elle vous doit un service'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div style={{ marginTop: 12 }}>
+                                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '0 0 8px 0' }}>
+                                      <strong>Pourquoi :</strong> {item.reason}
+                                    </p>
+                                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
+                                      <strong>Action reco :</strong> {item.recommendedAction}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Section 2: Deal Flow Radar */}
+                        <div>
+                          <h3 style={{ color: 'var(--neon-blue)', marginBottom: 16, borderBottom: '1px solid rgba(79, 142, 247, 0.3)', paddingBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <TrendingUp size={20} /> Deal Flow Radar
+                          </h3>
+                          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 16 }}>
+                            Signaux d'achat et intentions d'affaires détectés récemment chez vos contacts.
+                          </p>
+                          
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            {v3Result.profiles
+                              .filter(p => (p.buyingSignals && p.buyingSignals.length > 0) || p.businessIntent)
+                              .map((p, idx) => (
+                              <div key={idx} className="glass-card glow-active" style={{ padding: 16, display: 'flex', gap: 16, alignItems: 'center' }}>
+                                <div style={{ minWidth: 200 }}>
+                                  <h4 style={{ margin: '0 0 4px 0', color: '#fff', fontSize: '1.05rem' }}>{p.name}</h4>
+                                  <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.8rem' }}>{p.roleCategory} • {p.sector}</p>
+                                </div>
+                                <div style={{ width: 1, background: 'rgba(255,255,255,0.1)', height: '100%', alignSelf: 'stretch' }} />
+                                <div style={{ flex: 1 }}>
+                                  {p.businessIntent && (
+                                    <div style={{ marginBottom: 6 }}>
+                                      <span style={{ fontSize: '0.7rem', color: 'var(--neon-purple)', fontWeight: 700, textTransform: 'uppercase' }}>Objectif</span>
+                                      <p style={{ margin: '2px 0 0 0', color: '#fff', fontSize: '0.85rem' }}>{p.businessIntent}</p>
+                                    </div>
+                                  )}
+                                  {p.buyingSignals && p.buyingSignals.length > 0 && (
+                                    <div>
+                                      <span style={{ fontSize: '0.7rem', color: 'var(--neon-green)', fontWeight: 700, textTransform: 'uppercase' }}>Signaux</span>
+                                      <ul style={{ margin: '2px 0 0 0', paddingLeft: 16, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                        {p.buyingSignals.map((sig, i) => (
+                                          <li key={i}>{sig}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                      </div>
+                    )}
                   </div>
                 )}
               </>

@@ -127,7 +127,8 @@ Retourne un tableau JSON contenant jusqu'à 5 synergies les plus fortes avec la 
 Règle absolue : Ne propose que des synergies réalistes basées sur les données fournies. Réponds uniquement avec le JSON.`;
 
   const result = await model.generateContent(prompt);
-  const text = result.response.text();
+  let text = result.response.text();
+  text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
   return JSON.parse(text);
 }
 
@@ -190,7 +191,8 @@ Format de réponse attendu (Strictement ce JSON) :
 ]`;
 
   const result = await model.generateContent(prompt);
-  const text = result.response.text();
+  let text = result.response.text();
+  text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
   return JSON.parse(text);
 }
 
@@ -239,7 +241,8 @@ Format attendu :
 ]`;
 
   const result = await model.generateContent(prompt);
-  const text = result.response.text();
+  let text = result.response.text();
+  text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
   return JSON.parse(text);
 }
 
@@ -282,7 +285,8 @@ Retourne STRICTEMENT le JSON suivant :
 Règle : Reste factuel, ne sur-interprète pas si le texte ne contient rien de pertinent.`;
 
   const result = await model.generateContent(prompt);
-  const text = result.response.text();
+  let text = result.response.text();
+  text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
   return JSON.parse(text);
 }
 
@@ -370,7 +374,8 @@ Retourne un tableau JSON contenant les synergies trouvées avec cette structure 
 Règle absolue : Ne propose que des synergies réalistes basées sur les données fournies. S'il n'y a aucune synergie évidente ou sensée, renvoie un tableau vide []. Réponds uniquement avec le JSON.`;
 
   const result = await model.generateContent(prompt);
-  const text = result.response.text();
+  let text = result.response.text();
+  text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
   return JSON.parse(text);
 }
 
@@ -502,7 +507,7 @@ export async function detectGroupSynergies(contacts: any[], notes: any[]): Promi
   if (!genAI) throw new Error("Gemini API key is not configured");
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-flash",
+    model: "gemini-3.5-flash",
     generationConfig: { responseMimeType: "application/json" }
   });
 
@@ -541,7 +546,8 @@ Retourne UNIQUEMENT un tableau JSON valide avec cette structure exacte :
 ]`;
 
   const result = await model.generateContent(prompt);
-  const text = result.response.text();
+  let text = result.response.text();
+  text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
   return JSON.parse(text);
 }
 
@@ -554,7 +560,7 @@ export async function brainstormUserOpportunities(userProfile: any, contacts: an
   if (!genAI) throw new Error("Gemini API key is not configured");
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-pro", // Pro model for deeper reasoning
+    model: "gemini-3.5-flash", // Pro model for deeper reasoning
     generationConfig: { responseMimeType: "application/json" }
   });
 
@@ -596,7 +602,8 @@ Retourne UNIQUEMENT un tableau JSON valide avec cette structure exacte :
 ]`;
 
   const result = await model.generateContent(prompt);
-  const text = result.response.text();
+  let text = result.response.text();
+  text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
   return JSON.parse(text);
 }
 

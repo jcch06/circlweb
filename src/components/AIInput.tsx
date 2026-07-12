@@ -62,7 +62,7 @@ export const AIInput: React.FC<AIInputProps> = ({
 
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-pro",
+        model: "gemini-3.5-flash",
         generationConfig: { responseMimeType: "application/json" }
       });
 
@@ -96,7 +96,9 @@ Retourne un objet JSON valide avec :
 Réponds uniquement avec le JSON.`;
 
       const result = await model.generateContent(prompt);
-      const data = JSON.parse(result.response.text());
+      let text = result.response.text();
+      text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
+      const data = JSON.parse(text);
 
       // 1. Insert note in Supabase
       const { error: noteError } = await supabase
@@ -197,7 +199,7 @@ Réponds uniquement avec le JSON.`;
 
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash", // Flash is faster and perfect for extraction
+        model: "gemini-3.5-flash", // Flash is faster and perfect for extraction
         generationConfig: { responseMimeType: "application/json" }
       });
 
@@ -229,7 +231,9 @@ Retourne un objet JSON avec cette structure précise :
 Si aucun contact n'est présent, retourne {"contacts": []}. Réponds uniquement avec le JSON.`;
 
       const result = await model.generateContent(prompt);
-      const data = JSON.parse(result.response.text());
+      let text = result.response.text();
+      text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
+      const data = JSON.parse(text);
 
       setResults({
         type: 'extract',

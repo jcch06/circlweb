@@ -122,11 +122,11 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
           <button 
             className="glass-button" 
             onClick={() => setShowProfilePopup(true)}
-            style={{ fontSize: '0.85rem', padding: '6px 12px', background: 'transparent', borderColor: 'var(--neon-purple)' }}
+            style={{ fontSize: '0.85rem', padding: '8px 16px', background: 'rgba(138, 43, 226, 0.1)', border: '1px solid var(--neon-purple)', borderRadius: 8, color: 'var(--neon-purple)', cursor: 'pointer', whiteSpace: 'nowrap' }}
           >
             Mon Profil
           </button>
@@ -134,6 +134,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
             className="glow-button primary" 
             onClick={() => triggerV3Pipeline(true)}
             disabled={loading || contacts.length === 0}
+            style={{ whiteSpace: 'nowrap' }}
           >
             {loading ? 'Analyse en cours...' : 'Lancer l\'Analyse Globale'}
           </button>

@@ -112,23 +112,18 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
     <div style={styles.container}>
       {/* Header */}
       <div style={styles.header}>
-        <div style={styles.titleContainer}>
-          <div style={styles.iconWrapper}>
-            <Brain size={24} color="var(--bg-primary)" />
-          </div>
-          <div>
-            <h2 style={styles.title}>Oracle IA <span style={{ color: 'var(--neon-green)', fontSize: '0.9rem', marginLeft: 8, padding: '2px 8px', background: 'rgba(34,197,94,0.1)', borderRadius: 12 }}>V4 (Mistral)</span></h2>
-            <p style={styles.subtitle}>Analyse Map-Reduce de votre réseau par Mistral Small</p>
-          </div>
+        <div>
+          <h2 style={styles.title}>Analyse IA</h2>
+          <p style={styles.subtitle}>Mistral Small - Map/Reduce</p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <button 
             className="glass-button" 
             onClick={() => setShowProfilePopup(true)}
-            style={{ fontSize: '0.85rem', padding: '8px 16px', background: 'rgba(138, 43, 226, 0.1)', border: '1px solid var(--neon-purple)', borderRadius: 8, color: 'var(--neon-purple)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+            style={{ fontSize: '0.8rem', padding: '6px 14px', whiteSpace: 'nowrap' }}
           >
-            Mon Profil
+            Profil
           </button>
           <button 
             className="glow-button primary" 
@@ -136,7 +131,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
             disabled={loading || contacts.length === 0}
             style={{ whiteSpace: 'nowrap' }}
           >
-            {loading ? 'Analyse en cours...' : 'Lancer l\'Analyse Globale'}
+            {loading ? 'Analyse...' : 'Lancer l\'analyse'}
           </button>
         </div>
       </div>

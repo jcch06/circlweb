@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sparkles, User, Briefcase, Target, Lightbulb, Save } from 'lucide-react';
+
 import { autoEnrichUserProfile, isPerplexityConfigured } from '../lib/mistral';
 import { supabase } from '../lib/supabase';
 
@@ -114,7 +114,7 @@ const styles = {
   tag: {
     background: 'rgba(138, 43, 226, 0.15)',
     border: '1px solid rgba(138, 43, 226, 0.3)',
-    color: 'var(--neon-purple)',
+    color: '#fff',
     padding: '2px 8px',
     borderRadius: 99,
     fontSize: '0.75rem',
@@ -145,7 +145,7 @@ const styles = {
   },
   saveBtn: {
     width: '100%',
-    background: 'var(--neon-purple)',
+    background: '#333',
     border: 'none',
     color: '#fff',
     padding: '12px',
@@ -265,14 +265,14 @@ export const UserProfilePopup: React.FC<UserProfilePopupProps> = ({ userId, onCl
 
   return (
     <div style={styles.overlay}>
-      <div style={styles.modal} className="glow-active">
+      <div style={styles.modal} >
         <div style={styles.header}>
           <div>
-            <h2 style={styles.title}><User size={20} color="var(--neon-purple)" /> Mon Profil Oracle</h2>
+            <h2 style={styles.title}> Mon Profil Oracle</h2>
             <p style={styles.subtitle}>Enrichissez votre profil pour que l'IA trouve des opportunités sur-mesure pour VOUS.</p>
           </div>
           <button onClick={onClose} style={styles.closeBtn}>
-            <X size={20} />
+            
           </button>
         </div>
 
@@ -285,7 +285,7 @@ export const UserProfilePopup: React.FC<UserProfilePopupProps> = ({ userId, onCl
           {enriching ? (
             <><div className="orbit-spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Recherche Web en cours...</>
           ) : (
-            <><Sparkles size={16} /> Auto-Enrichir via le Web (Perplexity)</>
+            <> Auto-Enrichir via le Web (Perplexity)</>
           )}
         </button>
 
@@ -321,7 +321,7 @@ export const UserProfilePopup: React.FC<UserProfilePopupProps> = ({ userId, onCl
         </div>
 
         <div style={styles.formGroup}>
-          <label style={styles.label}><Lightbulb size={14} /> Mes Compétences (Entrée pour ajouter)</label>
+          <label style={styles.label}> Mes Compétences (Entrée pour ajouter)</label>
           <input 
             style={styles.input} 
             value={newSkill} 
@@ -333,7 +333,7 @@ export const UserProfilePopup: React.FC<UserProfilePopupProps> = ({ userId, onCl
             <div style={styles.tagContainer}>
               {profile.skills.map(s => (
                 <span key={s} style={styles.tag}>
-                  {s} <X size={12} style={styles.tagRemove} onClick={() => handleRemoveSkill(s)} />
+                  {s} <span style={{...styles.tagRemove, cursor: 'pointer', marginLeft: '6px'}} onClick={() => handleRemoveSkill(s)}>[x]</span>
                 </span>
               ))}
             </div>
@@ -341,7 +341,7 @@ export const UserProfilePopup: React.FC<UserProfilePopupProps> = ({ userId, onCl
         </div>
 
         <div style={styles.formGroup}>
-          <label style={styles.label}><Briefcase size={14} /> Projets Actuels / Ce que je propose</label>
+          <label style={styles.label}> Projets Actuels / Ce que je propose</label>
           <textarea 
             style={styles.textarea} 
             value={profile.currentProjects} 
@@ -351,7 +351,7 @@ export const UserProfilePopup: React.FC<UserProfilePopupProps> = ({ userId, onCl
         </div>
 
         <div style={styles.formGroup}>
-          <label style={styles.label}><Target size={14} /> Mes Besoins / Défis</label>
+          <label style={styles.label}> Mes Besoins / Défis</label>
           <textarea 
             style={styles.textarea} 
             value={profile.needs} 
@@ -361,7 +361,7 @@ export const UserProfilePopup: React.FC<UserProfilePopupProps> = ({ userId, onCl
         </div>
 
         <button style={styles.saveBtn} onClick={handleSave} className="hover-glow">
-          <Save size={18} /> Enregistrer mon profil
+           Enregistrer mon profil
         </button>
       </div>
     </div>

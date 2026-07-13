@@ -109,21 +109,21 @@ function gapBadgeStyle(level: string): React.CSSProperties {
       return {
         ...base,
         background: 'rgba(34,197,94,0.15)',
-        color: 'var(--neon-green, #22c55e)',
+        color: '#fff',
         border: '1px solid rgba(34,197,94,0.3)',
       };
     case 'partial':
       return {
         ...base,
         background: 'rgba(234,179,8,0.15)',
-        color: 'var(--neon-yellow, #eab308)',
+        color: '#fff',
         border: '1px solid rgba(234,179,8,0.3)',
       };
     case 'opportunity':
       return {
         ...base,
         background: 'rgba(168,85,247,0.15)',
-        color: 'var(--neon-purple, #a855f7)',
+        color: '#fff',
         border: '1px solid rgba(168,85,247,0.3)',
         animation: 'sdm-pulse-opportunity 2.5s ease-in-out infinite',
       };
@@ -243,7 +243,7 @@ export const SupplyDemandMatrix: React.FC<SupplyDemandMatrixProps> = ({
           }}
         >
           Showing network supply & demand for{' '}
-          <strong style={{ color: 'var(--neon-blue, #3b82f6)' }}>
+          <strong style={{ color: '#fff' }}>
             {userName}
           </strong>
         </div>

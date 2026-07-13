@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
-import { FileText, Plus, X, Search, Clock, User } from 'lucide-react';
+
 
 interface NotesPageProps {
   notes: any[];
@@ -89,14 +89,14 @@ export const NotesPage: React.FC<NotesPageProps> = ({
           className="btn-primary" 
           style={styles.addBtn}
         >
-          {showAddForm ? <X size={16} style={{ marginRight: 6 }} /> : <Plus size={16} style={{ marginRight: 6 }} />}
+          
           {showAddForm ? 'Fermer' : 'Nouvelle Note'}
         </button>
       </div>
 
       {/* Add Note Form */}
       {showAddForm && (
-        <form onSubmit={handleSubmit} className="glass-card glow-active" style={styles.formCard}>
+        <form onSubmit={handleSubmit} className="glass-card" style={styles.formCard}>
           <h3 style={styles.formTitle}>Ajouter une note de réunion ou d'échange</h3>
           <div style={styles.formGrid}>
             <div style={styles.formGroup}>
@@ -121,8 +121,8 @@ export const NotesPage: React.FC<NotesPageProps> = ({
                 required 
                 style={styles.select}
               >
-                <option value="professional">💼 Professionnel</option>
-                <option value="personal">🏠 Personnel / Informel</option>
+                <option value="professional">� Professionnel</option>
+                <option value="personal">� Personnel / Informel</option>
               </select>
             </div>
             <div style={{ ...styles.formGroup, gridColumn: 'span 2' }}>
@@ -137,14 +137,14 @@ export const NotesPage: React.FC<NotesPageProps> = ({
             </div>
           </div>
           <button type="submit" disabled={loading} className="btn-primary" style={styles.submitBtn}>
-            {loading ? 'Création de la note...' : 'Ajouter la Note 🚀'}
+            {loading ? 'Création de la note...' : 'Ajouter la Note '}
           </button>
         </form>
       )}
 
       {/* Search Block */}
       <div className="glass-card" style={styles.searchBlock}>
-        <Search size={18} color="var(--text-secondary)" style={{ marginRight: 10 }} />
+        
         <input 
           type="text" 
           value={searchTerm}
@@ -158,7 +158,7 @@ export const NotesPage: React.FC<NotesPageProps> = ({
       <div style={styles.notesList}>
         {filteredNotes.length === 0 ? (
           <div style={styles.emptyState}>
-            <FileText size={32} color="var(--text-muted)" style={{ marginBottom: 8 }} />
+            
             <span>Aucune note d'échange disponible.</span>
           </div>
         ) : (
@@ -171,7 +171,7 @@ export const NotesPage: React.FC<NotesPageProps> = ({
                 <div style={styles.noteHeader}>
                   <div style={styles.contactDetails}>
                     <div style={styles.avatar}>
-                      <User size={14} color="#fff" />
+                      
                     </div>
                     <div>
                       <span style={styles.contactName}>
@@ -193,7 +193,7 @@ export const NotesPage: React.FC<NotesPageProps> = ({
                     </span>
                     
                     <span style={styles.dateLabel}>
-                      <Clock size={12} style={{ marginRight: 4 }} />
+                      
                       {new Date(n.created_at).toLocaleDateString('fr-FR', {
                         day: 'numeric',
                         month: 'short',

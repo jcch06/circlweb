@@ -3,26 +3,7 @@ import ForceGraph2D from 'react-force-graph-2d';
 import { supabase } from '../lib/supabase';
 import { enrichProfileFromScraping, isMistralConfigured, detectContactSynergies } from '../lib/mistral';
 import type { ContactSynergy } from '../lib/mistral';
-import { 
-  X, 
-  User, 
-  Briefcase, 
-  MapPin, 
-  Mail, 
-  Phone, 
-  FileText, 
-  Tag, 
-  Sparkles, 
-  Globe, 
-  Clock,
-  ExternalLink,
-  Orbit,
-  Zap,
-  Key,
-  ArrowRight,
-  Search,
-  Layers
-} from 'lucide-react';
+
 
 interface GalaxyVisualizerProps {
   contacts: any[];
@@ -556,7 +537,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
       {/* Floating Search & Selection Panel */}
       <div className="glass-panel" style={styles.searchPanel}>
         <div style={styles.searchHeader}>
-          <Search size={14} color="var(--neon-purple)" />
+          
           <span style={styles.searchTitle}>Recherche d'Étoiles</span>
         </div>
         <input
@@ -601,7 +582,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
       >
         {graphData.nodes.length === 0 ? (
           <div style={styles.emptyState}>
-            <Sparkles size={40} color="var(--neon-purple)" style={{ marginBottom: 12 }} />
+            
             <h3>Galaxie Vide</h3>
             <p>Générez des données démo ou ajoutez des contacts pour voir votre univers s'allumer.</p>
           </div>
@@ -673,7 +654,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
           <div style={styles.drawerHeader}>
             <span style={styles.drawerTitle}>Fiche Étoile</span>
             <button onClick={() => { setSelectedNode(null); setShowEnrichForm(false); }} style={styles.closeBtn}>
-              <X size={18} />
+              
             </button>
           </div>
 
@@ -681,20 +662,20 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
             {/* Profile Summary Card */}
             <div style={styles.profileSection}>
               <div style={{ ...styles.avatarBig, borderColor: contactDetails.color }}>
-                <User size={32} color="#fff" />
+                
               </div>
               <h2 style={styles.profileName}>{contactDetails.first_name} {contactDetails.last_name}</h2>
               
               {contactDetails.job_title && (
                 <div style={styles.profileRole}>
-                  <Briefcase size={14} style={{ marginRight: 6 }} />
+                  
                   <span>{contactDetails.job_title} @ {contactDetails.company || 'Freelance'}</span>
                 </div>
               )}
 
               {contactDetails.location && (
                 <div style={styles.profileLocation}>
-                  <MapPin size={14} style={{ marginRight: 6 }} />
+                  
                   <span>{contactDetails.location}</span>
                 </div>
               )}
@@ -703,7 +684,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
             {/* Tags (Skills & Relationship Status) */}
             <div style={styles.infoBlock}>
               <div style={styles.blockTitleHeader}>
-                <Tag size={14} color="var(--text-secondary)" />
+                
                 <h4 style={styles.blockTitle}>Tags & Secteurs</h4>
               </div>
               <div style={styles.tagContainer}>
@@ -737,9 +718,9 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
 
             {/* AI Context Contextual Helper */}
             {contactDetails.ai_context && (
-              <div className="glow-active" style={styles.aiContextBlock}>
+              <div  style={styles.aiContextBlock}>
                 <div style={styles.aiContextTitle}>
-                  <Sparkles size={14} color="var(--neon-purple)" />
+                  
                   <span>Synthèse IA (Mistral)</span>
                 </div>
                 <p style={styles.aiContextText}>{contactDetails.ai_context}</p>
@@ -752,19 +733,19 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
               <div style={styles.detailsList}>
                 {contactDetails.email && (
                   <div style={styles.detailsItem}>
-                    <Mail size={14} color="var(--text-muted)" />
+                    
                     <span style={styles.detailsText}>{contactDetails.email}</span>
                   </div>
                 )}
                 {contactDetails.phone && (
                   <div style={styles.detailsItem}>
-                    <Phone size={14} color="var(--text-muted)" />
+                    
                     <span style={styles.detailsText}>{contactDetails.phone}</span>
                   </div>
                 )}
                 {contactDetails.linkedin && (
                   <a href={contactDetails.linkedin} target="_blank" rel="noreferrer" style={styles.linkedinLink}>
-                    <ExternalLink size={14} style={{ marginRight: 6 }} />
+                    
                     Profil LinkedIn
                   </a>
                 )}
@@ -774,7 +755,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
             {/* Appartenance aux Galaxies (Multi-liaison) */}
             <div style={styles.infoBlock}>
               <div style={styles.blockTitleHeader}>
-                <Layers size={14} color="var(--neon-purple)" />
+                
                 <h4 style={styles.blockTitle}>Appartenance aux Galaxies</h4>
               </div>
               <div className="glass-card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -797,7 +778,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
                             }
                           }}
                         />
-                        <span>{s.name} ({s.type === 'personal' ? '🔒 Perso' : '👥 Partagé'})</span>
+                        <span>{s.name} ({s.type === 'personal' ? '� Perso' : '� Partagé'})</span>
                       </label>
                     );
                   })}
@@ -808,7 +789,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
                   className="btn-primary"
                   style={{ fontSize: '0.75rem', padding: '8px 12px', marginTop: 4 }}
                 >
-                  {updatingSpaces ? "Enregistrement..." : "Valider l'Appartenance 🤝"}
+                  {updatingSpaces ? "Enregistrement..." : "Valider l'Appartenance �"}
                 </button>
               </div>
             </div>
@@ -816,7 +797,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
             {/* Fusion de Galaxies (Partage d'Espace) */}
             <div style={styles.infoBlock}>
               <div style={styles.blockTitleHeader}>
-                <Globe size={14} color="var(--neon-green)" />
+                
                 <h4 style={styles.blockTitle}>Fusion de Galaxies (Partage)</h4>
               </div>
               <div className="glass-card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -860,7 +841,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
                       className="btn-primary"
                       style={{ fontSize: '0.75rem', padding: '8px 12px', marginTop: 4 }}
                     >
-                      {sendingInvite ? "Envoi de la demande..." : "Envoyer l'invitation de fusion 🌌"}
+                      {sendingInvite ? "Envoi de la demande..." : "Envoyer l'invitation de fusion "}
                     </button>
                   </>
                 )}
@@ -870,7 +851,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
             {/* Direct Connections / Relais de contact */}
             <div style={styles.infoBlock}>
               <div style={styles.blockTitleHeader}>
-                <Orbit size={14} color="var(--text-secondary)" />
+                
                 <h4 style={styles.blockTitle}>Connexions Directes ({directConnections.length})</h4>
               </div>
               <div style={styles.connectionsContainer}>
@@ -895,16 +876,16 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
                         }}
                       >
                         <div style={{ ...styles.avatarSmall, borderColor: color }}>
-                          <User size={14} color="#fff" />
+                          
                         </div>
                         <div style={styles.connectionDetails}>
                           <span style={styles.connectionName}>{contact.first_name} {contact.last_name}</span>
                           <span style={styles.connectionReason}>
-                            {type === 'company' ? '🏢 ' : '🏷️ '}
+                            {type === 'company' ? '� ' : '�️ '}
                             {reason}
                           </span>
                         </div>
-                        <ArrowRight size={14} color="var(--text-muted)" style={styles.connectionArrow} />
+                        
                       </div>
                     );
                   })
@@ -915,13 +896,13 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
             {/* Synergy Connections (IA) */}
             <div style={styles.infoBlock}>
               <div style={styles.blockTitleHeader}>
-                <Sparkles size={14} color="var(--neon-purple)" />
+                
                 <h4 style={styles.blockTitle}>Synergies IA (Mistral)</h4>
               </div>
               
               {!isMistralConfigured() ? (
                 <div style={styles.synergyNotice}>
-                  <Key size={14} color="var(--text-muted)" style={{ marginRight: 6 }} />
+                  
                   <span style={styles.emptyText}>Clé Mistral requise pour activer l'Oracle.</span>
                 </div>
               ) : !hasSearchedSynergies && !loadingSynergies ? (
@@ -938,7 +919,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
                     padding: '8px 12px'
                   }}
                 >
-                  <Zap size={14} color="var(--neon-yellow)" />
+                  
                   Détecter les Synergies IA
                 </button>
               ) : null}
@@ -951,7 +932,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
               )}
 
               {synergyError && (
-                <span style={{ fontSize: '0.75rem', color: 'var(--neon-pink)' }}>{synergyError}</span>
+                <span style={{ fontSize: '0.75rem', color: '#fff' }}>{synergyError}</span>
               )}
 
               {hasSearchedSynergies && !loadingSynergies && (
@@ -989,7 +970,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
                         {syn.recommendedIntroPath && (
                           <div style={styles.synergyIntroBox}>
                             <span style={styles.synergyBoxTitle}>Introduction :</span>
-                            <p style={{ ...styles.synergyBoxText, color: 'var(--neon-blue)' }}>{syn.recommendedIntroPath}</p>
+                            <p style={{ ...styles.synergyBoxText, color: '#fff' }}>{syn.recommendedIntroPath}</p>
                           </div>
                         )}
                       </div>
@@ -1020,8 +1001,8 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
                   className="btn-primary" 
                   style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
                 >
-                  <Globe size={16} />
-                  Enrichir par le Web 🔍
+                  
+                  Enrichir par le Web �
                 </button>
               ) : (
                 <div className="glass-panel" style={styles.enrichForm}>
@@ -1058,7 +1039,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
             {/* Interaction Notes */}
             <div style={styles.infoBlock}>
               <div style={styles.blockTitleHeader}>
-                <FileText size={14} color="var(--text-secondary)" />
+                
                 <h4 style={styles.blockTitle}>Historique d'échanges</h4>
               </div>
               <div style={styles.notesContainer}>
@@ -1068,7 +1049,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
                   contactDetails.notes.map((n: any) => (
                     <div key={n.id} style={styles.noteCard}>
                       <div style={styles.noteCardHeader}>
-                        <Clock size={12} color="var(--text-muted)" />
+                        
                         <span style={styles.noteCardDate}>
                           {new Date(n.created_at).toLocaleDateString('fr-FR')}
                         </span>
@@ -1240,7 +1221,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 6,
     fontSize: '0.8rem',
     fontWeight: 700,
-    color: 'var(--neon-purple)',
+    color: '#fff',
   },
   aiContextText: {
     fontSize: '0.825rem',
@@ -1265,7 +1246,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'inline-flex',
     alignItems: 'center',
     fontSize: '0.85rem',
-    color: 'var(--neon-blue)',
+    color: '#fff',
     textDecoration: 'none',
     fontWeight: 500,
   },
@@ -1444,7 +1425,7 @@ const styles: Record<string, React.CSSProperties> = {
   partyLabelSmall: {
     fontSize: '0.6rem',
     fontWeight: 800,
-    color: 'var(--neon-green)',
+    color: '#fff',
     letterSpacing: '0.05em',
   },
   partyNameSmall: {
@@ -1527,7 +1508,7 @@ const styles: Record<string, React.CSSProperties> = {
   searchTitle: {
     fontSize: '0.8rem',
     fontWeight: 700,
-    color: 'var(--neon-purple)',
+    color: '#fff',
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
   },

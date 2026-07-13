@@ -2,29 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { detectContactSynergies, enrichProfileFromScraping, autoEnrichContact, isMistralConfigured, isPerplexityConfigured } from '../lib/mistral';
 import type { ContactSynergy } from '../lib/mistral';
-import { 
-  Users, 
-  Plus, 
-  X, 
-  Search, 
-  MapPin, 
-  Briefcase, 
-  Tag, 
-  Mail, 
-  Phone, 
-  ExternalLink, 
-  Sparkles, 
-  Orbit, 
-  Zap, 
-  Key, 
-  ArrowRight,
-  Clock,
-  Globe,
-  Layers,
-  Edit2,
-  Check,
-  Mic
-} from 'lucide-react';
+
 
 interface ContactsPageProps {
   contacts: any[];
@@ -791,7 +769,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                   onChange={(e) => setBulkEnrichSpaceId(e.target.value)}
                   style={{ ...styles.selectSmall, fontSize: '0.78rem', padding: '8px 10px' }}
                 >
-                  <option value="">✨ Tous les contacts</option>
+                  <option value=""> Tous les contacts</option>
                   {spaces.map(s => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
@@ -801,7 +779,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                   className="btn-secondary"
                   style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
                 >
-                  <Sparkles size={15} color="var(--neon-purple)" />
+                  
                   Enrichir via IA
                 </button>
               </div>
@@ -814,7 +792,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
               className="btn-primary" 
               style={styles.addBtn}
             >
-              {showAddForm ? <X size={16} style={{ marginRight: 6 }} /> : <Plus size={16} style={{ marginRight: 6 }} />}
+              
               {showAddForm ? 'Fermer' : 'Nouveau Contact'}
             </button>
           </div>
@@ -822,7 +800,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
 
         {/* Bulk Enrichment Progress Banner */}
         {bulkEnriching && (
-          <div className="glass-card glow-active" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="glass-card" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ width: 20, height: 20, flexShrink: 0, border: '2px solid var(--neon-purple)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
               <div style={{ flexGrow: 1 }}>
@@ -834,7 +812,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                     {bulkProgress.errors > 0 && (
                       <span style={{ fontSize: '0.75rem', color: '#E03E3E' }}>⚠️ {bulkProgress.errors} erreur(s)</span>
                     )}
-                    <span style={{ fontSize: '0.8rem', color: 'var(--neon-purple)', fontWeight: 700 }}>
+                    <span style={{ fontSize: '0.8rem', color: '#fff', fontWeight: 700 }}>
                       {bulkProgress.done} / {bulkProgress.total}
                     </span>
                   </div>
@@ -853,7 +831,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
             </div>
             {bulkProgress.current && (
               <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                🤖 Analyse IA : <b style={{ color: '#fff' }}>{bulkProgress.current}</b>
+                � Analyse IA : <b style={{ color: '#fff' }}>{bulkProgress.current}</b>
               </span>
             )}
           </div>
@@ -861,7 +839,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
 
         {/* Add Contact Modal / Section */}
         {showAddForm && (
-          <form onSubmit={handleSubmit} className="glass-card glow-active" style={styles.formCard}>
+          <form onSubmit={handleSubmit} className="glass-card" style={styles.formCard}>
             <h3 style={styles.formTitle}>Ajouter un nouveau contact</h3>
             <div style={styles.formGrid}>
               <div style={styles.formGroup}>
@@ -981,13 +959,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
               </div>
             </div>
             <button type="submit" disabled={loading} className="btn-primary" style={styles.submitBtn}>
-              {loading ? 'Création cosmique...' : 'Ajouter le Contact 🚀'}
+              {loading ? 'Création cosmique...' : 'Ajouter le Contact '}
             </button>
           </form>
         )}
         <div className="glass-card" style={{ ...styles.searchBlock, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', flex: 1, alignItems: 'center', background: 'transparent', minWidth: 200 }}>
-            <Search size={18} color="var(--text-secondary)" style={{ marginRight: 10 }} />
+            
             <input 
               type="text" 
               value={searchTerm}
@@ -1002,7 +980,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
             style={{ ...styles.input, width: 'auto', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glow)', minWidth: 220 }}
           >
             <option value="all" style={{ background: '#1a1a2e' }}>Tous les contacts</option>
-            <option value="enriched" style={{ background: '#1a1a2e' }}>✨ Déjà enrichis</option>
+            <option value="enriched" style={{ background: '#1a1a2e' }}> Déjà enrichis</option>
             <option value="not_enriched" style={{ background: '#1a1a2e' }}>❌ Non enrichis (données valides)</option>
             <option value="invalid" style={{ background: '#1a1a2e' }}>⚠️ Données insuffisantes (à corriger)</option>
           </select>
@@ -1034,9 +1012,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
 
         {/* Bulk Action Bar */}
         {bulkSelectedIds.length > 0 && (
-          <div className="glass-panel glow-active" style={styles.bulkActionBar}>
+          <div className="glass-panel" style={styles.bulkActionBar}>
             <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: 6 }}>
-              🛠️ Action en Masse ({bulkSelectedIds.length} contact(s) sélectionné(s))
+              �️ Action en Masse ({bulkSelectedIds.length} contact(s) sélectionné(s))
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <select 
@@ -1053,9 +1031,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                 onClick={handleBulkAddToSpace} 
                 disabled={bulkLoading || !bulkTargetSpaceId} 
                 className="btn-primary" 
-                style={{ fontSize: '0.75rem', padding: '6px 12px', background: 'var(--neon-green)', borderColor: 'var(--neon-green)' }}
+                style={{ fontSize: '0.75rem', padding: '6px 12px', background: '#333', borderColor: '#555' }}
               >
-                Ajouter à la Galaxie 🌌
+                Ajouter à la Galaxie 
               </button>
               <button 
                 onClick={handleBulkRemoveFromSpace} 
@@ -1080,7 +1058,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
         <div style={styles.contactsGrid}>
           {filteredContacts.length === 0 ? (
             <div style={styles.emptyState}>
-              <Users size={32} color="var(--text-muted)" style={{ marginBottom: 8 }} />
+              
               <span>Aucun contact trouvé.</span>
             </div>
           ) : (
@@ -1140,13 +1118,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                   <div style={styles.detailsList}>
                     {c.company && (
                       <div style={styles.detailItem}>
-                        <Briefcase size={14} color="var(--neon-purple)" />
+                        
                         <span style={styles.detailText}>{c.job_title || 'Poste inconnu'} @ <b>{c.company}</b></span>
                       </div>
                     )}
                     {c.location && (
                       <div style={styles.detailItem}>
-                        <MapPin size={14} color="var(--neon-blue)" />
+                        
                         <span style={styles.detailText}>{c.location}</span>
                       </div>
                     )}
@@ -1178,14 +1156,14 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                     setFullEditData({ ...contactDetails });
                     setIsEditingContact(true);
                   }} 
-                  style={{ ...styles.closeBtn, color: 'var(--neon-purple)' }}
+                  style={{ ...styles.closeBtn, color: '#fff' }}
                   title="Modifier les infos principales"
                 >
-                  <Edit2 size={16} />
+                  
                 </button>
               )}
               <button onClick={() => { setSelectedContactId(null); setIsEditingContact(false); }} style={styles.closeBtn}>
-                <X size={18} />
+                
               </button>
             </div>
           </div>
@@ -1251,13 +1229,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
 
               {contactDetails.job_title && (
                 <div style={styles.profileRole}>
-                  <Briefcase size={14} style={{ marginRight: 6 }} />
+                  
                   <span>{contactDetails.job_title} @ {contactDetails.company || 'Freelance'}</span>
                 </div>
               )}
               {contactDetails.location && (
                 <div style={styles.profileLocation}>
-                  <MapPin size={14} style={{ marginRight: 6 }} />
+                  
                   <span>{contactDetails.location}</span>
                 </div>
               )}
@@ -1266,7 +1244,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
             {/* Tags list */}
             <div style={styles.infoBlock}>
               <div style={styles.blockTitleHeader}>
-                <Tag size={14} color="var(--text-secondary)" />
+                
                 <h4 style={styles.blockTitle}>Tags & Secteurs</h4>
               </div>
               <div style={styles.tagContainer}>
@@ -1299,8 +1277,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                     style={{ background: 'none', border: 'none', color: isDictating ? 'var(--neon-pink)' : 'var(--text-muted)', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center', gap: 4 }}
                     title={isDictating ? "Arrêter la dictée" : "Dicter vocalement"}
                   >
-                    <Mic size={14} className={isDictating ? 'pulse-anim' : ''} />
-                    {isDictating && <span style={{ fontSize: '0.7rem', color: 'var(--neon-pink)' }}>Écoute...</span>}
+                    
+                    {isDictating && <span style={{ fontSize: '0.7rem', color: '#fff' }}>Écoute...</span>}
                   </button>
                   
                   {editingField !== 'bio' ? (
@@ -1309,16 +1287,16 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                       style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}
                       title="Modifier la bio"
                     >
-                      <Edit2 size={14} />
+                      
                     </button>
                   ) : (
                     <button 
                       onClick={() => handleInlineEditSave(contactDetails.id, 'bio')}
                       disabled={savingEdit}
-                      style={{ background: 'none', border: 'none', color: 'var(--neon-green)', cursor: 'pointer', padding: 4 }}
+                      style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 4 }}
                       title="Enregistrer"
                     >
-                      <Check size={16} />
+                      
                     </button>
                   )}
                 </div>
@@ -1340,28 +1318,28 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
 
             {/* AI Summary Context */}
             {(contactDetails.ai_context || editingField === 'ai_context') && (
-              <div className="glow-active" style={styles.aiContextBlock}>
+              <div  style={styles.aiContextBlock}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={styles.aiContextTitle}>
-                    <Sparkles size={14} color="var(--neon-purple)" />
+                    
                     <span>Synthèse IA</span>
                   </div>
                   {editingField !== 'ai_context' ? (
                     <button 
                       onClick={() => { setEditingField('ai_context'); setEditValue(contactDetails.ai_context || ''); }}
-                      style={{ background: 'none', border: 'none', color: 'var(--neon-purple)', cursor: 'pointer', padding: 4, opacity: 0.8 }}
+                      style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 4, opacity: 0.8 }}
                       title="Modifier la synthèse"
                     >
-                      <Edit2 size={14} />
+                      
                     </button>
                   ) : (
                     <button 
                       onClick={() => handleInlineEditSave(contactDetails.id, 'ai_context')}
                       disabled={savingEdit}
-                      style={{ background: 'none', border: 'none', color: 'var(--neon-green)', cursor: 'pointer', padding: 4 }}
+                      style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 4 }}
                       title="Enregistrer"
                     >
-                      <Check size={16} />
+                      
                     </button>
                   )}
                 </div>
@@ -1385,19 +1363,19 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
               <div style={styles.contactDetailsList}>
                 {contactDetails.email && (
                   <div style={styles.detailsItem}>
-                    <Mail size={14} color="var(--text-muted)" style={{ marginRight: 8 }} />
+                    
                     <span style={styles.detailsText}>{contactDetails.email}</span>
                   </div>
                 )}
                 {contactDetails.phone && (
                   <div style={styles.detailsItem}>
-                    <Phone size={14} color="var(--text-muted)" style={{ marginRight: 8 }} />
+                    
                     <span style={styles.detailsText}>{contactDetails.phone}</span>
                   </div>
                 )}
                 {contactDetails.linkedin && (
                   <a href={contactDetails.linkedin} target="_blank" rel="noreferrer" style={styles.linkedinLink}>
-                    <ExternalLink size={14} style={{ marginRight: 6 }} />
+                    
                     Profil LinkedIn
                   </a>
                 )}
@@ -1410,7 +1388,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
             {/* Appartenance aux Galaxies (Multi-liaison) */}
             <div style={styles.infoBlock}>
               <div style={styles.blockTitleHeader}>
-                <Layers size={14} color="var(--neon-purple)" />
+                
                 <h4 style={styles.blockTitle}>Appartenance aux Galaxies</h4>
               </div>
               <div className="glass-card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1433,7 +1411,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                             }
                           }}
                         />
-                        <span>{s.name} ({s.type === 'personal' ? '🔒 Perso' : '👥 Partagé'})</span>
+                        <span>{s.name} ({s.type === 'personal' ? '� Perso' : '� Partagé'})</span>
                       </label>
                     );
                   })}
@@ -1452,7 +1430,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
             {/* Fusion de Galaxies (Partage d'Espace) */}
             <div style={styles.infoBlock}>
               <div style={styles.blockTitleHeader}>
-                <Globe size={14} color="var(--neon-green)" />
+                
                 <h4 style={styles.blockTitle}>Fusion de Galaxies (Partage)</h4>
               </div>
               <div className="glass-card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1496,7 +1474,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                       className="btn-primary"
                       style={{ fontSize: '0.75rem', padding: '8px 12px', marginTop: 4 }}
                     >
-                      {sendingInvite ? "Envoi de la demande..." : "Envoyer l'invitation de fusion 🌌"}
+                      {sendingInvite ? "Envoi de la demande..." : "Envoyer l'invitation de fusion "}
                     </button>
                   </>
                 )}
@@ -1506,7 +1484,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
             {/* Connections list */}
             <div style={styles.infoBlock}>
               <div style={styles.blockTitleHeader}>
-                <Orbit size={14} color="var(--text-secondary)" />
+                
                 <h4 style={styles.blockTitle}>Connexions Directes ({directConnections.length})</h4>
               </div>
               <div style={styles.connectionsContainer}>
@@ -1526,11 +1504,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                       <div style={styles.connectionDetails}>
                         <span style={styles.connectionName}>{contact.first_name} {contact.last_name}</span>
                         <span style={styles.connectionReason}>
-                          {type === 'company' ? '🏢 ' : '🏷️ '}
+                          {type === 'company' ? '� ' : '�️ '}
                           {reason}
                         </span>
                       </div>
-                      <ArrowRight size={14} color="var(--text-muted)" />
+                      
                     </div>
                   ))
                 )}
@@ -1540,13 +1518,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
             {/* Synergy Connections (IA) */}
             <div style={styles.infoBlock}>
               <div style={styles.blockTitleHeader}>
-                <Sparkles size={14} color="var(--neon-purple)" />
+                
                 <h4 style={styles.blockTitle}>Synergies IA</h4>
               </div>
               
               {!isMistralConfigured() ? (
                 <div style={styles.synergyNotice}>
-                  <Key size={14} color="var(--text-muted)" style={{ marginRight: 6 }} />
+                  
                   <span style={styles.emptyText}>Clé IA requise pour activer l'Oracle.</span>
                 </div>
               ) : !hasSearchedSynergies && !loadingSynergies ? (
@@ -1563,7 +1541,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                     padding: '8px 12px'
                   }}
                 >
-                  <Zap size={14} color="var(--neon-yellow)" />
+                  
                   Détecter les Synergies IA
                 </button>
               ) : null}
@@ -1576,7 +1554,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
               )}
 
               {synergyError && (
-                <span style={{ fontSize: '0.75rem', color: 'var(--neon-pink)' }}>{synergyError}</span>
+                <span style={{ fontSize: '0.75rem', color: '#fff' }}>{synergyError}</span>
               )}
 
               {hasSearchedSynergies && !loadingSynergies && (
@@ -1607,7 +1585,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                         {syn.recommendedIntroPath && (
                           <div style={styles.synergyIntroBox}>
                             <span style={styles.synergyBoxTitle}>Introduction :</span>
-                            <p style={{ ...styles.synergyBoxText, color: 'var(--neon-blue)' }}>{syn.recommendedIntroPath}</p>
+                            <p style={{ ...styles.synergyBoxText, color: '#fff' }}>{syn.recommendedIntroPath}</p>
                           </div>
                         )}
                       </div>
@@ -1639,7 +1617,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                   className="btn-primary"
                   style={{ flex: 1, fontSize: '0.75rem', padding: '8px 12px', opacity: autoEnrichingSingle ? 0.7 : 1 }}
                 >
-                  {autoEnrichingSingle ? 'Recherche en cours...' : '✨ Auto-Enrichir (Web)'}
+                  {autoEnrichingSingle ? 'Recherche en cours...' : ' Auto-Enrichir (Web)'}
                 </button>
                 {!showEnrichForm && (
                   <button 
@@ -1647,7 +1625,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                     className="btn-secondary"
                     style={{ flex: 1, fontSize: '0.75rem', padding: '8px 12px' }}
                   >
-                    ✨ Scraping Manuel
+                     Scraping Manuel
                   </button>
                 )}
               </div>
@@ -1656,7 +1634,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                     <h5 style={{ margin: 0, fontSize: '0.8rem', color: '#fff' }}>Données Web à analyser</h5>
                     <button onClick={() => setShowEnrichForm(false)} style={styles.closeBtnSmall}>
-                      <X size={12} />
+                      
                     </button>
                   </div>
                   <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '0 0 10px 0', lineHeight: 1.3 }}>
@@ -1683,7 +1661,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
             {/* Note logs */}
             <div style={styles.infoBlock}>
               <div style={styles.blockTitleHeader}>
-                <Clock size={14} color="var(--text-secondary)" style={{ marginRight: 6 }} />
+                
                 <h4 style={styles.blockTitle}>Notes de réunions ({contactDetails.notes.length})</h4>
               </div>
               <div style={styles.drawerNotesList}>
@@ -2061,7 +2039,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
     fontSize: '0.8rem',
     fontWeight: 700,
-    color: 'var(--neon-purple)',
+    color: '#fff',
   },
   aiContextText: {
     fontSize: '0.775rem',
@@ -2085,7 +2063,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'inline-flex',
     alignItems: 'center',
     fontSize: '0.8rem',
-    color: 'var(--neon-blue)',
+    color: '#fff',
     textDecoration: 'none',
     fontWeight: 600,
     marginTop: 4,
@@ -2190,7 +2168,7 @@ const styles: Record<string, React.CSSProperties> = {
   partyLabelSmall: {
     fontSize: '0.6rem',
     fontWeight: 800,
-    color: 'var(--neon-green)',
+    color: '#fff',
     letterSpacing: '0.05em',
   },
   partyNameSmall: {

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { LogIn, UserPlus, Sparkles, AlertCircle } from 'lucide-react';
 
 interface AuthScreenProps {
   onAuthSuccess: () => void;
@@ -31,7 +30,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
           },
         });
         if (signUpError) throw signUpError;
-        alert('Inscription réussie ! Vous pouvez maintenant vous connecter.');
+        alert('Inscription réussie. Vous pouvez maintenant vous connecter.');
         setIsSignUp(false);
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -43,7 +42,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
       }
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Une erreur est survenue.');
+      setError(err.message || 'Erreur système.');
     } finally {
       setLoading(false);
     }
@@ -51,24 +50,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
 
   return (
     <div style={styles.container}>
-      <div className="bg-grid"></div>
-      <div className="bg-stars"></div>
-      
       <div className="glass-card" style={styles.card}>
         <div style={styles.logoContainer}>
-          <div className="glow-active" style={styles.logoIcon}>
-            <Sparkles size={28} color="var(--neon-purple)" />
-          </div>
-          <h1 style={styles.logoText}>
-            CIRCL <span className="text-gradient-purple-blue">WEB</span>
-          </h1>
-          <p style={styles.subtitle}>Gérez et fusionnez vos galaxies de contacts</p>
+          <h1 style={styles.logoText}>circl</h1>
         </div>
 
         {error && (
           <div style={styles.errorContainer}>
-            <AlertCircle size={18} color="var(--neon-pink)" />
-            <span style={styles.errorText}>{error}</span>
+            <span style={styles.errorText}>[Erreur] {error}</span>
           </div>
         )}
 
@@ -81,20 +70,20 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 required
-                placeholder="Jean Dupont"
+                placeholder="Identité"
                 style={styles.input}
               />
             </div>
           )}
 
           <div style={styles.inputGroup}>
-            <label style={styles.label}>Adresse Email</label>
+            <label style={styles.label}>Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              placeholder="jean@exemple.com"
+              placeholder="adresse@domaine.com"
               style={styles.input}
             />
           </div>
@@ -112,19 +101,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
           </div>
 
           <button type="submit" disabled={loading} className="btn-primary" style={styles.submitBtn}>
-            {loading ? (
-              <div className="orbit-spinner" style={{ width: 20, height: 20 }}></div>
-            ) : isSignUp ? (
-              <>
-                <UserPlus size={18} style={{ marginRight: 8 }} />
-                Créer un compte
-              </>
-            ) : (
-              <>
-                <LogIn size={18} style={{ marginRight: 8 }} />
-                Se connecter
-              </>
-            )}
+            {loading ? 'Traitement...' : isSignUp ? 'Créer un compte' : 'Se connecter'}
           </button>
         </form>
 
@@ -133,9 +110,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
             onClick={() => setIsSignUp(!isSignUp)}
             style={styles.switchBtn}
           >
-            {isSignUp
-              ? 'Déjà un compte ? Connectez-vous'
-              : "Pas de compte ? Inscrivez-vous gratuitement"}
+            {isSignUp ? 'Se connecter' : "S'inscrire"}
           </button>
         </div>
       </div>
@@ -150,59 +125,37 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     width: '100vw',
     height: '100vh',
-    position: 'relative',
     padding: 20,
+    background: 'var(--bg-primary)',
   },
   card: {
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 380,
     padding: '40px 30px',
     display: 'flex',
     flexDirection: 'column',
-    zIndex: 1,
-    transform: 'none', // Override translateY animation on login screen for simplicity
+    background: 'var(--bg-card)',
   },
   logoContainer: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    marginBottom: 30,
-  },
-  logoIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: '50%',
-    background: 'rgba(159, 97, 232, 0.1)',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    border: '1px solid rgba(159, 97, 232, 0.2)',
-    marginBottom: 16,
+    marginBottom: 40,
   },
   logoText: {
     fontSize: '2rem',
-    fontWeight: 800,
-    letterSpacing: '-0.03em',
-    marginBottom: 6,
-  },
-  subtitle: {
-    fontSize: '0.875rem',
-    color: 'var(--text-secondary)',
-    textAlign: 'center',
+    fontWeight: 700,
+    letterSpacing: '0.05em',
   },
   errorContainer: {
-    background: 'rgba(236, 111, 139, 0.1)',
-    border: '1px solid rgba(236, 111, 139, 0.2)',
-    borderRadius: 8,
-    padding: 12,
-    display: 'flex',
-    alignItems: 'center',
+    border: '1px solid #555',
+    padding: 10,
     marginBottom: 20,
+    textAlign: 'center',
   },
   errorText: {
     fontSize: '0.85rem',
-    color: 'var(--neon-pink)',
-    marginLeft: 8,
+    color: '#fff',
   },
   form: {
     display: 'flex',
@@ -215,42 +168,36 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 6,
   },
   label: {
-    fontSize: '0.8rem',
-    fontWeight: 600,
-    color: 'var(--text-secondary)',
+    fontSize: '0.75rem',
+    fontWeight: 500,
+    color: '#888',
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
   },
   input: {
-    background: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid var(--border-glow)',
-    borderRadius: 8,
-    padding: '12px 16px',
+    background: 'var(--bg-input)',
+    border: '1px solid var(--border)',
+    padding: '10px 12px',
     color: '#fff',
-    fontSize: '0.95rem',
+    fontSize: '0.9rem',
     outline: 'none',
-    transition: 'border-color 0.2s',
   },
   submitBtn: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 14,
+    padding: 12,
     marginTop: 10,
-    fontSize: '1rem',
+    fontSize: '0.9rem',
+    width: '100%',
   },
   switchContainer: {
-    marginTop: 24,
+    marginTop: 20,
     textAlign: 'center',
   },
   switchBtn: {
     background: 'none',
     border: 'none',
-    color: 'var(--text-secondary)',
-    fontSize: '0.875rem',
+    color: '#888',
+    fontSize: '0.8rem',
     cursor: 'pointer',
-    textDecoration: 'underline',
-    transition: 'color 0.2s',
+    textDecoration: 'none',
   },
 };
-

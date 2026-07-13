@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Brain, Fingerprint, Network, Target, Activity, HeartHandshake } from 'lucide-react';
+
 
 /**
  * Props for NetworkAnalysisProgress.
@@ -24,7 +24,6 @@ const DEFAULT_LABELS = [
   'Analyzing Reciprocity'
 ];
 
-const STEP_ICONS = [Brain, Fingerprint, Network, Target, Activity, HeartHandshake] as const;
 
 type StepStatus = 'pending' | 'active' | 'done';
 
@@ -82,7 +81,6 @@ export const NetworkAnalysisProgress: React.FC<NetworkAnalysisProgressProps> = (
     () =>
       labels.map((label, i) => ({
         label,
-        Icon: STEP_ICONS[i],
         status: getStepStatus(i, currentPass, isComplete),
       })),
     [labels, currentPass, isComplete]
@@ -153,11 +151,7 @@ export const NetworkAnalysisProgress: React.FC<NetworkAnalysisProgressProps> = (
     };
   }
 
-  function iconColor(status: StepStatus): string {
-    if (status === 'done') return '#fff';
-    if (status === 'active') return '#fff';
-    return 'var(--text-muted, #555)';
-  }
+
 
   function lineStyle(status: StepStatus): React.CSSProperties {
     const base: React.CSSProperties = {
@@ -174,7 +168,7 @@ export const NetworkAnalysisProgress: React.FC<NetworkAnalysisProgressProps> = (
     if (status === 'done') {
       return {
         ...base,
-        background: 'var(--neon-green, #22c55e)',
+        background: '#333',
         boxShadow: '0 0 6px rgba(34,197,94,0.3)',
       };
     }
@@ -217,7 +211,7 @@ export const NetworkAnalysisProgress: React.FC<NetworkAnalysisProgressProps> = (
   return (
     <div style={containerStyle}>
       {steps.map((step, idx) => {
-        const { Icon, label, status } = step;
+        const { label, status } = step;
         // Determine the status of the connecting line AFTER this step
         const lineStatus: StepStatus | null =
           idx < steps.length - 1 ? steps[idx + 1].status : null;
@@ -237,14 +231,13 @@ export const NetworkAnalysisProgress: React.FC<NetworkAnalysisProgressProps> = (
                   <span
                     style={{
                       fontSize: 20,
-                      animation: 'nap-check-pop 0.4s ease forwards',
                       color: '#fff',
                     }}
                   >
                     ✓
                   </span>
                 ) : (
-                  <Icon size={20} color={iconColor(status)} />
+                  <span style={{ fontSize: 14, color: '#fff', fontWeight: 600 }}>{idx + 1}</span>
                 )}
               </div>
               <span style={labelStyle(status)}>{label}</span>
@@ -253,7 +246,7 @@ export const NetworkAnalysisProgress: React.FC<NetworkAnalysisProgressProps> = (
                   style={{
                     marginTop: 4,
                     fontSize: 10,
-                    color: 'var(--neon-blue, #3b82f6)',
+                    color: '#fff',
                     fontWeight: 600,
                     fontVariantNumeric: 'tabular-nums',
                   }}

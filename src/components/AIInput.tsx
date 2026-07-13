@@ -22,16 +22,7 @@ const callMistralForAIInput = async (apiKey: string, prompt: string): Promise<st
   const data = await response.json();
   return data.choices?.[0]?.message?.content || '';
 };
-import { 
-  Sparkles, 
-  UserPlus, 
-  FileText, 
-  Check, 
-  Building,
-  MapPin,
-  Mail,
-  UserCheck
-} from 'lucide-react';
+
 
 interface AIInputProps {
   contacts: any[];
@@ -333,14 +324,14 @@ Si aucun contact n'est présent, retourne {"contacts": []}. Réponds uniquement 
           onClick={() => { setActiveTab('note'); setResults(null); }} 
           style={{ ...styles.tabBtn, ...(activeTab === 'note' ? styles.tabBtnActive : {}) }}
         >
-          <FileText size={16} />
+          
           Ajouter une Note (Contact existant)
         </button>
         <button 
           onClick={() => { setActiveTab('extract'); setResults(null); }} 
           style={{ ...styles.tabBtn, ...(activeTab === 'extract' ? styles.tabBtnActive : {}) }}
         >
-          <UserPlus size={16} />
+          
           Extraire des Contacts (Texte brut)
         </button>
       </div>
@@ -385,7 +376,7 @@ Si aucun contact n'est présent, retourne {"contacts": []}. Réponds uniquement 
               className="btn-primary" 
               style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: 14 }}
             >
-              <Sparkles size={16} />
+              
               {loading ? 'Analyse IA...' : 'Analyser et Enregistrer'}
             </button>
           </div>
@@ -408,7 +399,7 @@ Si aucun contact n'est présent, retourne {"contacts": []}. Réponds uniquement 
               className="btn-primary" 
               style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: 14 }}
             >
-              <UserPlus size={16} />
+              
               {loading ? 'Extraction en cours...' : 'Extraire les Contacts'}
             </button>
           </div>
@@ -417,9 +408,9 @@ Si aucun contact n'est présent, retourne {"contacts": []}. Réponds uniquement 
 
       {/* Results Display */}
       {results && results.type === 'note' && (
-        <div className="glass-card glow-active" style={styles.resultsCard}>
+        <div className="glass-card" style={styles.resultsCard}>
           <div style={styles.resultsHeader}>
-            <Check size={18} color="var(--neon-green)" />
+            
             <h3 style={{ fontSize: '1.1rem' }}>Note enregistrée et analysée avec succès !</h3>
           </div>
           <div style={styles.resultDetails}>
@@ -430,7 +421,7 @@ Si aucun contact n'est présent, retourne {"contacts": []}. Réponds uniquement 
             
             {Object.keys(results.updates).length > 0 && (
               <div style={styles.resultBlock}>
-                <span style={{ ...styles.resultBlockTitle, color: 'var(--neon-blue)' }}>Changements appliqués au contact :</span>
+                <span style={{ ...styles.resultBlockTitle, color: '#fff' }}>Changements appliqués au contact :</span>
                 <div style={styles.updatesList}>
                   {Object.entries(results.updates).map(([key, val]) => (
                     <div key={key} style={styles.updateItem}>
@@ -457,9 +448,9 @@ Si aucun contact n'est présent, retourne {"contacts": []}. Réponds uniquement 
       )}
 
       {results && results.type === 'extract' && (
-        <div className="glass-card glow-active" style={styles.resultsCard}>
+        <div className="glass-card" style={styles.resultsCard}>
           <div style={styles.resultsHeader}>
-            <Sparkles size={18} color="var(--neon-purple)" />
+            
             <h3 style={{ fontSize: '1.1rem' }}>Contacts identifiés par Mistral ({results.contacts.length})</h3>
           </div>
 
@@ -471,25 +462,25 @@ Si aucun contact n'est présent, retourne {"contacts": []}. Réponds uniquement 
                 {results.contacts.map((c: any, idx: number) => (
                   <div key={idx} style={styles.extractedCard}>
                     <div style={styles.extractedCardHeader}>
-                      <UserCheck size={16} color="var(--neon-green)" />
+                      
                       <span style={{ fontWeight: 700, color: '#fff' }}>{c.first_name} {c.last_name}</span>
                     </div>
                     <div style={styles.extractedDetails}>
                       {c.company && (
                         <div style={styles.extDetail}>
-                          <Building size={12} color="var(--text-muted)" />
+                          
                           <span>{c.job_title || 'Poste'} chez <b>{c.company}</b></span>
                         </div>
                       )}
                       {c.location && (
                         <div style={styles.extDetail}>
-                          <MapPin size={12} color="var(--text-muted)" />
+                          
                           <span>{c.location}</span>
                         </div>
                       )}
                       {c.email && (
                         <div style={styles.extDetail}>
-                          <Mail size={12} color="var(--text-muted)" />
+                          
                           <span>{c.email}</span>
                         </div>
                       )}
@@ -671,7 +662,7 @@ const styles: Record<string, React.CSSProperties> = {
   tagBadge: {
     background: 'rgba(159, 97, 232, 0.1)',
     border: '1px solid rgba(159, 97, 232, 0.2)',
-    color: 'var(--neon-purple)',
+    color: '#fff',
     padding: '4px 10px',
     borderRadius: 99,
     fontSize: '0.75rem',

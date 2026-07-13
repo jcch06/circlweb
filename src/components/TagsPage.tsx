@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
-import { Tag as TagIcon, Plus, X, Folder } from 'lucide-react';
+
 
 interface TagsPageProps {
   tags: any[];
@@ -78,9 +78,9 @@ export const TagsPage: React.FC<TagsPageProps> = ({
 
   const getCategoryLabel = (cat: string) => {
     switch (cat) {
-      case 'industrie': return '🏷️ Secteur / Compétence (Liaisons Actives)';
-      case 'relation': return '👥 Type de Relation (Liaisons Actives)';
-      case 'contexte': return '📡 Source / Contexte (Métadonnées)';
+      case 'industrie': return '�️ Secteur / Compétence (Liaisons Actives)';
+      case 'relation': return '� Type de Relation (Liaisons Actives)';
+      case 'contexte': return '� Source / Contexte (Métadonnées)';
       case 'statut': return '⏳ Statut d\'Activité (Veille)';
       default: return 'Tag';
     }
@@ -112,14 +112,14 @@ export const TagsPage: React.FC<TagsPageProps> = ({
           className="btn-primary" 
           style={styles.addBtn}
         >
-          {showAddForm ? <X size={16} style={{ marginRight: 6 }} /> : <Plus size={16} style={{ marginRight: 6 }} />}
+          
           {showAddForm ? 'Fermer' : 'Nouveau Tag'}
         </button>
       </div>
 
       {/* Add Tag Form */}
       {showAddForm && (
-        <form onSubmit={handleSubmit} className="glass-card glow-active" style={styles.formCard}>
+        <form onSubmit={handleSubmit} className="glass-card" style={styles.formCard}>
           <h3 style={styles.formTitle}>Créer un nouveau tag</h3>
           <div style={styles.formGrid}>
             <div style={styles.formGroup}>
@@ -163,7 +163,7 @@ export const TagsPage: React.FC<TagsPageProps> = ({
             </div>
           </div>
           <button type="submit" disabled={loading} className="btn-primary" style={styles.submitBtn}>
-            {loading ? 'Création...' : 'Créer le Tag 🚀'}
+            {loading ? 'Création...' : 'Créer le Tag '}
           </button>
         </form>
       )}
@@ -177,7 +177,7 @@ export const TagsPage: React.FC<TagsPageProps> = ({
           return (
             <div key={catKey} className="glass-panel" style={styles.categoryPanel}>
               <div style={{ ...styles.panelHeader, borderBottom: `2px solid ${color}` }}>
-                <Folder size={16} color={color} style={{ marginRight: 8 }} />
+                
                 <h3 style={styles.panelTitle}>{getCategoryLabel(catKey)}</h3>
               </div>
 
@@ -196,7 +196,7 @@ export const TagsPage: React.FC<TagsPageProps> = ({
                           background: `rgba(${catKey === 'industrie' ? '159, 97, 232' : catKey === 'relation' ? '79, 142, 247' : catKey === 'contexte' ? '48, 192, 96' : '212, 160, 48'}, 0.06)`
                         }}
                       >
-                        <TagIcon size={12} color={color} style={{ marginRight: 6 }} />
+                        
                         <span style={styles.tagName}>{t.name}</span>
                         <span style={styles.tagSpace}>({spaceName})</span>
                       </div>

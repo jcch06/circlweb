@@ -706,12 +706,16 @@ Nom : ${name}
 Poste : ${role}
 Entreprise : ${company}
 
-Trouve ses comp├®tences probables, ses projets actuels et les d├®fis (besoins) auxquels elle fait face dans ce r├┤le.
+L'utilisateur a déjà renseigné les informations suivantes sur lui-même :
+Projets actuels : ${existingProjects || 'Non renseigné'}
+Besoins/Défis : ${existingNeeds || 'Non renseigné'}
+
+Trouve ses compétences probables, et ENRICHIS ses projets et défis en intégrant intelligemment ce qu'il a déjà écrit avec tes nouvelles trouvailles (ne supprime pas ce qu'il a écrit, complète-le !).
 Retourne UNIQUEMENT un objet JSON valide avec cette structure exacte :
 {
-  "skills": ["Comp├®tence 1", "Comp├®tence 2"],
-  "currentProjects": "Un paragraphe d├®crivant les missions ou projets probables...",
-  "needs": "Un paragraphe d├®crivant ses enjeux et d├®fis actuels..."
+  "skills": ["Compétence 1", "Compétence 2"],
+  "currentProjects": "Texte combiné des projets existants et de tes ajouts...",
+  "needs": "Texte combiné des besoins existants et de tes ajouts..."
 }`;
 
   const response = await fetch(
@@ -1113,3 +1117,4 @@ export async function runMistralOracleBatchPipeline(
 
   return result;
 }
+

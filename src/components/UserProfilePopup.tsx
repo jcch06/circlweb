@@ -227,7 +227,13 @@ export const UserProfilePopup: React.FC<UserProfilePopupProps> = ({ userId, onCl
 
     setEnriching(true);
     try {
-      const data = await autoEnrichUserProfile(profile.name, profile.company, profile.role);
+      const data = await autoEnrichUserProfile(
+        profile.name, 
+        profile.company, 
+        profile.role,
+        profile.currentProjects,
+        profile.needs
+      );
       setProfile(prev => ({
         ...prev,
         skills: Array.from(new Set([...prev.skills, ...(data.skills || [])])),

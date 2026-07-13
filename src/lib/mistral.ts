@@ -689,7 +689,13 @@ Retourne UNIQUEMENT un tableau JSON valide avec cette structure exacte :
 /**
  * 9. Auto-Enrich User Profile (Perplexity)
  */
-export async function autoEnrichUserProfile(name: string, company: string, role: string): Promise<any> {
+export async function autoEnrichUserProfile(
+  name: string, 
+  company: string, 
+  role: string,
+  existingProjects?: string,
+  existingNeeds?: string
+): Promise<any> {
   const perplexityKey = import.meta.env.VITE_PERPLEXITY_API_KEY;
   if (!perplexityKey) {
     throw new Error("Perplexity API key is not configured");

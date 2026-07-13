@@ -230,16 +230,19 @@ export const UserProfilePopup: React.FC<UserProfilePopupProps> = ({ userId, onCl
       const data = await autoEnrichUserProfile(
         profile.name, 
         profile.company, 
-        profile.role,
-        profile.currentProjects,
-        profile.needs
+        profile.role
       );
-      setProfile(prev => ({
-        ...prev,
-        skills: Array.from(new Set([...prev.skills, ...(data.skills || [])])),
-        currentProjects: data.currentProjects || prev.currentProjects,
-        needs: data.needs || prev.needs,
-      }));
+      setProfile(prev => {
+        const newProjects = data.currentProjects ? (prev.currentProjects ? prev.currentProjects + '\n\n[IA]: ' + data.currentProjects : data.currentProjects) : prev.currentProjects;
+        const newNeeds = data.needs ? (prev.needs ? prev.needs + '\n\n[IA]: ' + data.needs : data.needs) : prev.needs;
+
+        return {
+          ...prev,
+          skills: Array.from(new Set([...prev.skills, ...(data.skills || [])])),
+          currentProjects: newProjects,
+          needs: newNeeds,
+        };
+      });
     } catch (err: any) {
       alert(`Erreur d'enrichissement: ${err.message}`);
     } finally {

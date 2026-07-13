@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Sparkles, User, Briefcase, Target, Lightbulb, Save } from 'lucide-react';
 import { autoEnrichUserProfile, isPerplexityConfigured } from '../lib/mistral';
+import { supabase } from '../lib/supabase';
 
 interface UserProfile {
   name: string;
@@ -174,14 +175,26 @@ export const UserProfilePopup: React.FC<UserProfilePopupProps> = ({ userId, onCl
   const [enriching, setEnriching] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem(`circl_user_profile_${userId}`);
-    if (saved) {
-      try {
-        setProfile(JSON.parse(saved));
-      } catch (e) {
-        console.error("Erreur parsing profil utilisateur", e);
+    const loadProfile = async () => {
+      // 1. Try to fetch from Supabase
+      const { data } = await supabase.auth.getUser();
+      const metaProfile = data?.user?.user_metadata?.oracle_profile;
+      
+      if (metaProfile) {
+        setProfile(metaProfile);
+      } else {
+        // 2. Fallback to localStorage
+        const saved = localStorage.getItem(`circl_user_profile_${userId}`);
+        if (saved) {
+          try {
+            setProfile(JSON.parse(saved));
+          } catch (e) {
+            console.error("Erreur parsing profil utilisateur", e);
+          }
+        }
       }
-    }
+    };
+    loadProfile();
   }, [userId]);
 
   const handleChange = (field: keyof UserProfile, value: any) => {
@@ -228,7 +241,17 @@ export const UserProfilePopup: React.FC<UserProfilePopupProps> = ({ userId, onCl
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    // Save to Supabase to persist across sessions/devices
+    try {
+      await supabase.auth.updateUser({
+        data: { oracle_profile: profile }
+      });
+    } catch (err) {
+      console.error("Erreur de sauvegarde Supabase :", err);
+    }
+    
+    // Fallback/cache local
     localStorage.setItem(`circl_user_profile_${userId}`, JSON.stringify(profile));
     onSave(profile);
     onClose();

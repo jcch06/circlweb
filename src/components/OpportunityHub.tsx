@@ -37,8 +37,9 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
 
   useEffect(() => {
     if (user) {
+      const metaProfile = user.user_metadata?.oracle_profile;
       const saved = localStorage.getItem(`circl_user_profile_${user.id}`);
-      if (!saved) {
+      if (!metaProfile && !saved) {
         setShowProfilePopup(true);
       }
     }

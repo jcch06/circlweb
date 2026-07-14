@@ -491,6 +491,9 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
 // =========================================================================
 const styles: Record<string, React.CSSProperties> = {
   container: {
+    height: '100%',
+    width: '100%',
+    overflowY: 'auto',
     padding: '24px 0',
   },
   header: {

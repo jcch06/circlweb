@@ -68,7 +68,7 @@ export const AIInput: React.FC<AIInputProps> = ({
 
     try {
       const apiKey = import.meta.env.VITE_MISTRAL_API_KEY;
-      if (!apiKey || apiKey === 'YOUR_GEMINI_API_KEY_HERE') {
+      if (!apiKey || apiKey === 'YOUR_MISTRAL_API_KEY_HERE') {
         throw new Error("Clé Mistral API manquante dans .env.local");
       }
 
@@ -198,7 +198,7 @@ Réponds uniquement avec le JSON.`;
 
     try {
       const apiKey = import.meta.env.VITE_MISTRAL_API_KEY;
-      if (!apiKey || apiKey === 'YOUR_GEMINI_API_KEY_HERE') {
+      if (!apiKey || apiKey === 'YOUR_MISTRAL_API_KEY_HERE') {
         throw new Error("Clé Mistral API manquante dans .env.local");
       }
 

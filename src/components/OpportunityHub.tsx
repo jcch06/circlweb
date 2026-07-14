@@ -255,8 +255,8 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
           </p>
           <div style={styles.setupInstructions}>
             <p>1. Allez sur <a href="https://console.mistral.ai/" target="_blank" rel="noreferrer" style={{ color: 'var(--neon-blue)' }}>Mistral Console</a> et créez une clé API.</p>
-            <p>3. Ouvrez le fichier <code>.env.local</code> de votre projet et remplacez la valeur : <br/> <code>VITE_MISTRAL_API_KEY=votre_cle_ici</code></p>
-            <p>4. Relancez l'application.</p>
+            <p>2. Dans les paramètres de votre projet Vercel, ajoutez la variable d'environnement <code>MISTRAL_API_KEY</code> (sans préfixe <code>VITE_</code> — elle reste côté serveur et n'est jamais exposée au navigateur).</p>
+            <p>3. Redéployez l'application.</p>
           </div>
         </div>
       )}

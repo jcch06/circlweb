@@ -456,7 +456,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
 
     try {
       if (!isMistralConfigured()) {
-        throw new Error("Clé Mistral API non configurée. Veuillez ajouter votre clé dans le fichier .env.local.");
+        throw new Error("Clé Mistral API non configurée côté serveur. Contactez l'administrateur du projet.");
       }
 
       // Call Mistral enrichment helper

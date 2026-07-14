@@ -1,26 +1,29 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-// Mistral API helper for AIInput
-const callMistralForAIInput = async (apiKey: string, prompt: string): Promise<string> => {
-  const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+// Mistral API helper for AIInput — goes through the authenticated server-side
+// proxy (api/ai/mistral-chat.ts) so the Mistral key never reaches the client.
+const callMistralForAIInput = async (prompt: string): Promise<string> => {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+
+  const response = await fetch('/api/ai/mistral-chat', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify({
       model: 'mistral-small-latest',
       messages: [{ role: 'user', content: prompt }],
-      response_format: { type: 'json_object' },
-      temperature: 0.3,
+      responseFormat: 'json_object',
     }),
   });
   if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Mistral API error ${response.status}: ${errText}`);
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `Mistral proxy error ${response.status}`);
   }
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
+  return data.text || '';
 };
 
 
@@ -67,11 +70,6 @@ export const AIInput: React.FC<AIInputProps> = ({
     setResults(null);
 
     try {
-      const apiKey = import.meta.env.VITE_MISTRAL_API_KEY;
-      if (!apiKey || apiKey === 'YOUR_MISTRAL_API_KEY_HERE') {
-        throw new Error("Clé Mistral API manquante dans .env.local");
-      }
-
       const contact = contacts.find(c => c.id === selectedContactId);
       
       const prompt = `Tu es l'assistant IA de Circl Web. Un utilisateur vient de saisir une note brute (dictée ou résumé rapide) concernant un contact.
@@ -101,7 +99,7 @@ Retourne un objet JSON valide avec :
 
 Réponds uniquement avec le JSON.`;
 
-      let text = await callMistralForAIInput(apiKey, prompt);
+      let text = await callMistralForAIInput(prompt);
       text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
       const data = JSON.parse(text);
 
@@ -197,11 +195,6 @@ Réponds uniquement avec le JSON.`;
     setResults(null);
 
     try {
-      const apiKey = import.meta.env.VITE_MISTRAL_API_KEY;
-      if (!apiKey || apiKey === 'YOUR_MISTRAL_API_KEY_HERE') {
-        throw new Error("Clé Mistral API manquante dans .env.local");
-      }
-
       const prompt = `Tu es un expert en extraction de contacts (parsing).
 Analyse le texte brut ci-dessous et extrais TOUS les contacts professionnels présents (personnes physiques avec leurs détails).
 
@@ -229,7 +222,7 @@ Retourne un objet JSON avec cette structure précise :
 
 Si aucun contact n'est présent, retourne {"contacts": []}. Réponds uniquement avec le JSON.`;
 
-      let text = await callMistralForAIInput(apiKey, prompt);
+      let text = await callMistralForAIInput(prompt);
       text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
       const data = JSON.parse(text);
 

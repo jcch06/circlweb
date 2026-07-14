@@ -1,4 +1,3 @@
-import { Mistral } from '@mistralai/mistralai';
 import { buildSimilarityMatrix, findOptimalK, kMeansClustering, computeBetweennessCentrality } from './vectorMath';
 import { supabase } from './supabase';
 
@@ -22,51 +21,86 @@ export function resetGlobalUsage() {
   globalTokenUsage = { promptTokens: 0, candidateTokens: 0, totalTokens: 0 };
 }
 
-const getMistralClient = () => {
-  const apiKey = import.meta.env.VITE_MISTRAL_API_KEY;
-  if (!apiKey || apiKey === 'YOUR_MISTRAL_API_KEY_HERE') {
-    return null;
+// ============================================================================
+// AI keys never live in the client anymore — every Mistral/Perplexity call
+// goes through an authenticated Vercel function (api/ai/*) that holds the
+// real keys server-side. See api/_lib/auth.ts.
+// ============================================================================
+
+async function getAuthHeader(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+let cachedAIStatus: { mistralConfigured: boolean; perplexityConfigured: boolean } | null = null;
+let statusFetchPromise: Promise<void> | null = null;
+
+function refreshAIStatus(): Promise<void> {
+  if (!statusFetchPromise) {
+    statusFetchPromise = fetch('/api/ai/status')
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (data) cachedAIStatus = data;
+      })
+      .catch(() => {
+        // Network error: leave the optimistic default in place, the real
+        // call will surface a clear error from the server if truly unconfigured.
+      });
   }
-  return new Mistral({ apiKey });
-};
+  return statusFetchPromise;
+}
 
-export const isMistralConfigured = () => {
-  return getMistralClient() !== null;
-};
+refreshAIStatus();
 
-export const isPerplexityConfigured = () => {
-  const key = import.meta.env.VITE_PERPLEXITY_API_KEY;
-  return key && key.trim().length > 0;
-};
+// Optimistic default (true) until the async status check resolves, so the UI
+// doesn't flash a "not configured" screen on every cold load in the common
+// case where the keys ARE configured server-side.
+export const isMistralConfigured = (): boolean =>
+  cachedAIStatus ? cachedAIStatus.mistralConfigured : true;
+
+export const isPerplexityConfigured = (): boolean =>
+  cachedAIStatus ? cachedAIStatus.perplexityConfigured : true;
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function callMistral(prompt: string, isJSON: boolean = true, model: string = 'mistral-small-latest'): Promise<string> {
-  const client = getMistralClient();
-  if (!client) throw new Error("Mistral API key is not configured");
-
   let retries = 3;
+  let lastError: any = null;
+
   while (retries > 0) {
     try {
-      const response = await client.chat.complete({
-        model,
-        messages: [{ role: 'user', content: prompt }],
-        responseFormat: isJSON ? { type: 'json_object' } : undefined
+      const authHeader = await getAuthHeader();
+      const response = await fetch('/api/ai/mistral-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeader },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: 'user', content: prompt }],
+          responseFormat: isJSON ? 'json_object' : undefined
+        })
       });
-      trackGlobalUsage(response.usage);
-      let text = response.choices?.[0]?.message?.content || (isJSON ? "{}" : "");
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        lastError = new Error(err.error || `Mistral proxy error ${response.status}`);
+        await sleep(response.status === 429 ? 3000 : 1000);
+        retries--;
+        continue;
+      }
+
+      const data = await response.json();
+      trackGlobalUsage(data.usage);
+      let text = data.text || (isJSON ? "{}" : "");
       if (typeof text !== 'string') text = String(text);
       return text;
     } catch (err: any) {
-      if (err.status === 429) {
-        await sleep(3000);
-      } else {
-        await sleep(1000);
-      }
+      lastError = err;
+      await sleep(1000);
       retries--;
     }
   }
-  throw new Error("Mistral API failure");
+  throw lastError || new Error("Mistral API failure");
 }
 
 function safeParseJSON(text: string): any {
@@ -176,11 +210,6 @@ export interface UserOpportunityResult {
  * Compares contacts' needs and skills to find complementary matches
  */
 export async function detectSynergies(contacts: any[], notes: any[]): Promise<SynergyResult[]> {
-  const genAI = getMistralClient();
-  if (!genAI) throw new Error("Mistral API key is not configured in .env.local");
-
-  
-
   // Prepare a condensed version of contacts and notes to conserve tokens
   const networkData = contacts.map(c => {
     const contactNotes = notes
@@ -234,11 +263,6 @@ export async function brainstormProjects(
   contacts: any[],
   notes: any[]
 ): Promise<ProjectIdea[]> {
-  const genAI = getMistralClient();
-  if (!genAI) throw new Error("Mistral API key is not configured in .env.local");
-
-  
-
   const networkData = contacts.map(c => {
     const contactNotes = notes
       .filter(n => n.contact_id === c.id)
@@ -295,11 +319,6 @@ export async function suggestWarmIntros(
   targetCompany: string,
   targetRole: string
 ): Promise<WarmIntroSuggestion[]> {
-  const genAI = getMistralClient();
-  if (!genAI) throw new Error("Mistral API key is not configured in .env.local");
-
-  
-
   const networkData = contacts.map(c => ({
     name: `${c.first_name} ${c.last_name}`,
     company: c.company || '',
@@ -344,12 +363,6 @@ export async function enrichProfileFromScraping(
   company: string,
   scrapedText: string
 ): Promise<EnrichmentResult> {
-  const genAI = getMistralClient();
-  if (!genAI) throw new Error("Mistral API key is not configured in .env.local");
-
-  // Mistral Flash is perfect for parsing and structuring raw text quickly and cheaply
-  
-
   const prompt = `Tu es un agent d'enrichissement de donn├®es de contact.
 ├Ç partir des informations brutes scrapp├®es sur internet concernant ${name} qui travaille chez ${company}, extrais et structure les informations de profil.
 
@@ -394,11 +407,6 @@ export async function detectContactSynergies(
   contacts: any[],
   notes: any[]
 ): Promise<ContactSynergy[]> {
-  const genAI = getMistralClient();
-  if (!genAI) throw new Error("Mistral API key is not configured in .env.local");
-
-  
-
   // Exclude the selected contact from the potential target list
   const otherContacts = contacts.filter(c => c.id !== selectedContact.id);
   if (otherContacts.length === 0) return [];
@@ -509,11 +517,6 @@ export async function autoEnrichContact(contact: {
   bio?: string;
   location?: string;
 }): Promise<EnrichmentResult> {
-  const perplexityKey = import.meta.env.VITE_PERPLEXITY_API_KEY;
-  if (!perplexityKey) {
-    throw new Error("Perplexity API key is not configured");
-  }
-
   // Validate before even calling the API
   if (!isValidContactForEnrichment(contact)) {
     throw new Error(`Donn├®es insuffisantes ou invalides pour enrichir "${contact.first_name} ${contact.last_name}"`);
@@ -542,31 +545,25 @@ Retourne UNIQUEMENT un objet JSON valide avec cette structure exacte, sans markd
   "aiContext": "conseil concret et personnalis├® sur comment aborder ce contact, ou null si pas assez d'info"
 }`;
 
-  const response = await fetch(
-    `https://api.perplexity.ai/chat/completions`,
-    {
-      method: 'POST',
-      headers: { 
-        'Authorization': `Bearer ${perplexityKey}`,
-        'Content-Type': 'application/json' 
-      },
-      body: JSON.stringify({
-        model: 'sonar',
-        messages: [
-          { role: 'system', content: 'You are a strict data extraction assistant. Always output only valid JSON without any markdown or extra text.' },
-          { role: 'user', content: prompt }
-        ]
-      }),
-    }
-  );
+  const authHeader = await getAuthHeader();
+  const response = await fetch('/api/ai/perplexity-chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader },
+    body: JSON.stringify({
+      messages: [
+        { role: 'system', content: 'You are a strict data extraction assistant. Always output only valid JSON without any markdown or extra text.' },
+        { role: 'user', content: prompt }
+      ]
+    })
+  });
 
   if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Perplexity API error: ${response.status} ÔÇö ${err}`);
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `Perplexity proxy error ${response.status}`);
   }
 
   const data = await response.json();
-  let text = data.choices?.[0]?.message?.content || '{}';
+  let text = data.text || '{}';
 
   // Sanitize markdown wrappers if present
   text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
@@ -588,11 +585,6 @@ Retourne UNIQUEMENT un objet JSON valide avec cette structure exacte, sans markd
  * Analyzes the entire network to find clusters of people with common needs/interests.
  */
 export async function detectGroupSynergies(contacts: any[], notes: any[]): Promise<GroupSynergyResult[]> {
-  const genAI = getMistralClient();
-  if (!genAI) throw new Error("Mistral API key is not configured");
-
-  
-
   const networkData = contacts.map(c => {
     const contactNotes = notes.filter(n => n.contact_id === c.id).map(n => n.content).join(" | ");
     return {
@@ -639,11 +631,6 @@ Retourne UNIQUEMENT un tableau JSON valide avec cette structure exacte :
  * Proposes specific services or projects the SaaS user can launch to serve network clusters.
  */
 export async function brainstormUserOpportunities(userProfile: any, contacts: any[], notes: any[]): Promise<UserOpportunityResult[]> {
-  const genAI = getMistralClient();
-  if (!genAI) throw new Error("Mistral API key is not configured");
-
-  
-
   const networkData = contacts.map(c => {
     const contactNotes = notes.filter(n => n.contact_id === c.id).map(n => n.content).join(" | ");
     return {
@@ -698,11 +685,6 @@ export async function autoEnrichUserProfile(
   existingProjects?: string,
   existingNeeds?: string
 ): Promise<any> {
-  const perplexityKey = import.meta.env.VITE_PERPLEXITY_API_KEY;
-  if (!perplexityKey) {
-    throw new Error("Perplexity API key is not configured");
-  }
-
   const prompt = `Tu es un assistant d'analyse de profil B2B. Fais une recherche approfondie sur cette personne.
 Nom : ${name}
 Poste : ${role}
@@ -720,31 +702,25 @@ Retourne UNIQUEMENT un objet JSON valide avec cette structure exacte :
   "needs": "Texte combiné des besoins existants et de tes ajouts..."
 }`;
 
-  const response = await fetch(
-    `https://api.perplexity.ai/chat/completions`,
-    {
-      method: 'POST',
-      headers: { 
-        'Authorization': `Bearer ${perplexityKey}`,
-        'Content-Type': 'application/json' 
-      },
-      body: JSON.stringify({
-        model: 'sonar',
-        messages: [
-          { role: 'system', content: 'You are a strict data extraction assistant. Always output only valid JSON without any markdown or extra text.' },
-          { role: 'user', content: prompt }
-        ]
-      }),
-    }
-  );
+  const authHeader = await getAuthHeader();
+  const response = await fetch('/api/ai/perplexity-chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader },
+    body: JSON.stringify({
+      messages: [
+        { role: 'system', content: 'You are a strict data extraction assistant. Always output only valid JSON without any markdown or extra text.' },
+        { role: 'user', content: prompt }
+      ]
+    })
+  });
 
   if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Perplexity API error: ${response.status} ÔÇö ${err}`);
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `Perplexity proxy error ${response.status}`);
   }
 
   const data = await response.json();
-  let text = data.choices?.[0]?.message?.content || '{}';
+  let text = data.text || '{}';
   text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
 
   try {
@@ -1233,11 +1209,8 @@ export async function computeMistralEmbeddings(
   notes: any[],
   onProgress?: (pct: number) => void
 ): Promise<{ contactId: string; vector: number[] }[]> {
-  const client = getMistralClient();
-  if (!client) throw new Error("Mistral API key non configurée");
-
   const results: { contactId: string; vector: number[] }[] = [];
-  
+
   const BATCH_SIZE = 20;
   for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
     const batch = contacts.slice(i, i + BATCH_SIZE);
@@ -1247,20 +1220,27 @@ export async function computeMistralEmbeddings(
     });
 
     try {
-      const embedResponse = await client.embeddings.create({
-        model: 'mistral-embed',
-        inputs
+      const authHeader = await getAuthHeader();
+      const response = await fetch('/api/ai/mistral-embeddings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeader },
+        body: JSON.stringify({ inputs })
       });
-      
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || `Embeddings proxy error ${response.status}`);
+      }
+      const embedResponse = await response.json();
+
       trackGlobalUsage(embedResponse.usage);
-      
-      embedResponse.data.forEach((d, idx) => {
+
+      embedResponse.data.forEach((d: any, idx: number) => {
         results.push({ contactId: batch[idx].id, vector: d.embedding as number[] });
       });
     } catch (err) {
       console.error("Mistral Embedding Error", err);
     }
-    
+
     onProgress?.(Math.min(100, Math.round(((i + BATCH_SIZE) / contacts.length) * 100)));
     if (i + BATCH_SIZE < contacts.length) {
       await sleep(500);

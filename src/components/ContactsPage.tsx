@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { Pencil, Check, X, Mic, MicOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { detectContactSynergies, enrichProfileFromScraping, autoEnrichContact, isMistralConfigured, isPerplexityConfigured } from '../lib/mistral';
 import type { ContactSynergy } from '../lib/mistral';
@@ -1192,19 +1193,19 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
             </span>
             <div style={{ display: 'flex', gap: 8 }}>
               {!isEditingContact && (
-                <button 
+                <button
                   onClick={() => {
                     setFullEditData({ ...contactDetails });
                     setIsEditingContact(true);
-                  }} 
+                  }}
                   style={{ ...styles.closeBtn, color: '#fff' }}
                   title="Modifier les infos principales"
                 >
-                  
+                  <Pencil size={16} />
                 </button>
               )}
               <button onClick={() => { setSelectedContactId(null); setIsEditingContact(false); }} style={styles.closeBtn}>
-                
+                <X size={16} />
               </button>
             </div>
           </div>
@@ -1313,31 +1314,31 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <h4 style={{ ...styles.blockTitle, marginBottom: 0 }}>Description / Bio</h4>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button 
+                  <button
                     onClick={toggleDictation}
                     style={{ background: 'none', border: 'none', color: isDictating ? 'var(--neon-pink)' : 'var(--text-muted)', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center', gap: 4 }}
                     title={isDictating ? "Arrêter la dictée" : "Dicter vocalement"}
                   >
-                    
+                    {isDictating ? <MicOff size={14} /> : <Mic size={14} />}
                     {isDictating && <span style={{ fontSize: '0.7rem', color: '#fff' }}>Écoute...</span>}
                   </button>
-                  
+
                   {editingField !== 'bio' ? (
-                    <button 
+                    <button
                       onClick={() => { setEditingField('bio'); setEditValue(contactDetails.bio || ''); }}
                       style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}
                       title="Modifier la bio"
                     >
-                      
+                      <Pencil size={14} />
                     </button>
                   ) : (
-                    <button 
+                    <button
                       onClick={() => handleInlineEditSave(contactDetails.id, 'bio')}
                       disabled={savingEdit}
                       style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 4 }}
                       title="Enregistrer"
                     >
-                      
+                      <Check size={14} />
                     </button>
                   )}
                 </div>
@@ -1366,21 +1367,21 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                     <span>Synthèse IA</span>
                   </div>
                   {editingField !== 'ai_context' ? (
-                    <button 
+                    <button
                       onClick={() => { setEditingField('ai_context'); setEditValue(contactDetails.ai_context || ''); }}
                       style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 4, opacity: 0.8 }}
                       title="Modifier la synthèse"
                     >
-                      
+                      <Pencil size={14} />
                     </button>
                   ) : (
-                    <button 
+                    <button
                       onClick={() => handleInlineEditSave(contactDetails.id, 'ai_context')}
                       disabled={savingEdit}
                       style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 4 }}
                       title="Enregistrer"
                     >
-                      
+                      <Check size={14} />
                     </button>
                   )}
                 </div>
@@ -1675,7 +1676,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                     <h5 style={{ margin: 0, fontSize: '0.8rem', color: '#fff' }}>Données Web à analyser</h5>
                     <button onClick={() => setShowEnrichForm(false)} style={styles.closeBtnSmall}>
-                      
+                      <X size={14} />
                     </button>
                   </div>
                   <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '0 0 10px 0', lineHeight: 1.3 }}>

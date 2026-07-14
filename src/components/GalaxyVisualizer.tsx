@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { X } from 'lucide-react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { supabase } from '../lib/supabase';
 import { enrichProfileFromScraping, isMistralConfigured, detectContactSynergies, getCachedMistralPipelineResult } from '../lib/mistral';
@@ -702,7 +703,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
           <div style={styles.drawerHeader}>
             <span style={styles.drawerTitle}>Fiche Étoile</span>
             <button onClick={() => { setSelectedNode(null); setShowEnrichForm(false); }} style={styles.closeBtn}>
-              
+              <X size={16} />
             </button>
           </div>
 

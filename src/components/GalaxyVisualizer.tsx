@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X } from 'lucide-react';
+import { X, Lock } from 'lucide-react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { supabase } from '../lib/supabase';
 import { enrichProfileFromScraping, isMistralConfigured, detectContactSynergies, getCachedMistralPipelineResult } from '../lib/mistral';
 import type { ContactSynergy, BridgeContact } from '../lib/mistral';
+import { requestContactAccess, listMyPendingRequests } from '../lib/contactAccess';
 
 
 interface GalaxyVisualizerProps {
@@ -48,6 +49,29 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
     setSynergyError(null);
     setHasSearchedSynergies(false);
   }, [selectedNode?.id]);
+
+  // Contact access requests — same "already asked" tracking as ContactsPage.
+  const [pendingAccessRequestIds, setPendingAccessRequestIds] = useState<Set<string>>(new Set());
+  const [requestingAccessId, setRequestingAccessId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    listMyPendingRequests(user.id).then(requests => {
+      setPendingAccessRequestIds(new Set(requests.map(r => r.contactId)));
+    });
+  }, [user]);
+
+  const handleRequestAccess = async (contact: any) => {
+    setRequestingAccessId(contact.id);
+    try {
+      await requestContactAccess(contact.id, user.id, contact.space_id, contact.owner_id);
+      setPendingAccessRequestIds(prev => new Set(prev).add(contact.id));
+    } catch (err: any) {
+      alert(`Erreur lors de la demande d'accès : ${err.message || err}`);
+    } finally {
+      setRequestingAccessId(null);
+    }
+  };
 
   // Galaxy Merge Invitation States
   const [inviteSpaceId, setInviteSpaceId] = useState('');
@@ -708,6 +732,32 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
           </div>
 
           <div style={styles.drawerContent}>
+            {contactDetails.is_unlocked === false && (
+              <div style={{
+                display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center', textAlign: 'center',
+                padding: '16px 20px', marginBottom: 16, borderRadius: 10,
+                background: 'rgba(250, 204, 21, 0.06)', border: '1px solid rgba(250, 204, 21, 0.2)'
+              }}>
+                <Lock size={20} color="#facc15" />
+                <span style={{ fontSize: '0.85rem', color: '#facc15' }}>
+                  Contact verrouillé{contactDetails.owner_display_name ? ` — appartient à ${contactDetails.owner_display_name}` : ''}.
+                  Vous ne voyez que son nom tant que l'accès ne vous a pas été accordé.
+                </span>
+                <button
+                  onClick={() => handleRequestAccess(contactDetails)}
+                  disabled={requestingAccessId === contactDetails.id || pendingAccessRequestIds.has(contactDetails.id)}
+                  className="glow-button primary"
+                  style={{ fontSize: '0.8rem', padding: '6px 16px' }}
+                >
+                  {pendingAccessRequestIds.has(contactDetails.id)
+                    ? 'Demande envoyée — en attente'
+                    : requestingAccessId === contactDetails.id
+                      ? 'Envoi...'
+                      : "Demander l'accès complet"}
+                </button>
+              </div>
+            )}
+
             {/* Profile Summary Card */}
             <div style={styles.profileSection}>
               <div style={{ ...styles.avatarBig, borderColor: contactDetails.color }}>
@@ -1053,7 +1103,9 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
               )}
             </div>
 
-            {/* Web Enrichment Tool (Scraping) */}
+            {/* Web Enrichment Tool (Scraping) — not offered on a locked contact:
+                you'd be enriching fields you can't even see the current value of. */}
+            {contactDetails.is_unlocked !== false && (
             <div style={styles.enrichmentBlock}>
               {!showEnrichForm ? (
                 <button 
@@ -1095,6 +1147,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
                 </div>
               )}
             </div>
+            )}
 
             {/* Interaction Notes */}
             <div style={styles.infoBlock}>

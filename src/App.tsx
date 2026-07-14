@@ -66,22 +66,26 @@ function App() {
       setSpaces(spacesData || []);
 
       if (spacesData && spacesData.length > 0) {
-        // 2. Fetch Contacts in user's spaces
+        // 2. Fetch Contacts in user's spaces — via the masked view so a
+        // locked contact (space in "request_only" mode, no approved access
+        // grant) only ever exposes first/last name to this client, never
+        // the full row. See supabase/migrations/20260716100000_*.sql.
         const { data: contactsData, error: contactsError } = await supabase
-          .from('contacts')
+          .from('contacts_visible')
           .select('*')
           .order('first_name');
-        
+
         if (contactsError) throw contactsError;
         setContacts(contactsData || []);
 
         if (contactsData && contactsData.length > 0) {
-          // 3. Fetch Notes associated with loaded contacts
+          // 3. Fetch Notes associated with loaded contacts — same masking:
+          // notes on a locked contact never reach the client at all.
           const { data: notesData, error: notesError } = await supabase
-            .from('notes')
+            .from('notes_visible')
             .select('*')
             .order('created_at', { ascending: false });
-          
+
           if (notesError) throw notesError;
           setNotes(notesData || []);
         } else {
@@ -97,11 +101,12 @@ function App() {
         if (tagsError) throw tagsError;
         setTags(tagsData || []);
 
-        // 5. Fetch junction mapping
+        // 5. Fetch junction mapping — masked so a locked contact's tags
+        // (which can reveal skills/sector) don't leak either.
         const { data: contactTagsData, error: contactTagsError } = await supabase
-          .from('contact_tags')
+          .from('contact_tags_visible')
           .select('*');
-        
+
         if (contactTagsError) throw contactTagsError;
         setContactTags(contactTagsData || []);
       }

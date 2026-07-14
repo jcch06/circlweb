@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { listIncomingRequests, respondToAccessRequest } from '../lib/contactAccess';
+import type { AccessRequest } from '../lib/contactAccess';
 
 
 interface SpacesPageProps {
@@ -24,8 +26,59 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
   const [incomingInvites, setIncomingInvites] = useState<any[]>([]);
   const [outgoingInvites, setOutgoingInvites] = useState<any[]>([]);
   const [loadingInvites, setLoadingInvites] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState<'list' | 'invitations'>('list');
+  const [activeSubTab, setActiveSubTab] = useState<'list' | 'invitations' | 'access-requests'>('list');
   const [syncingSpaceId, setSyncingSpaceId] = useState<string | null>(null);
+  const [updatingSharingSpaceId, setUpdatingSharingSpaceId] = useState<string | null>(null);
+
+  // Contact access requests (people asking to see a locked contact's full details)
+  const [incomingAccessRequests, setIncomingAccessRequests] = useState<AccessRequest[]>([]);
+  const [loadingAccessRequests, setLoadingAccessRequests] = useState(false);
+  const [respondingRequestId, setRespondingRequestId] = useState<string | null>(null);
+
+  const fetchAccessRequests = async () => {
+    if (!user) return;
+    setLoadingAccessRequests(true);
+    try {
+      const requests = await listIncomingRequests(user.id);
+      setIncomingAccessRequests(requests);
+    } finally {
+      setLoadingAccessRequests(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAccessRequests();
+  }, [user]);
+
+  const handleRespondToRequest = async (requestId: string, approve: boolean) => {
+    setRespondingRequestId(requestId);
+    try {
+      await respondToAccessRequest(requestId, approve);
+      setIncomingAccessRequests(prev => prev.filter(r => r.id !== requestId));
+      await onRefreshData();
+    } catch (err: any) {
+      alert(`Erreur : ${err.message || err}`);
+    } finally {
+      setRespondingRequestId(null);
+    }
+  };
+
+  const handleToggleSharingMode = async (spaceId: string, currentMode: string) => {
+    const nextMode = currentMode === 'request_only' ? 'full' : 'request_only';
+    setUpdatingSharingSpaceId(spaceId);
+    try {
+      const { error } = await supabase
+        .from('spaces')
+        .update({ contact_sharing_mode: nextMode })
+        .eq('id', spaceId);
+      if (error) throw error;
+      await onRefreshData();
+    } catch (err: any) {
+      alert(`Erreur lors du changement de mode de partage : ${err.message || err}`);
+    } finally {
+      setUpdatingSharingSpaceId(null);
+    }
+  };
 
   const fetchInvitations = async () => {
     if (!user) return;
@@ -244,7 +297,7 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
           
           Mes Espaces ({spaces.length})
         </button>
-        <button 
+        <button
           onClick={() => setActiveSubTab('invitations')}
           style={{
             ...styles.tabBtn,
@@ -252,17 +305,27 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
             borderBottom: activeSubTab === 'invitations' ? '2px solid var(--neon-purple)' : 'none'
           }}
         >
-          
+
           Fusions & Invitations ({incomingInvites.length + outgoingInvites.length})
+        </button>
+        <button
+          onClick={() => setActiveSubTab('access-requests')}
+          style={{
+            ...styles.tabBtn,
+            color: activeSubTab === 'access-requests' ? 'var(--neon-green)' : 'var(--text-secondary)',
+            borderBottom: activeSubTab === 'access-requests' ? '2px solid var(--neon-green)' : 'none'
+          }}
+        >
+          Demandes d'accès ({incomingAccessRequests.length})
         </button>
       </div>
 
-      {activeSubTab === 'list' ? (
+      {activeSubTab === 'list' && (
         /* List of Spaces */
         <div style={styles.spacesGrid}>
           {spaces.length === 0 ? (
             <div style={styles.emptyState}>
-              
+
               <span>Aucune galaxie configurée.</span>
             </div>
           ) : (
@@ -300,6 +363,29 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
                     </div>
                   </div>
 
+                  {!isPersonal && isOwner && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                      padding: '8px 0', borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 8
+                    }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }} title="Contrôle ce que les autres membres voient par défaut sur les contacts que vous n'avez pas ajoutés vous-même.">
+                        {s.contact_sharing_mode === 'request_only' ? 'Accès sur demande' : 'Partage intégral'}
+                      </span>
+                      <button
+                        onClick={() => handleToggleSharingMode(s.id, s.contact_sharing_mode || 'full')}
+                        disabled={updatingSharingSpaceId === s.id}
+                        className="glass-button"
+                        style={{ fontSize: '0.7rem', padding: '4px 10px', whiteSpace: 'nowrap' }}
+                      >
+                        {updatingSharingSpaceId === s.id
+                          ? '...'
+                          : s.contact_sharing_mode === 'request_only'
+                            ? 'Passer en partage intégral'
+                            : 'Passer en accès sur demande'}
+                      </button>
+                    </div>
+                  )}
+
                   <div style={styles.cardFooter}>
                     <span style={styles.creationText}>
                       Créé le {new Date(s.created_at).toLocaleDateString('fr-FR', {
@@ -309,7 +395,7 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
                       })}
                     </span>
                     {!isPersonal && (
-                      <button 
+                      <button
                         onClick={() => handleSyncNetwork(s.id)}
                         disabled={syncingSpaceId !== null}
                         style={styles.syncBtn}
@@ -324,7 +410,9 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
             })
           )}
         </div>
-      ) : (
+      )}
+
+      {activeSubTab === 'invitations' && (
         /* Invitations Panel */
         <div style={styles.invitationsLayout}>
           {/* Incoming */}
@@ -391,6 +479,52 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
                 })
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {activeSubTab === 'access-requests' && (
+        /* Contact Access Requests Panel */
+        <div className="glass-panel" style={styles.inviteSection}>
+          <h3 style={styles.sectionTitleInvite}>Demandes d'accès reçues ({incomingAccessRequests.length})</h3>
+          <div style={styles.invitesList}>
+            {loadingAccessRequests ? (
+              <span style={styles.emptyText}>Chargement...</span>
+            ) : incomingAccessRequests.length === 0 ? (
+              <span style={styles.emptyText}>Aucune demande d'accès en attente. Quand un membre de votre équipe demande à voir les détails complets d'un de vos contacts verrouillés, ça apparaîtra ici.</span>
+            ) : (
+              incomingAccessRequests.map(req => (
+                <div key={req.id} className="glass-card" style={styles.inviteCard}>
+                  <div>
+                    <h4 style={styles.inviteSpaceName}>{req.contactName || 'Contact'}</h4>
+                    {req.reason && (
+                      <p style={styles.inviteMeta}>Raison : {req.reason}</p>
+                    )}
+                    <p style={styles.inviteMeta}>
+                      Demandé le {new Date(req.createdAt).toLocaleDateString('fr-FR')}
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={() => handleRespondToRequest(req.id, true)}
+                      disabled={respondingRequestId === req.id}
+                      className="btn-primary"
+                      style={styles.acceptBtn}
+                    >
+                      Approuver
+                    </button>
+                    <button
+                      onClick={() => handleRespondToRequest(req.id, false)}
+                      disabled={respondingRequestId === req.id}
+                      className="glass-button"
+                      style={{ fontSize: '0.8rem', padding: '8px 14px' }}
+                    >
+                      Refuser
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}

@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Pencil, Check, X, Mic, MicOff } from 'lucide-react';
+import { Pencil, Check, X, Mic, MicOff, Lock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { detectContactSynergies, enrichProfileFromScraping, autoEnrichContact, isMistralConfigured, isPerplexityConfigured } from '../lib/mistral';
 import type { ContactSynergy } from '../lib/mistral';
+import { requestContactAccess, listMyPendingRequests } from '../lib/contactAccess';
 
 /**
  * Persist the skills / inferred_needs extracted during enrichment so the synergy
@@ -86,6 +87,30 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
       tags: contactTagsList
     };
   }, [selectedContactId, contacts, notes, tags, contactTags]);
+
+  // Contact access requests — contacts I've already asked to unlock, so the
+  // button can show "En attente" instead of letting me spam the same request.
+  const [pendingAccessRequestIds, setPendingAccessRequestIds] = useState<Set<string>>(new Set());
+  const [requestingAccessId, setRequestingAccessId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    listMyPendingRequests(user.id).then(requests => {
+      setPendingAccessRequestIds(new Set(requests.map(r => r.contactId)));
+    });
+  }, [user]);
+
+  const handleRequestAccess = async (contact: any) => {
+    setRequestingAccessId(contact.id);
+    try {
+      await requestContactAccess(contact.id, user.id, contact.space_id, contact.owner_id);
+      setPendingAccessRequestIds(prev => new Set(prev).add(contact.id));
+    } catch (err: any) {
+      alert(`Erreur lors de la demande d'accès : ${err.message || err}`);
+    } finally {
+      setRequestingAccessId(null);
+    }
+  };
 
   // Form Fields for New Contact
   const [firstName, setFirstName] = useState('');
@@ -392,10 +417,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
       ? contacts.filter(c => c.space_id === bulkEnrichSpaceId)
       : contacts;
 
-    // Step 1: Keep only contacts with valid first+last name AND not yet enriched
+    // Step 1: Keep only contacts with valid first+last name, not yet enriched,
+    // and not locked (a locked contact always looks "empty" — bio/ai_context
+    // are masked, not actually missing — enriching it would be a blind write
+    // onto data we can't even verify).
     const validAndUnenriched = pool
       .map(c => ({ c, score: contactRichnessScore(c) }))
-      .filter(({ c, score }) => score >= 0 && !c.ai_context && !c.bio)
+      .filter(({ c, score }) => score >= 0 && !c.ai_context && !c.bio && c.is_unlocked !== false)
       // Step 2: Sort by richness score — richest data first (best enrichment quality)
       .sort((a, b) => b.score - a.score)
       .map(({ c }) => c);
@@ -1192,7 +1220,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
               {isEditingContact ? 'Modifier la fiche' : 'Fiche Contact'}
             </span>
             <div style={{ display: 'flex', gap: 8 }}>
-              {!isEditingContact && (
+              {!isEditingContact && contactDetails.is_unlocked !== false && (
                 <button
                   onClick={() => {
                     setFullEditData({ ...contactDetails });
@@ -1262,6 +1290,32 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
               </form>
             ) : (
               <>
+                {contactDetails.is_unlocked === false && (
+                  <div style={{
+                    display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center', textAlign: 'center',
+                    padding: '16px 20px', marginBottom: 16, borderRadius: 10,
+                    background: 'rgba(250, 204, 21, 0.06)', border: '1px solid rgba(250, 204, 21, 0.2)'
+                  }}>
+                    <Lock size={20} color="#facc15" />
+                    <span style={{ fontSize: '0.85rem', color: '#facc15' }}>
+                      Contact verrouillé{contactDetails.owner_display_name ? ` — appartient à ${contactDetails.owner_display_name}` : ''}.
+                      Vous ne voyez que son nom tant que l'accès ne vous a pas été accordé.
+                    </span>
+                    <button
+                      onClick={() => handleRequestAccess(contactDetails)}
+                      disabled={requestingAccessId === contactDetails.id || pendingAccessRequestIds.has(contactDetails.id)}
+                      className="glow-button primary"
+                      style={{ fontSize: '0.8rem', padding: '6px 16px' }}
+                    >
+                      {pendingAccessRequestIds.has(contactDetails.id)
+                        ? 'Demande envoyée — en attente'
+                        : requestingAccessId === contactDetails.id
+                          ? 'Envoi...'
+                          : "Demander l'accès complet"}
+                    </button>
+                  </div>
+                )}
+
                 {/* Summary Card */}
                 <div style={styles.profileSection}>
                   <div style={styles.avatarBig}>
@@ -1650,10 +1704,12 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
               )}
             </div>
 
-            {/* Public Web Ingestion & Enrichment */}
+            {/* Public Web Ingestion & Enrichment — not offered on a locked contact:
+                you'd be enriching fields you can't even see the current value of. */}
+            {contactDetails.is_unlocked !== false && (
             <div style={styles.enrichmentBlock}>
               <div style={{ display: 'flex', gap: 8, marginBottom: showEnrichForm ? 12 : 0 }}>
-                <button 
+                <button
                   onClick={handleAutoEnrichSingle}
                   disabled={autoEnrichingSingle}
                   className="btn-primary"
@@ -1662,8 +1718,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                   {autoEnrichingSingle ? 'Recherche en cours...' : ' Auto-Enrichir (Web)'}
                 </button>
                 {!showEnrichForm && (
-                  <button 
-                    onClick={() => setShowEnrichForm(true)} 
+                  <button
+                    onClick={() => setShowEnrichForm(true)}
                     className="btn-secondary"
                     style={{ flex: 1, fontSize: '0.75rem', padding: '8px 12px' }}
                   >
@@ -1699,6 +1755,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                 </div>
               )}
             </div>
+            )}
 
             {/* Note logs */}
             <div style={styles.infoBlock}>

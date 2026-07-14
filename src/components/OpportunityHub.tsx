@@ -313,7 +313,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                   </div>
                   <h3 style={{ margin: '16px 0 8px 0' }}>Analyse Mistral Map-Reduce...</h3>
                   <p style={{ color: 'var(--text-secondary)', marginBottom: 24, fontSize: '0.9rem', textAlign: 'center' }}>
-                    Le réseau est cartographié sémantiquement puis découpé en lots cohérents. Chaque lot est analysé, puis une synthèse globale est générée.
+                    Le réseau est cartographié sémantiquement puis découpé en lots cohérents. Chaque lot est analysé, puis une synthèse globale est générée. Ça peut prendre jusqu'à une minute sur un grand réseau.
                   </p>
                   
                   <div style={styles.progressBarBg}>
@@ -380,10 +380,14 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                           Ces contacts relient des groupes autrement séparés de votre réseau — les meilleurs candidats pour des introductions à fort impact.
                         </p>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
-                          {v3Result.bridgeContacts.map((b, i) => (
+                          {v3Result.bridgeContacts.map((b, i) => {
+                            const isLocked = b.role === 'Verrouillé';
+                            return (
                             <div key={i} className="glass-card" style={{ padding: 16 }}>
                               <div style={{ fontWeight: 600, color: '#fff', marginBottom: 4 }}>{b.name}</div>
-                              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 10 }}>{b.role} · {b.company}</div>
+                              <div style={{ fontSize: '0.8rem', color: isLocked ? '#facc15' : 'var(--text-secondary)', marginBottom: 10 }}>
+                                {isLocked ? '🔒 Accès non accordé — consultez ce contact pour le demander' : `${b.role} · ${b.company}`}
+                              </div>
                               <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden' }}>
                                 <div style={{ height: '100%', width: `${Math.round(b.centralityScore * 100)}%`, background: 'var(--neon-purple)', borderRadius: 99 }} />
                               </div>
@@ -391,7 +395,8 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                                 Score de connexion : {Math.round(b.centralityScore * 100)}%
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}

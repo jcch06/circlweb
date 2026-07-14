@@ -1,4 +1,3 @@
-import { buildSimilarityMatrix, findOptimalK, kMeansClustering, computeBetweennessCentrality } from './vectorMath';
 import { supabase } from './supabase';
 
 export interface TokenUsage {
@@ -944,323 +943,6 @@ export interface MistralPipelineResult {
   timestamp: number;
 }
 
-/** Only model on Mistral capable of the complex, indirect deductions this pipeline requires. */
-const MAP_REDUCE_MODEL = 'mistral-large-latest';
-
-const FALLBACK_BATCH_RESULT: MistralBatchResult = {
-  recurrentNeeds: [],
-  immediateSynergies: [],
-  keyCompetencies: []
-};
-
-const FALLBACK_SYNTHESIS: MistralGlobalSynthesis = {
-  globalThemes: [],
-  crossBatchSynergies: [],
-  networkStrength: "L'analyse globale a échoué (erreur API ou rate-limiting). Veuillez réessayer.",
-  recommendedActionPlan: [],
-  macroNeeds: [],
-  valueChains: []
-};
-
-async function processContactBatch(batch: any[], notes: any[], userContext: string = ''): Promise<MistralBatchResult> {
-  const batchData = batch.map(c => {
-    const contactNotes = notes.filter(n => n.contact_id === c.id || n.contactId === c.id).map(n => n.content).join(' | ');
-    const skills: string[] = Array.isArray(c.skills) ? c.skills : [];
-    const needs: string[] = Array.isArray(c.inferred_needs) ? c.inferred_needs : [];
-    return `<contact id="${c.id}">
-  <name>${c.name || (c.first_name + ' ' + c.last_name)}</name>
-  <role>${c.job_title || 'Inconnu'}</role>
-  <company>${c.company || 'Inconnue'}</company>
-  <skills>${skills.length > 0 ? skills.join(', ') : 'Non renseignées'}</skills>
-  <needs>${needs.length > 0 ? needs.join(', ') : 'Non renseignés'}</needs>
-  <notes>${contactNotes || 'Aucune note disponible'}</notes>
-</contact>`;
-  }).join('\n');
-
-  const prompt = `<role>
-Tu es "Oracle MAP", un analyste expert en réseaux professionnels et en détection de synergies business cachées. Tu es reconnu pour ta capacité à relier des profils en apparence très différents autour d'un besoin, d'une ressource ou d'une compétence complémentaire non évidente.
-</role>
-${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}
-<instructions>
-Analyse EN PROFONDEUR le lot de contacts fourni ci-dessous et extrais :
-1. Les besoins récurrents ou latents (explicites dans les notes, ou déduits du poste/secteur/contexte).
-2. Des synergies immédiates entre paires de contacts DE CE LOT UNIQUEMENT.
-3. Les compétences clés (mots-clés) qui ressortent du groupe.
-</instructions>
-
-<rules>
-- INTERDICTION FORMELLE de renvoyer un tableau "immediateSynergies" vide si le lot contient au moins 2 contacts. Si aucune synergie évidente n'existe, tu DOIS déduire une opportunité d'échange de compétences plausible même entre profils qui semblent éloignés au premier abord (ex : un besoin abstrait chez A peut être résolu par une compétence indirecte ou un réseau détenu par B). Sois créatif mais réaliste.
-- N'invente jamais d'identité : utilise uniquement les id/noms fournis dans les balises <contact>.
-- Chaque synergie doit avoir une "reason" concrète et actionnable, pas une généralité.
-- Réponds STRICTEMENT avec un objet JSON valide respectant le format ci-dessous, sans aucun texte, markdown ou commentaire additionnel.
-</rules>
-
-<contacts>
-${batchData}
-</contacts>
-
-<output_format>
-{
-  "recurrentNeeds": ["besoin 1", "besoin 2"],
-  "immediateSynergies": [
-    {
-      "contactId1": "id exact du premier contact",
-      "contactName1": "Nom du premier",
-      "contactId2": "id exact du deuxieme contact",
-      "contactName2": "Nom du deuxieme",
-      "reason": "Explication concrète et actionnable de la synergie, même indirecte"
-    }
-  ],
-  "keyCompetencies": ["mot cle 1", "mot cle 2"]
-}
-</output_format>`;
-
-  try {
-    const text = await callMistral(prompt, true, MAP_REDUCE_MODEL);
-    const parsed = safeParseJSON(text);
-    if (parsed && Array.isArray(parsed.immediateSynergies) && Array.isArray(parsed.recurrentNeeds) && Array.isArray(parsed.keyCompetencies)) {
-      return parsed as MistralBatchResult;
-    }
-    console.error('Mistral MAP: réponse JSON invalide ou incomplète, fallback appliqué.', text);
-    return { ...FALLBACK_BATCH_RESULT };
-  } catch (err) {
-    console.error('Mistral MAP batch failure:', err);
-    return { ...FALLBACK_BATCH_RESULT };
-  }
-}
-
-// ============================================================================
-// REDUCE: Synthesize all batch results
-// ============================================================================
-async function synthesizeNetwork(
-  batchResults: MistralBatchResult[],
-  userContext: string = '',
-  bridgeContacts: BridgeContact[] = []
-): Promise<MistralGlobalSynthesis> {
-  const aggregatedData = JSON.stringify(batchResults, null, 2);
-  const bridgeContext = bridgeContacts.length > 0
-    ? `\n<bridge_contacts>\nCes contacts relient structurellement des parties autrement séparées du réseau (calculé par centralité d'intermédiarité). Ce sont les meilleurs candidats pour des introductions stratégiques et des chaînes de valeur inter-groupes :\n${bridgeContacts.map(b => `- ${b.name} (${b.role} chez ${b.company})`).join('\n')}\n</bridge_contacts>\n`
-    : '';
-
-  const prompt = `<role>
-Tu es "Oracle REDUCE", un super-cerveau stratégique spécialisé dans la consolidation d'analyses de réseaux professionnels. Ta mission est de fusionner des dizaines d'analyses locales (par lots) en une synthèse globale d'une qualité exceptionnelle.
-</role>
-${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${bridgeContext}
-<instructions>
-1. Fusionne les besoins similaires ou redondants détectés dans les différents lots en "Macro-Besoins" consolidés (ne liste pas les doublons séparément).
-2. Construis des chaînes de valeur globales (value chains) qui relient plusieurs contacts de lots DIFFÉRENTS entre eux autour d'un objectif business commun (ex : A a un besoin, B a la compétence, C a le réseau/financement pour industrialiser). Quand c'est pertinent, utilise les <bridge_contacts> comme maillons de connexion entre groupes.
-3. Identifie les thèmes dominants et les synergies transversales (cross-batch).
-4. Propose un plan d'action concret et priorisé.
-</instructions>
-
-<rules>
-- INTERDICTION de renvoyer des tableaux vides ("globalThemes", "crossBatchSynergies", "macroNeeds") si les données agrégées contiennent au moins un besoin ou une synergie exploitable. Déduis des connexions même si elles ne sont pas explicites lot par lot.
-- Un "Macro-Besoin" doit regrouper au moins un besoin réel présent dans "mergedFrom", jamais inventé de toutes pièces.
-- Une "valueChain" doit contenir au moins 2 étapes (chain) reliant des contacts réellement mentionnés dans les données agrégées.
-- Réponds STRICTEMENT avec un objet JSON valide respectant le format ci-dessous, sans markdown ni texte additionnel.
-</rules>
-
-<aggregated_batch_data>
-${aggregatedData}
-</aggregated_batch_data>
-
-<output_format>
-{
-  "globalThemes": ["thème dominant 1", "thème dominant 2"],
-  "crossBatchSynergies": [
-    {
-      "theme": "Thème de la synergie globale",
-      "description": "Explication de pourquoi ce réseau a de la valeur ici",
-      "potentialImpact": "Estimation de l'impact (ex: Fort potentiel commercial)"
-    }
-  ],
-  "macroNeeds": [
-    {
-      "label": "Nom du besoin consolidé (ex: Recrutement Tech Senior)",
-      "mergedFrom": ["besoin brut 1", "besoin brut 2"],
-      "affectedContactsCount": 3,
-      "priority": "high"
-    }
-  ],
-  "valueChains": [
-    {
-      "title": "Nom de la chaîne de valeur",
-      "description": "Comment ces contacts s'enchaînent pour créer de la valeur",
-      "chain": [
-        { "step": 1, "contactName": "Nom", "role": "Poste", "contribution": "Ce qu'il apporte à la chaîne" }
-      ],
-      "estimatedImpact": "Estimation de l'impact business"
-    }
-  ],
-  "networkStrength": "Résumé en 1-2 phrases de la force principale de ce réseau",
-  "recommendedActionPlan": ["Action 1", "Action 2"]
-}
-</output_format>`;
-
-  try {
-    const text = await callMistral(prompt, true, MAP_REDUCE_MODEL);
-    const parsed = safeParseJSON(text);
-    if (parsed && Array.isArray(parsed.globalThemes)) {
-      return {
-        globalThemes: parsed.globalThemes ?? [],
-        crossBatchSynergies: parsed.crossBatchSynergies ?? [],
-        networkStrength: parsed.networkStrength ?? FALLBACK_SYNTHESIS.networkStrength,
-        recommendedActionPlan: parsed.recommendedActionPlan ?? [],
-        macroNeeds: parsed.macroNeeds ?? [],
-        valueChains: parsed.valueChains ?? []
-      };
-    }
-    console.error('Mistral REDUCE: réponse JSON invalide ou incomplète, fallback appliqué.', text);
-    return { ...FALLBACK_SYNTHESIS };
-  } catch (err) {
-    console.error('Mistral REDUCE synthesis failure:', err);
-    return { ...FALLBACK_SYNTHESIS };
-  }
-}
-
-// ============================================================================
-// SUPPLY / DEMAND: Cross-match needs (demand) with skills (supply) network-wide
-// ============================================================================
-async function buildSupplyDemandMatrix(
-  contacts: any[],
-  notes: any[],
-  userContext: string = ''
-): Promise<SupplyDemandEntry[]> {
-  if (!contacts || contacts.length === 0) return [];
-
-  // Compact catalog of every contact's supply (skills) and demand (needs).
-  // Truncated defensively to keep the single consolidation call affordable.
-  const catalog = contacts.slice(0, 200).map(c => {
-    const contactNotes = notes
-      .filter(n => n.contact_id === c.id || n.contactId === c.id)
-      .map(n => n.content)
-      .join(' | ')
-      .substring(0, 400);
-    const skills: string[] = Array.isArray(c.skills) ? c.skills : [];
-    const needs: string[] = Array.isArray(c.inferred_needs) ? c.inferred_needs : [];
-    return {
-      id: c.id,
-      name: c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim(),
-      role: c.job_title || 'Inconnu',
-      company: c.company || 'Inconnue',
-      skills,
-      needs,
-      notes: contactNotes
-    };
-  });
-
-  const prompt = `<role>
-Tu es "Oracle MARKET", un analyste spécialisé dans la cartographie OFFRE / DEMANDE d'un réseau professionnel. Tu construis une matrice qui, pour chaque besoin identifié dans le réseau, liste QUI le demande et QUI peut le fournir.
-</role>
-${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}
-<instructions>
-1. Parcours le catalogue de contacts (chacun a des compétences = OFFRE, et des besoins = DEMANDE).
-2. Regroupe les besoins similaires en une même ligne "need" (ex : "trouver un développeur" et "besoin technique" → "Développement / compétence technique").
-3. Pour chaque besoin, liste les "demanders" (contacts qui expriment ce besoin) et les "suppliers" (contacts dont les compétences y répondent, même indirectement).
-4. Évalue le "gapLevel" :
-   - "opportunity" : forte demande mais aucun/peu de fournisseur dans le réseau (manque à combler = opportunité).
-   - "partial" : demande partiellement couverte.
-   - "covered" : demande bien couverte par plusieurs fournisseurs.
-5. Mets "opportunityForUser" à true si l'utilisateur (voir user_context) est bien placé pour capter cette opportunité (via ses compétences, ou en jouant l'intermédiaire rémunéré).
-</instructions>
-
-<rules>
-- INTERDICTION de renvoyer un tableau vide si le catalogue contient au moins un besoin exploitable. Déduis les correspondances offre/demande même quand elles ne sont pas littérales.
-- Utilise UNIQUEMENT les id/noms fournis dans le catalogue pour demanders/suppliers.
-- Priorise les lignes à fort intérêt business (opportunités pour l'utilisateur, gaps de marché).
-- Limite-toi aux ~12 lignes les plus pertinentes.
-- Réponds STRICTEMENT avec un objet JSON valide, sans markdown ni texte additionnel.
-</rules>
-
-<catalog>
-${JSON.stringify(catalog, null, 2)}
-</catalog>
-
-<output_format>
-{
-  "supplyDemand": [
-    {
-      "need": "Nom clair du besoin consolidé",
-      "demanders": [{ "id": "id exact", "name": "Nom" }],
-      "suppliers": [{ "id": "id exact", "name": "Nom" }],
-      "gapLevel": "opportunity",
-      "opportunityForUser": true
-    }
-  ]
-}
-</output_format>`;
-
-  try {
-    const text = await callMistral(prompt, true, MAP_REDUCE_MODEL);
-    const parsed = safeParseJSON(text);
-    if (parsed && Array.isArray(parsed.supplyDemand)) {
-      // Defensive normalization so the UI never crashes on a malformed row.
-      return parsed.supplyDemand
-        .filter((e: any) => e && typeof e.need === 'string')
-        .map((e: any) => ({
-          need: e.need,
-          demanders: Array.isArray(e.demanders) ? e.demanders : [],
-          suppliers: Array.isArray(e.suppliers) ? e.suppliers : [],
-          gapLevel: ['covered', 'partial', 'opportunity'].includes(e.gapLevel) ? e.gapLevel : 'partial',
-          opportunityForUser: Boolean(e.opportunityForUser)
-        })) as SupplyDemandEntry[];
-    }
-    console.error('Mistral SUPPLY/DEMAND: réponse JSON invalide, fallback vide appliqué.', text);
-    return [];
-  } catch (err) {
-    console.error('Mistral SUPPLY/DEMAND failure:', err);
-    return [];
-  }
-}
-
-// ============================================================================
-// Embeddings (Mistral Embed)
-// ============================================================================
-export async function computeMistralEmbeddings(
-  contacts: any[],
-  notes: any[],
-  onProgress?: (pct: number) => void
-): Promise<{ contactId: string; vector: number[] }[]> {
-  const results: { contactId: string; vector: number[] }[] = [];
-
-  const BATCH_SIZE = 20;
-  for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
-    const batch = contacts.slice(i, i + BATCH_SIZE);
-    const inputs = batch.map(c => {
-      const contactNotes = notes.filter((n: any) => n.contact_id === c.id || n.contactId === c.id).map((n: any) => n.content).join(' ');
-      return `Profil: ${c.first_name || c.name}, Role: ${c.job_title || c.role}, Entreprise: ${c.company}. Notes: ${contactNotes}`.substring(0, 8000);
-    });
-
-    try {
-      const authHeader = await getAuthHeader();
-      const response = await fetch('/api/ai/mistral-embeddings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeader },
-        body: JSON.stringify({ inputs })
-      });
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || `Embeddings proxy error ${response.status}`);
-      }
-      const embedResponse = await response.json();
-
-      trackGlobalUsage(embedResponse.usage);
-
-      embedResponse.data.forEach((d: any, idx: number) => {
-        results.push({ contactId: batch[idx].id, vector: d.embedding as number[] });
-      });
-    } catch (err) {
-      console.error("Mistral Embedding Error", err);
-    }
-
-    onProgress?.(Math.min(100, Math.round(((i + BATCH_SIZE) / contacts.length) * 100)));
-    if (i + BATCH_SIZE < contacts.length) {
-      await sleep(500);
-    }
-  }
-
-  return results;
-}
 
 export interface BridgeContact {
   id: string;
@@ -1270,154 +952,6 @@ export interface BridgeContact {
   centralityScore: number;
 }
 
-interface NetworkTopology {
-  /** Contacts grouped into semantically coherent batches (20-30 contacts each) for the MAP step. */
-  batches: any[][];
-  /** Contacts that structurally bridge otherwise-separate clusters of the network (betweenness centrality). */
-  bridgeContacts: BridgeContact[];
-}
-
-const MIN_MAP_BATCH = 15;
-const MAX_MAP_BATCH = 30;
-
-/** Naive fallback: chunk contacts into fixed-size slices, ignoring semantics. */
-function chunkNaive(contacts: any[], size: number = 25): any[][] {
-  const batches: any[][] = [];
-  for (let i = 0; i < contacts.length; i += size) {
-    batches.push(contacts.slice(i, i + size));
-  }
-  return batches;
-}
-
-/**
- * Packs cluster-grouped contact id lists into batches of 20-30, preserving
- * cluster boundaries where possible so each MAP batch is thematically coherent.
- * Small leftover groups get merged into the previous batch rather than sent
- * alone (a lone/duo batch starves the MAP prompt's anti-empty-synergy rule).
- */
-function packClustersIntoBatches(clusterGroups: any[][]): any[][] {
-  const batches: any[][] = [];
-  let buffer: any[] = [];
-
-  for (const group of clusterGroups) {
-    let idx = 0;
-    while (idx < group.length) {
-      const space = MAX_MAP_BATCH - buffer.length;
-      const slice = group.slice(idx, idx + space);
-      buffer.push(...slice);
-      idx += slice.length;
-      if (buffer.length >= MAX_MAP_BATCH) {
-        batches.push(buffer);
-        buffer = [];
-      }
-    }
-  }
-
-  if (buffer.length > 0) {
-    if (batches.length > 0 && buffer.length < MIN_MAP_BATCH) {
-      batches[batches.length - 1] = batches[batches.length - 1].concat(buffer);
-    } else {
-      batches.push(buffer);
-    }
-  }
-
-  return batches;
-}
-
-/**
- * Computes network topology ahead of the MAP step:
- * 1. Embeds every contact (mistral-embed).
- * 2. K-means clusters them so MAP batches are thematically coherent instead of
- *    arbitrary array slices (a batch mixing a politician, a dev and a mason
- *    struggles to find real synergies; a batch of semantically close profiles doesn't).
- * 3. Runs betweenness centrality on the similarity graph to surface "bridge"
- *    contacts — the people structurally connecting otherwise separate parts
- *    of the network (highest strategic introduction value).
- *
- * Falls back to naive fixed-size chunking (previous behavior) if embeddings
- * fail, are only partially available, or the network is too small to cluster.
- */
-async function computeNetworkTopology(
-  contacts: any[],
-  notes: any[],
-  onProgress?: (pct: number) => void
-): Promise<NetworkTopology> {
-  // `onProgress` here is local to this phase (0-100); the caller rescales it
-  // to whatever share of the overall pipeline this phase represents.
-  if (contacts.length < 6) {
-    onProgress?.(100);
-    return { batches: chunkNaive(contacts), bridgeContacts: [] };
-  }
-
-  let embeddings: { contactId: string; vector: number[] }[] = [];
-  try {
-    // Embeddings are the slow part of this phase: give them 0-85% of the local scale.
-    embeddings = await computeMistralEmbeddings(contacts, notes, (pct) => onProgress?.(pct * 0.85));
-  } catch (err) {
-    console.error('computeNetworkTopology: embedding failure, falling back to naive batching.', err);
-    onProgress?.(100);
-    return { batches: chunkNaive(contacts), bridgeContacts: [] };
-  }
-
-  if (embeddings.length < 6) {
-    onProgress?.(100);
-    return { batches: chunkNaive(contacts), bridgeContacts: [] };
-  }
-
-  const embeddedIds = new Set(embeddings.map(e => e.contactId));
-  const contactById = new Map(contacts.map(c => [c.id, c]));
-  const vectors = embeddings.map(e => e.vector);
-
-  let clusterGroups: any[][];
-  let bridgeContacts: BridgeContact[] = [];
-
-  try {
-    const k = findOptimalK(vectors);
-    const { clusters } = kMeansClustering(vectors, k);
-
-    const groupsById = new Map<number, any[]>();
-    embeddings.forEach((e, idx) => {
-      const clusterId = clusters[idx];
-      const contact = contactById.get(e.contactId);
-      if (!contact) return;
-      if (!groupsById.has(clusterId)) groupsById.set(clusterId, []);
-      groupsById.get(clusterId)!.push(contact);
-    });
-    clusterGroups = Array.from(groupsById.values());
-
-    const similarityMatrix = buildSimilarityMatrix(vectors);
-    const centrality = computeBetweennessCentrality(similarityMatrix, 0.5);
-    const maxCentrality = Math.max(...centrality, 0);
-
-    if (maxCentrality > 0) {
-      bridgeContacts = embeddings
-        .map((e, idx) => ({ e, score: centrality[idx] }))
-        .filter(({ score }) => score > 0)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 6)
-        .map(({ e, score }) => {
-          const c = contactById.get(e.contactId);
-          return {
-            id: e.contactId,
-            name: c?.name || `${c?.first_name || ''} ${c?.last_name || ''}`.trim(),
-            role: c?.job_title || 'Inconnu',
-            company: c?.company || 'Inconnue',
-            centralityScore: Math.round((score / maxCentrality) * 100) / 100
-          };
-        });
-    }
-  } catch (err) {
-    console.error('computeNetworkTopology: clustering failure, falling back to a single naive group.', err);
-    clusterGroups = [contacts.filter(c => embeddedIds.has(c.id))];
-  }
-
-  // Contacts whose embedding failed still need to be analyzed — append them as their own group(s).
-  const unembedded = contacts.filter(c => !embeddedIds.has(c.id));
-  if (unembedded.length > 0) clusterGroups.push(unembedded);
-
-  onProgress?.(100);
-  return { batches: packClustersIntoBatches(clusterGroups), bridgeContacts };
-}
 
 // ============================================================================
 // ORCHESTRATOR: Run full Map-Reduce Pipeline
@@ -1442,52 +976,44 @@ export interface AnalysisHistoryMeta {
   label?: string;
 }
 
+/**
+ * Runs the full Map-Reduce Oracle pipeline server-side (api/oracle/run-analysis.ts):
+ * embeddings, semantic clustering, MAP, REDUCE, and supply/demand all execute
+ * with FULL contact data (never sent to this client), and the server redacts
+ * anything involving a contact the caller doesn't have full access to before
+ * returning — this is what makes cross-network analysis safe even when some
+ * contacts are locked (see the confidentialité inter-réseaux migration).
+ *
+ * `contacts` is still used here for the local cache key and history bookkeeping
+ * (count/ids), not sent to the pipeline itself — the server fetches its own
+ * authoritative copy scoped to `historyMeta.spaceId`.
+ */
 export async function runMistralOracleBatchPipeline(
   contacts: any[],
-  notes: any[],
+  _notes: any[],
   userProfile?: any,
   onProgress?: (pct: number) => void,
   historyMeta?: AnalysisHistoryMeta
 ): Promise<MistralPipelineResult> {
   resetGlobalUsage();
+  onProgress?.(10);
 
-  const userContext = userProfile ? buildUserContext(userProfile) : '';
+  const authHeader = await getAuthHeader();
+  const response = await fetch('/api/oracle/run-analysis', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader },
+    body: JSON.stringify({ spaceId: historyMeta?.spaceId ?? null, userProfile })
+  });
 
-  // Embeddings + semantic clustering + bridge-contact detection ahead of MAP,
-  // so batches are thematically coherent instead of arbitrary array slices.
-  const { batches, bridgeContacts } = await computeNetworkTopology(
-    contacts,
-    notes,
-    (pct) => onProgress?.(pct * 0.3) // 0-30%: topology phase
-  );
+  onProgress?.(90);
 
-  const batchResults: MistralBatchResult[] = [];
-
-  for (let i = 0; i < batches.length; i++) {
-    onProgress?.(30 + (i / batches.length) * 35); // 30-65%: MAP
-    const res = await processContactBatch(batches[i], notes, userContext);
-    batchResults.push(res);
-    if (i < batches.length - 1) {
-      await sleep(1500);
-    }
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `Oracle analysis proxy error ${response.status}`);
   }
 
-  onProgress?.(70);
-  const synthesis = await synthesizeNetwork(batchResults, userContext, bridgeContacts);
-
-  onProgress?.(85);
-  const supplyDemand = await buildSupplyDemandMatrix(contacts, notes, userContext);
+  const result: MistralPipelineResult = await response.json();
   onProgress?.(100);
-
-  synthesis.tokenUsage = globalTokenUsage || undefined;
-
-  const result = {
-    batches: batchResults,
-    synthesis,
-    supplyDemand,
-    bridgeContacts,
-    timestamp: Date.now()
-  };
 
   const cacheKey = `circl_mistral_v7_${contacts.length}_${contacts.map(c => c.id).sort().join(',').substring(0, 100)}`;
   localStorage.setItem(cacheKey, JSON.stringify(result));
@@ -1611,6 +1137,9 @@ const FALLBACK_DELTA: AnalysisDelta = {
  * got resolved (disappeared), new synergies, and how the strategic
  * connectors changed.
  */
+/** Only model on Mistral capable of the complex, indirect deductions this comparison requires. */
+const MAP_REDUCE_MODEL = 'mistral-large-latest';
+
 export async function compareAnalyses(
   before: MistralPipelineResult,
   after: MistralPipelineResult

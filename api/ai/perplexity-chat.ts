@@ -16,25 +16,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const userId = await authenticateRequest(req);
-  if (!userId) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
-
-  const apiKey = process.env.PERPLEXITY_API_KEY;
-  if (!apiKey) {
-    res.status(500).json({ error: 'Perplexity API key is not configured on the server' });
-    return;
-  }
-
-  const { messages } = req.body || {};
-  if (!Array.isArray(messages) || messages.length === 0) {
-    res.status(400).json({ error: 'Missing messages in request body' });
-    return;
-  }
-
+  // See mistral-chat.ts for why this is one top-level try/catch: no failure
+  // mode should ever escape as a non-JSON platform error page.
   try {
+    const userId = await authenticateRequest(req);
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const apiKey = process.env.PERPLEXITY_API_KEY;
+    if (!apiKey) {
+      res.status(500).json({ error: 'Perplexity API key is not configured on the server' });
+      return;
+    }
+
+    const { messages } = req.body || {};
+    if (!Array.isArray(messages) || messages.length === 0) {
+      res.status(400).json({ error: 'Missing messages in request body' });
+      return;
+    }
+
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
       headers: {

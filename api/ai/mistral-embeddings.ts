@@ -17,25 +17,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const userId = await authenticateRequest(req);
-  if (!userId) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
-
-  const apiKey = process.env.MISTRAL_API_KEY;
-  if (!apiKey) {
-    res.status(500).json({ error: 'Mistral API key is not configured on the server' });
-    return;
-  }
-
-  const { inputs } = req.body || {};
-  if (!Array.isArray(inputs) || inputs.length === 0) {
-    res.status(400).json({ error: 'Missing inputs in request body' });
-    return;
-  }
-
+  // See mistral-chat.ts for why this is one top-level try/catch: no failure
+  // mode should ever escape as a non-JSON platform error page.
   try {
+    const userId = await authenticateRequest(req);
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const apiKey = process.env.MISTRAL_API_KEY;
+    if (!apiKey) {
+      res.status(500).json({ error: 'Mistral API key is not configured on the server' });
+      return;
+    }
+
+    const { inputs } = req.body || {};
+    if (!Array.isArray(inputs) || inputs.length === 0) {
+      res.status(400).json({ error: 'Missing inputs in request body' });
+      return;
+    }
+
     const client = new Mistral({ apiKey });
     const response = await client.embeddings.create({ model: 'mistral-embed', inputs });
     res.status(200).json({

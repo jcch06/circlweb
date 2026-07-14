@@ -17,25 +17,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const userId = await authenticateRequest(req);
-  if (!userId) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
-
-  const apiKey = process.env.MISTRAL_API_KEY;
-  if (!apiKey) {
-    res.status(500).json({ error: 'Mistral API key is not configured on the server' });
-    return;
-  }
-
-  const { model, messages, responseFormat } = req.body || {};
-  if (!model || !Array.isArray(messages) || messages.length === 0) {
-    res.status(400).json({ error: 'Missing model or messages in request body' });
-    return;
-  }
-
+  // Everything below is wrapped in one top-level try/catch so that literally
+  // no failure mode (auth, key lookup, SDK call, anything unforeseen) can
+  // ever escape as an uncaught exception — which would make Vercel return a
+  // non-JSON platform error page the client can't parse or show meaningfully.
   try {
+    const userId = await authenticateRequest(req);
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const apiKey = process.env.MISTRAL_API_KEY;
+    if (!apiKey) {
+      res.status(500).json({ error: 'Mistral API key is not configured on the server' });
+      return;
+    }
+
+    const { model, messages, responseFormat } = req.body || {};
+    if (!model || !Array.isArray(messages) || messages.length === 0) {
+      res.status(400).json({ error: 'Missing model or messages in request body' });
+      return;
+    }
+
     const client = new Mistral({ apiKey });
     const response = await client.chat.complete({
       model,

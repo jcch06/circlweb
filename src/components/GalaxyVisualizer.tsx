@@ -314,6 +314,14 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
     }
   }, [activeContacts]);
 
+  // Explicit "who-knows-who" edges created from note mentions.
+  const [contactLinks, setContactLinks] = useState<any[]>([]);
+  useEffect(() => {
+    supabase.from('contact_links')
+      .select('from_contact_id, to_contact_id')
+      .then(({ data }) => setContactLinks(data || []));
+  }, [selectedSpaceId]);
+
   // Construct Graph Data (Nodes & Links)
   const graphData = useMemo(() => {
     const nodes = activeContacts.map(c => {
@@ -370,8 +378,16 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
       }
     }
 
+    // Explicit mention links (from notes) — the strongest, most meaningful edges.
+    const nodeIds = new Set(nodes.map(n => n.id));
+    contactLinks.forEach((l: any) => {
+      if (nodeIds.has(l.from_contact_id) && nodeIds.has(l.to_contact_id)) {
+        links.push({ source: l.from_contact_id, target: l.to_contact_id, type: 'mention', val: 4 });
+      }
+    });
+
     return { nodes, links };
-  }, [activeContacts, spaces, contactTags, selectedSpaceId]);
+  }, [activeContacts, spaces, contactTags, selectedSpaceId, contactLinks]);
 
   // Fetch full details for the selected contact drawer (including notes and tags)
   const contactDetails = useMemo(() => {
@@ -612,9 +628,10 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
             width={dimensions.width}
             height={dimensions.height}
             backgroundColor="#faf9fc"
-            linkColor={(link: any) => 
-              link.type === 'company' ? 'rgba(79, 142, 247, 0.35)' : 
-              link.type === 'tag' ? 'rgba(159, 97, 232, 0.3)' : 'rgba(255, 255, 255, 0.08)'
+            linkColor={(link: any) =>
+              link.type === 'mention' ? 'rgba(124, 92, 224, 0.6)' :
+              link.type === 'company' ? 'rgba(79, 142, 247, 0.35)' :
+              link.type === 'tag' ? 'rgba(159, 97, 232, 0.3)' : 'rgba(120, 120, 140, 0.15)'
             }
             linkWidth={(link: any) => link.val || 1}
             onNodeClick={(node) => setSelectedNode(node)}

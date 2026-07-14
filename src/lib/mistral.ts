@@ -515,34 +515,46 @@ export async function autoEnrichContact(contact: {
   job_title?: string;
   industry?: string;
   bio?: string;
+  ai_context?: string;
   location?: string;
 }): Promise<EnrichmentResult> {
   // Validate before even calling the API
   if (!isValidContactForEnrichment(contact)) {
-    throw new Error(`Donn├®es insuffisantes ou invalides pour enrichir "${contact.first_name} ${contact.last_name}"`);
+    throw new Error(`Données insuffisantes ou invalides pour enrichir "${contact.first_name} ${contact.last_name}"`);
   }
 
+  const hasExistingContent = Boolean(contact.bio?.trim() || contact.ai_context?.trim());
+
+  const existingContextBlock = hasExistingContent
+    ? `\nL'utilisateur a déjà renseigné manuellement les informations suivantes sur ce contact — NE LES EFFACE PAS :
+${contact.bio?.trim() ? `Bio existante : ${contact.bio.trim()}` : ''}
+${contact.ai_context?.trim() ? `Contexte existant : ${contact.ai_context.trim()}` : ''}
+`
+    : '';
+
   const prompt = `Tu es un assistant d'enrichissement de contacts professionnels B2B.
-Recherche sur le web des informations R├ëELLES et V├ëRIFIABLES sur ce contact professionnel.
+Recherche sur le web des informations RÉELLES et VÉRIFIABLES sur ce contact professionnel.
 
 Nom complet : ${contact.first_name} ${contact.last_name}
-Poste : ${contact.job_title || 'Non renseign├®'}
-Entreprise : ${contact.company || 'Non renseign├®e'}
-Secteur d├®clar├® : ${contact.industry || 'Non renseign├®'}
-Localisation : ${contact.location || 'Non renseign├®e'}
-
-R├êGLE ABSOLUE : Si tu n'as pas assez d'informations v├®rifiables, mets "null" plut├┤t qu'inventer.
-Ne g├®n├¿re JAMAIS de bio g├®n├®rique comme "professionnel chevronn├®" ou "experte en marketing digital".
-La bio doit ├¬tre SP├ëCIFIQUE ├á cette personne et cette entreprise.
+Poste : ${contact.job_title || 'Non renseigné'}
+Entreprise : ${contact.company || 'Non renseignée'}
+Secteur déclaré : ${contact.industry || 'Non renseigné'}
+Localisation : ${contact.location || 'Non renseignée'}
+${existingContextBlock}
+${hasExistingContent
+  ? `RÈGLE ABSOLUE : Utilise les informations déjà renseignées ci-dessus comme BASE de vérité. Ta recherche web doit COMPLÉTER et ENRICHIR cette base, pas la remplacer. Si tes recherches confirment ou précisent ce qui est déjà écrit, intègre-le dans une version enrichie. Si tu ne trouves rien de nouveau, renvoie la bio/le contexte existants tels quels plutôt que "null" — ne fais JAMAIS régresser une information déjà présente.`
+  : `RÈGLE ABSOLUE : Si tu n'as pas assez d'informations vérifiables, mets "null" plutôt qu'inventer.`}
+Ne génère JAMAIS de bio générique comme "professionnel chevronné" ou "experte en marketing digital".
+La bio doit être SPÉCIFIQUE à cette personne et cette entreprise.
 
 Retourne UNIQUEMENT un objet JSON valide avec cette structure exacte, sans markdown ni code blocks autour :
 {
-  "industry": "secteur pr├®cis ou null si inconnu",
-  "companySize": "taille estim├®e (1-10 | 11-50 | 51-200 | 201-1000 | 1000+) ou null",
-  "bio": "bio SP├ëCIFIQUE et V├ëRIFIABLE en 1-2 phrases, ou null si pas assez d'info",
-  "skills": ["comp├®tences sp├®cifiques au poste/secteur"],
-  "inferredNeeds": ["d├®fis sp├®cifiques ├á ce type de r├┤le dans ce secteur"],
-  "aiContext": "conseil concret et personnalis├® sur comment aborder ce contact, ou null si pas assez d'info"
+  "industry": "secteur précis ou null si inconnu",
+  "companySize": "taille estimée (1-10 | 11-50 | 51-200 | 201-1000 | 1000+) ou null",
+  "bio": "bio SPÉCIFIQUE et VÉRIFIABLE en 1-2 phrases, ou null si pas assez d'info",
+  "skills": ["compétences spécifiques au poste/secteur"],
+  "inferredNeeds": ["défis spécifiques à ce type de rôle dans ce secteur"],
+  "aiContext": "conseil concret et personnalisé sur comment aborder ce contact, ou null si pas assez d'info"
 }`;
 
   const authHeader = await getAuthHeader();

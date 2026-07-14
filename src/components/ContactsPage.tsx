@@ -427,6 +427,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
           job_title: c.job_title,
           industry: c.industry,
           bio: c.bio,
+          ai_context: c.ai_context,
           location: c.location
         });
 
@@ -660,12 +661,16 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
     try {
       const enrichedData = await autoEnrichContact(contactDetails);
 
-      const { error } = await supabase.from('contacts').update({
-        bio: enrichedData.bio,
-        ai_context: enrichedData.aiContext,
-        industry: enrichedData.industry,
-        enriched_at: new Date().toISOString()
-      }).eq('id', contactDetails.id);
+      // Only overwrite a field if the search actually found something —
+      // never let a "null"/empty result erase existing (possibly manually
+      // entered) data. The prompt itself is instructed to merge rather than
+      // replace, this is defense-in-depth in case it doesn't.
+      const updateData: Record<string, string> = { enriched_at: new Date().toISOString() };
+      if (enrichedData.industry && enrichedData.industry !== 'null') updateData.industry = enrichedData.industry;
+      if (enrichedData.bio && enrichedData.bio !== 'null') updateData.bio = enrichedData.bio;
+      if (enrichedData.aiContext && enrichedData.aiContext !== 'null') updateData.ai_context = enrichedData.aiContext;
+
+      const { error } = await supabase.from('contacts').update(updateData).eq('id', contactDetails.id);
 
       if (error) throw error;
 
@@ -712,14 +717,15 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
         scrapedText
       );
 
-      // Save enrichment to Supabase
+      // Save enrichment to Supabase — never let an empty/missing extraction
+      // erase data that's already there (existing bio/context/company size).
       const { error } = await supabase
         .from('contacts')
         .update({
           bio: enrichment.bio || contactDetails.bio,
           industry: enrichment.industry || contactDetails.industry,
-          company_size: enrichment.companySize,
-          ai_context: enrichment.aiContext
+          company_size: enrichment.companySize || contactDetails.company_size,
+          ai_context: enrichment.aiContext || contactDetails.ai_context
         })
         .eq('id', contactDetails.id);
 

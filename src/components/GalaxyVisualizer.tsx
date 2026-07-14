@@ -466,14 +466,15 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
         scrapedText
       );
 
-      // Save enrichment to Supabase
+      // Save enrichment to Supabase — never let an empty/missing extraction
+      // erase data that's already there (existing bio/context/company size).
       const { error: updateError } = await supabase
         .from('contacts')
         .update({
-          bio: enrichment.bio,
-          industry: enrichment.industry,
-          company_size: enrichment.companySize,
-          ai_context: enrichment.aiContext,
+          bio: enrichment.bio || selectedNode.bio,
+          industry: enrichment.industry || selectedNode.industry,
+          company_size: enrichment.companySize || selectedNode.company_size,
+          ai_context: enrichment.aiContext || selectedNode.ai_context,
           enriched_at: new Date().toISOString(),
           source: 'enrichment'
         })

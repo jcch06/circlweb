@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Zap, Copy, Check, Target, Key, Brain, Workflow, Award, Scale, Share2 } from 'lucide-react';
-import type { MistralPipelineResult } from '../lib/mistral';
+import { Zap, Copy, Check, Target, Key, Brain, Workflow, Award, Scale, Share2, History, GitCompare, Trash2, ArrowRight } from 'lucide-react';
+import type { MistralPipelineResult, AnalysisHistoryEntry, AnalysisDelta } from '../lib/mistral';
 import {
   suggestWarmIntros,
   isMistralConfigured,
   runMistralOracleBatchPipeline,
-  getCachedMistralPipelineResult
+  getCachedMistralPipelineResult,
+  listAnalysisHistory,
+  getAnalysisById,
+  deleteAnalysis,
+  compareAnalyses
 } from '../lib/mistral';
 import { UserProfilePopup } from './UserProfilePopup';
 import { SupplyDemandMatrix } from './SupplyDemandMatrix';
@@ -32,15 +36,24 @@ function loadUserProfile(user: any): any | null {
   }
 }
 
-export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes, user }) => {
-  const [activeMode, setActiveMode] = useState<'network' | 'opportunities' | 'market' | 'intros' | 'radar'>('network');
-  
+export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes, user, selectedSpaceId }) => {
+  const [activeMode, setActiveMode] = useState<'network' | 'opportunities' | 'market' | 'intros' | 'radar' | 'history'>('network');
+
   const [loading, setLoading] = useState(false);
   const [pipelineRunning, setPipelineRunning] = useState(false);
   const [pipelineProgress, setPipelineProgress] = useState(0);
-  
+
   const [v3Result, setV3Result] = useState<MistralPipelineResult | null>(null);
+  const [viewingArchiveId, setViewingArchiveId] = useState<string | null>(null);
   const [showProfilePopup, setShowProfilePopup] = useState(false);
+
+  // Analysis history & delta comparison
+  const [history, setHistory] = useState<AnalysisHistoryEntry[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [compareFromId, setCompareFromId] = useState<string>('');
+  const [compareToId, setCompareToId] = useState<string>('');
+  const [delta, setDelta] = useState<AnalysisDelta | null>(null);
+  const [loadingDelta, setLoadingDelta] = useState(false);
 
   // Legacy: Warm Intros (kept as a separate targeted feature)
   const [intros, setIntros] = useState<any[]>([]);
@@ -65,15 +78,93 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
       const cached = getCachedMistralPipelineResult(contacts);
       if (cached && !pipelineRunning) {
         setV3Result(cached);
+        setViewingArchiveId(null);
       }
     }
   }, [contacts]);
+
+  const refreshHistory = async () => {
+    setLoadingHistory(true);
+    try {
+      const entries = await listAnalysisHistory(selectedSpaceId ?? null);
+      setHistory(entries);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshHistory();
+  }, [selectedSpaceId]);
+
+  const handleViewArchivedAnalysis = async (id: string) => {
+    setLoading(true);
+    try {
+      const archived = await getAnalysisById(id);
+      if (!archived) {
+        alert("Impossible de charger cette analyse archivée.");
+        return;
+      }
+      setV3Result(archived);
+      setViewingArchiveId(id);
+      setActiveMode('network');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReturnToLatest = () => {
+    const cached = getCachedMistralPipelineResult(contacts);
+    setV3Result(cached);
+    setViewingArchiveId(null);
+  };
+
+  const handleDeleteArchivedAnalysis = async (id: string) => {
+    if (!confirm("Supprimer définitivement cette analyse de l'historique ?")) return;
+    try {
+      await deleteAnalysis(id);
+      setHistory(h => h.filter(e => e.id !== id));
+      if (compareFromId === id) setCompareFromId('');
+      if (compareToId === id) setCompareToId('');
+    } catch (err: any) {
+      alert(`Erreur lors de la suppression : ${err.message || err}`);
+    }
+  };
+
+  const handleCompareAnalyses = async () => {
+    if (!compareFromId || !compareToId || compareFromId === compareToId) {
+      alert("Sélectionnez deux analyses différentes à comparer.");
+      return;
+    }
+    setLoadingDelta(true);
+    setDelta(null);
+    try {
+      const [before, after] = await Promise.all([
+        getAnalysisById(compareFromId),
+        getAnalysisById(compareToId)
+      ]);
+      if (!before || !after) {
+        alert("Impossible de charger les deux analyses sélectionnées.");
+        return;
+      }
+      const result = await compareAnalyses(before, after);
+      setDelta(result);
+    } catch (err) {
+      console.error(err);
+      alert("Erreur lors de la comparaison des analyses.");
+    } finally {
+      setLoadingDelta(false);
+    }
+  };
 
   // V3 Pipeline trigger
   const triggerV3Pipeline = async (forceRefresh = false) => {
     setPipelineRunning(true);
     setPipelineProgress(0);
     setLoading(true);
+    setViewingArchiveId(null);
 
     if (forceRefresh) {
       const keys = Object.keys(localStorage).filter(k => k.startsWith('circl_mistral_v7_'));
@@ -88,9 +179,11 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
         userProfile,
         (progress) => {
           setPipelineProgress(progress);
-        }
+        },
+        { ownerId: user.id, spaceId: selectedSpaceId ?? null }
       );
       setV3Result(result);
+      refreshHistory();
     } catch (err) {
       console.error(err);
       alert("Erreur lors de l'analyse Mistral AI. Vérifiez votre clé API.");
@@ -200,6 +293,13 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
               <Target size={16} />
               Warm Intros
             </button>
+            <button
+              onClick={() => setActiveMode('history')}
+              style={{ ...styles.tabBtn, ...(activeMode === 'history' ? styles.tabBtnActive : {}) }}
+            >
+              <History size={16} />
+              Historique
+            </button>
           </div>
 
           <div style={styles.tabContentContainer}>
@@ -238,7 +338,27 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
-                    
+
+                    {viewingArchiveId && (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                        padding: '12px 20px', borderRadius: 10,
+                        background: 'rgba(250, 204, 21, 0.08)', border: '1px solid rgba(250, 204, 21, 0.25)'
+                      }}>
+                        <span style={{ fontSize: '0.85rem', color: '#facc15' }}>
+                          <History size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+                          Vous consultez une analyse archivée
+                          {(() => {
+                            const entry = history.find(h => h.id === viewingArchiveId);
+                            return entry ? ` du ${new Date(entry.createdAt).toLocaleString('fr-FR')}` : '';
+                          })()}.
+                        </span>
+                        <button className="glass-button" onClick={handleReturnToLatest} style={{ fontSize: '0.75rem', padding: '4px 12px', whiteSpace: 'nowrap' }}>
+                          Revenir à la dernière analyse
+                        </button>
+                      </div>
+                    )}
+
                     {/* Synthèse */}
                     <div className="glass-card" style={{ padding: 32, background: 'linear-gradient(145deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.4) 100%)', border: '1px solid rgba(255,255,255,0.05)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
@@ -536,6 +656,174 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                 )}
               </div>
             )}
+
+            {/* 4. HISTORY & DELTA TAB */}
+            {activeMode === 'history' && (
+              <div style={styles.tabContent}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+
+                  {/* Delta comparison */}
+                  <div className="glass-card" style={{ padding: 24 }}>
+                    <h3 style={{ color: 'var(--neon-purple)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <GitCompare size={20} /> Comparer deux analyses
+                    </h3>
+                    {history.length < 2 ? (
+                      <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                        Il faut au moins 2 analyses archivées pour comparer leur évolution.
+                      </p>
+                    ) : (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+                          <select
+                            value={compareFromId}
+                            onChange={e => setCompareFromId(e.target.value)}
+                            style={styles.historySelect}
+                          >
+                            <option value="">Analyse de départ...</option>
+                            {history.map(h => (
+                              <option key={h.id} value={h.id}>
+                                {h.label || new Date(h.createdAt).toLocaleString('fr-FR')} ({h.contactCount} contacts)
+                              </option>
+                            ))}
+                          </select>
+                          <ArrowRight size={18} color="var(--text-muted)" />
+                          <select
+                            value={compareToId}
+                            onChange={e => setCompareToId(e.target.value)}
+                            style={styles.historySelect}
+                          >
+                            <option value="">Analyse d'arrivée...</option>
+                            {history.map(h => (
+                              <option key={h.id} value={h.id}>
+                                {h.label || new Date(h.createdAt).toLocaleString('fr-FR')} ({h.contactCount} contacts)
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            className="glow-button primary"
+                            onClick={handleCompareAnalyses}
+                            disabled={loadingDelta || !compareFromId || !compareToId}
+                            style={{ whiteSpace: 'nowrap' }}
+                          >
+                            {loadingDelta ? 'Comparaison...' : 'Voir l\'évolution'}
+                          </button>
+                        </div>
+
+                        {delta && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginTop: 8 }}>
+                            <p style={{ fontSize: '1rem', color: '#e2e8f0', lineHeight: 1.6 }}>
+                              {delta.networkEvolutionSummary}
+                            </p>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
+                              {delta.newThemes.length > 0 && (
+                                <div>
+                                  <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--neon-green)', fontWeight: 700 }}>Nouveaux thèmes</span>
+                                  <ul style={{ paddingLeft: 18, marginTop: 8, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                    {delta.newThemes.map((t, i) => <li key={i}>{t}</li>)}
+                                  </ul>
+                                </div>
+                              )}
+                              {delta.resolvedThemes.length > 0 && (
+                                <div>
+                                  <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700 }}>Thèmes résolus / disparus</span>
+                                  <ul style={{ paddingLeft: 18, marginTop: 8, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                    {delta.resolvedThemes.map((t, i) => <li key={i}>{t}</li>)}
+                                  </ul>
+                                </div>
+                              )}
+                              {delta.newMacroNeeds.length > 0 && (
+                                <div>
+                                  <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#38bdf8', fontWeight: 700 }}>Nouveaux macro-besoins</span>
+                                  <ul style={{ paddingLeft: 18, marginTop: 8, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                    {delta.newMacroNeeds.map((t, i) => <li key={i}>{t}</li>)}
+                                  </ul>
+                                </div>
+                              )}
+                              {delta.emergingSynergies.length > 0 && (
+                                <div>
+                                  <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#facc15', fontWeight: 700 }}>Synergies émergentes</span>
+                                  <ul style={{ paddingLeft: 18, marginTop: 8, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                    {delta.emergingSynergies.map((t, i) => <li key={i}>{t}</li>)}
+                                  </ul>
+                                </div>
+                              )}
+                              {delta.bridgeContactChanges.length > 0 && (
+                                <div>
+                                  <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--neon-purple)', fontWeight: 700 }}>Connecteurs clés</span>
+                                  <ul style={{ paddingLeft: 18, marginTop: 8, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                    {delta.bridgeContactChanges.map((t, i) => <li key={i}>{t}</li>)}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+
+                            {delta.recommendedNextSteps.length > 0 && (
+                              <div className="glass-card" style={{ padding: 20, borderColor: 'var(--neon-purple)' }}>
+                                <h4 style={{ color: 'var(--neon-purple)', marginBottom: 12 }}>Prochaines étapes recommandées</h4>
+                                <ul style={{ paddingLeft: 20, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                                  {delta.recommendedNextSteps.map((s, i) => <li key={i} style={{ marginBottom: 6 }}>{s}</li>)}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* History list */}
+                  <div>
+                    <h3 style={{ color: 'var(--text-secondary)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <History size={20} /> Analyses archivées
+                    </h3>
+                    {loadingHistory ? (
+                      <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Chargement...</p>
+                    ) : history.length === 0 ? (
+                      <div style={styles.emptyState}>
+                        <History size={48} color="rgba(255,255,255,0.1)" />
+                        <h3>Aucune analyse archivée</h3>
+                        <p>Chaque analyse complète que vous lancez est automatiquement sauvegardée ici.</p>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {history.map(h => (
+                          <div
+                            key={h.id}
+                            className="glass-card"
+                            style={{
+                              padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                              borderLeft: viewingArchiveId === h.id ? '3px solid var(--neon-purple)' : '3px solid transparent'
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontWeight: 600, color: '#fff', fontSize: '0.9rem' }}>
+                                {h.label || new Date(h.createdAt).toLocaleString('fr-FR')}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                                {new Date(h.createdAt).toLocaleString('fr-FR')} · {h.contactCount} contacts
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                              <button className="glass-button" onClick={() => handleViewArchivedAnalysis(h.id)} style={{ fontSize: '0.75rem', padding: '4px 12px' }}>
+                                Consulter
+                              </button>
+                              <button
+                                onClick={() => handleDeleteArchivedAnalysis(h.id)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}
+                                title="Supprimer"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}
@@ -733,6 +1021,15 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 8,
     color: '#fff',
     fontSize: '0.95rem',
+  },
+  historySelect: {
+    background: 'rgba(0,0,0,0.3)',
+    border: '1px solid rgba(255,255,255,0.1)',
+    padding: '10px 14px',
+    borderRadius: 8,
+    color: '#fff',
+    fontSize: '0.85rem',
+    minWidth: 220,
   },
   resultsGrid: {
     display: 'grid',

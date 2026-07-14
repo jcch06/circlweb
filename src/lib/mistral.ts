@@ -1,5 +1,6 @@
 import { Mistral } from '@mistralai/mistralai';
 import { buildSimilarityMatrix, findOptimalK, kMeansClustering, computeBetweennessCentrality } from './vectorMath';
+import { supabase } from './supabase';
 
 export interface TokenUsage {
   promptTokens: number;
@@ -1443,11 +1444,18 @@ export function getCachedMistralPipelineResult(contacts: any[]): MistralPipeline
   return null;
 }
 
+export interface AnalysisHistoryMeta {
+  ownerId: string;
+  spaceId: string | null;
+  label?: string;
+}
+
 export async function runMistralOracleBatchPipeline(
   contacts: any[],
   notes: any[],
   userProfile?: any,
-  onProgress?: (pct: number) => void
+  onProgress?: (pct: number) => void,
+  historyMeta?: AnalysisHistoryMeta
 ): Promise<MistralPipelineResult> {
   resetGlobalUsage();
 
@@ -1492,6 +1500,195 @@ export async function runMistralOracleBatchPipeline(
   const cacheKey = `circl_mistral_v7_${contacts.length}_${contacts.map(c => c.id).sort().join(',').substring(0, 100)}`;
   localStorage.setItem(cacheKey, JSON.stringify(result));
 
+  if (historyMeta) {
+    await saveAnalysisSnapshot(result, contacts, historyMeta);
+  }
+
   return result;
+}
+
+// ============================================================================
+// ANALYSIS HISTORY — persist every full run so past analyses stay readable
+// even after running new ones, and can be diffed to show network evolution.
+// ============================================================================
+
+export interface AnalysisHistoryEntry {
+  id: string;
+  label: string | null;
+  spaceId: string | null;
+  contactCount: number;
+  createdAt: string;
+}
+
+/**
+ * Best-effort persistence of a completed pipeline run. Never throws — a
+ * history-write failure (e.g. migration not applied yet) must not make the
+ * analysis the user just paid for look like it failed.
+ */
+async function saveAnalysisSnapshot(
+  result: MistralPipelineResult,
+  contacts: any[],
+  meta: AnalysisHistoryMeta
+): Promise<void> {
+  try {
+    const { error } = await supabase.from('network_analyses').insert({
+      owner_id: meta.ownerId,
+      space_id: meta.spaceId,
+      label: meta.label || null,
+      contact_count: contacts.length,
+      contact_ids: contacts.map(c => c.id),
+      result
+    });
+    if (error) {
+      console.warn('saveAnalysisSnapshot: écriture ignorée (migration manquante ?)', error.message);
+    }
+  } catch (err) {
+    console.warn('saveAnalysisSnapshot: écriture ignorée', err);
+  }
+}
+
+/** Lightweight list of past analyses (no `result` payload) for a history picker. */
+export async function listAnalysisHistory(spaceId: string | null): Promise<AnalysisHistoryEntry[]> {
+  let query = supabase
+    .from('network_analyses')
+    .select('id, label, space_id, contact_count, created_at')
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  query = spaceId ? query.eq('space_id', spaceId) : query.is('space_id', null);
+
+  const { data, error } = await query;
+  if (error) {
+    console.error('listAnalysisHistory failure:', error);
+    return [];
+  }
+
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    label: row.label,
+    spaceId: row.space_id,
+    contactCount: row.contact_count,
+    createdAt: row.created_at
+  }));
+}
+
+/** Fetches the full pipeline result of a single archived analysis. */
+export async function getAnalysisById(id: string): Promise<(MistralPipelineResult & { id: string; label: string | null }) | null> {
+  const { data, error } = await supabase
+    .from('network_analyses')
+    .select('id, label, result')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error || !data) {
+    console.error('getAnalysisById failure:', error);
+    return null;
+  }
+
+  return { ...(data.result as MistralPipelineResult), id: data.id, label: data.label };
+}
+
+export async function deleteAnalysis(id: string): Promise<void> {
+  const { error } = await supabase.from('network_analyses').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export interface AnalysisDelta {
+  networkEvolutionSummary: string;
+  newThemes: string[];
+  resolvedThemes: string[];
+  newMacroNeeds: string[];
+  emergingSynergies: string[];
+  bridgeContactChanges: string[];
+  recommendedNextSteps: string[];
+}
+
+const FALLBACK_DELTA: AnalysisDelta = {
+  networkEvolutionSummary: "La comparaison a échoué (erreur API ou rate-limiting). Veuillez réessayer.",
+  newThemes: [],
+  resolvedThemes: [],
+  newMacroNeeds: [],
+  emergingSynergies: [],
+  bridgeContactChanges: [],
+  recommendedNextSteps: []
+};
+
+/**
+ * Compares two archived analyses with Mistral Large to surface how the
+ * network evolved between them — new themes/needs that appeared, ones that
+ * got resolved (disappeared), new synergies, and how the strategic
+ * connectors changed.
+ */
+export async function compareAnalyses(
+  before: MistralPipelineResult,
+  after: MistralPipelineResult
+): Promise<AnalysisDelta> {
+  const compact = (r: MistralPipelineResult) => ({
+    globalThemes: r.synthesis.globalThemes,
+    macroNeeds: r.synthesis.macroNeeds,
+    valueChains: r.synthesis.valueChains.map(v => v.title),
+    networkStrength: r.synthesis.networkStrength,
+    bridgeContacts: r.bridgeContacts.map(b => b.name),
+    supplyDemandOpportunities: r.supplyDemand.filter(s => s.opportunityForUser).map(s => s.need)
+  });
+
+  const prompt = `<role>
+Tu es "Oracle DELTA", un analyste spécialisé dans l'évolution temporelle des réseaux professionnels. Tu compares deux analyses successives du même réseau (ou du même périmètre) pour en dégager la trajectoire.
+</role>
+
+<instructions>
+1. Identifie les thèmes/besoins qui sont NOUVEAUX dans "after" et absents de "before" (newThemes, newMacroNeeds).
+2. Identifie les thèmes qui étaient présents dans "before" et ont DISPARU dans "after" (resolvedThemes) — cela signale généralement un besoin comblé ou une opportunité saisie.
+3. Repère les synergies ou chaînes de valeur émergentes qui n'existaient pas avant (emergingSynergies).
+4. Compare les listes de contacts-ponts (bridgeContacts) entre les deux analyses et décris ce qui a changé (bridgeContactChanges) — nouveaux connecteurs, connecteurs qui ont perdu leur rôle central, etc.
+5. Rédige un résumé narratif de l'évolution du réseau (networkEvolutionSummary) et un plan d'action pour capitaliser sur cette trajectoire (recommendedNextSteps).
+</instructions>
+
+<rules>
+- INTERDICTION de renvoyer un résumé générique du type "le réseau a évolué positivement" sans détails concrets tirés des données.
+- Si les deux analyses sont quasi identiques, dis-le explicitement dans networkEvolutionSummary plutôt que d'inventer des différences.
+- Réponds STRICTEMENT avec un objet JSON valide respectant le format ci-dessous, sans markdown ni texte additionnel.
+</rules>
+
+<analysis_before>
+${JSON.stringify(compact(before), null, 2)}
+</analysis_before>
+
+<analysis_after>
+${JSON.stringify(compact(after), null, 2)}
+</analysis_after>
+
+<output_format>
+{
+  "networkEvolutionSummary": "Résumé narratif de l'évolution en 2-4 phrases",
+  "newThemes": ["thème nouveau 1"],
+  "resolvedThemes": ["thème disparu / résolu 1"],
+  "newMacroNeeds": ["macro-besoin nouveau 1"],
+  "emergingSynergies": ["synergie ou chaîne de valeur émergente 1"],
+  "bridgeContactChanges": ["description d'un changement de connecteur clé"],
+  "recommendedNextSteps": ["action 1", "action 2"]
+}
+</output_format>`;
+
+  try {
+    const text = await callMistral(prompt, true, MAP_REDUCE_MODEL);
+    const parsed = safeParseJSON(text);
+    if (parsed && typeof parsed.networkEvolutionSummary === 'string') {
+      return {
+        networkEvolutionSummary: parsed.networkEvolutionSummary,
+        newThemes: parsed.newThemes ?? [],
+        resolvedThemes: parsed.resolvedThemes ?? [],
+        newMacroNeeds: parsed.newMacroNeeds ?? [],
+        emergingSynergies: parsed.emergingSynergies ?? [],
+        bridgeContactChanges: parsed.bridgeContactChanges ?? [],
+        recommendedNextSteps: parsed.recommendedNextSteps ?? []
+      };
+    }
+    console.error('Mistral DELTA: réponse JSON invalide, fallback appliqué.', text);
+    return { ...FALLBACK_DELTA };
+  } catch (err) {
+    console.error('Mistral DELTA comparison failure:', err);
+    return { ...FALLBACK_DELTA };
+  }
 }
 

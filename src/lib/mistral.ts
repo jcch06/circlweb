@@ -39,15 +39,15 @@ export const isPerplexityConfigured = () => {
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-async function callMistral(prompt: string, isJSON: boolean = true): Promise<string> {
+async function callMistral(prompt: string, isJSON: boolean = true, model: string = 'mistral-small-latest'): Promise<string> {
   const client = getMistralClient();
   if (!client) throw new Error("Mistral API key is not configured");
-  
+
   let retries = 3;
   while (retries > 0) {
     try {
       const response = await client.chat.complete({
-        model: 'mistral-small-latest',
+        model,
         messages: [{ role: 'user', content: prompt }],
         responseFormat: isJSON ? { type: 'json_object' } : undefined
       });
@@ -826,12 +826,6 @@ export interface DeepOpportunity {
   urgency: 'immediate' | 'short-term' | 'medium-term';
 }
 
-export interface TokenUsage {
-  promptTokens: number;
-  candidateTokens: number;
-  totalTokens: number;
-}
-
 /**
  * Full pipeline result
  */
@@ -846,21 +840,6 @@ export interface OracleV3Result {
   reciprocity?: ReciprocityImbalance[];
   timestamp: number;
   tokenUsage?: TokenUsage;
-}
-
-/**
- * Reciprocity Imbalance (Giver/Taker CRM)
-    const start = cleaned.indexOf('[') !== -1 && (cleaned.indexOf('{') === -1 || cleaned.indexOf('[') < cleaned.indexOf('{'))
-      ? cleaned.indexOf('[')
-      : cleaned.indexOf('{');
-    const end = cleaned.lastIndexOf(']') !== -1 && cleaned.lastIndexOf(']') > cleaned.lastIndexOf('}')
-      ? cleaned.lastIndexOf(']')
-      : cleaned.lastIndexOf('}');
-    if (start !== -1 && end !== -1) {
-      return JSON.parse(cleaned.substring(start, end + 1));
-    }
-    throw new Error('Could not parse Mistral response as JSON');
-  }
 }
 
 /**
@@ -922,6 +901,27 @@ export interface MistralBatchResult {
   keyCompetencies: string[];
 }
 
+export interface MacroNeed {
+  label: string;
+  mergedFrom: string[];
+  affectedContactsCount: number;
+  priority: 'high' | 'medium' | 'low';
+}
+
+export interface ValueChainLink {
+  step: number;
+  contactName: string;
+  role: string;
+  contribution: string;
+}
+
+export interface ValueChain {
+  title: string;
+  description: string;
+  chain: ValueChainLink[];
+  estimatedImpact: string;
+}
+
 export interface MistralGlobalSynthesis {
   globalThemes: string[];
   crossBatchSynergies: {
@@ -931,6 +931,8 @@ export interface MistralGlobalSynthesis {
   }[];
   networkStrength: string;
   recommendedActionPlan: string[];
+  macroNeeds: MacroNeed[];
+  valueChains: ValueChain[];
   tokenUsage?: TokenUsage;
 }
 
@@ -940,40 +942,85 @@ export interface MistralPipelineResult {
   timestamp: number;
 }
 
+/** Only model on Mistral capable of the complex, indirect deductions this pipeline requires. */
+const MAP_REDUCE_MODEL = 'mistral-large-latest';
+
+const FALLBACK_BATCH_RESULT: MistralBatchResult = {
+  recurrentNeeds: [],
+  immediateSynergies: [],
+  keyCompetencies: []
+};
+
+const FALLBACK_SYNTHESIS: MistralGlobalSynthesis = {
+  globalThemes: [],
+  crossBatchSynergies: [],
+  networkStrength: "L'analyse globale a échoué (erreur API ou rate-limiting). Veuillez réessayer.",
+  recommendedActionPlan: [],
+  macroNeeds: [],
+  valueChains: []
+};
+
 async function processContactBatch(batch: any[], notes: any[]): Promise<MistralBatchResult> {
   const batchData = batch.map(c => {
     const contactNotes = notes.filter(n => n.contact_id === c.id || n.contactId === c.id).map(n => n.content).join(' | ');
-    return `Contact: ${c.name || (c.first_name + ' ' + c.last_name)} (${c.job_title} chez ${c.company})\nInfos: ${contactNotes}`;
-  }).join('\n\n');
+    return `<contact id="${c.id}">
+  <name>${c.name || (c.first_name + ' ' + c.last_name)}</name>
+  <role>${c.job_title || 'Inconnu'}</role>
+  <company>${c.company || 'Inconnue'}</company>
+  <notes>${contactNotes || 'Aucune note disponible'}</notes>
+</contact>`;
+  }).join('\n');
 
-  const prompt = `Tu es un expert en analyse de réseau professionnel.
-Voici un lot de contacts avec leurs informations.
-Extrais les informations suivantes au format JSON STRICT :
+  const prompt = `<role>
+Tu es "Oracle MAP", un analyste expert en réseaux professionnels et en détection de synergies business cachées. Tu es reconnu pour ta capacité à relier des profils en apparence très différents autour d'un besoin, d'une ressource ou d'une compétence complémentaire non évidente.
+</role>
+
+<instructions>
+Analyse EN PROFONDEUR le lot de contacts fourni ci-dessous et extrais :
+1. Les besoins récurrents ou latents (explicites dans les notes, ou déduits du poste/secteur/contexte).
+2. Des synergies immédiates entre paires de contacts DE CE LOT UNIQUEMENT.
+3. Les compétences clés (mots-clés) qui ressortent du groupe.
+</instructions>
+
+<rules>
+- INTERDICTION FORMELLE de renvoyer un tableau "immediateSynergies" vide si le lot contient au moins 2 contacts. Si aucune synergie évidente n'existe, tu DOIS déduire une opportunité d'échange de compétences plausible même entre profils qui semblent éloignés au premier abord (ex : un besoin abstrait chez A peut être résolu par une compétence indirecte ou un réseau détenu par B). Sois créatif mais réaliste.
+- N'invente jamais d'identité : utilise uniquement les id/noms fournis dans les balises <contact>.
+- Chaque synergie doit avoir une "reason" concrète et actionnable, pas une généralité.
+- Réponds STRICTEMENT avec un objet JSON valide respectant le format ci-dessous, sans aucun texte, markdown ou commentaire additionnel.
+</rules>
+
+<contacts>
+${batchData}
+</contacts>
+
+<output_format>
 {
   "recurrentNeeds": ["besoin 1", "besoin 2"],
   "immediateSynergies": [
     {
-      "contactId1": "ID du premier contact",
+      "contactId1": "id exact du premier contact",
       "contactName1": "Nom du premier",
-      "contactId2": "ID du deuxieme contact",
+      "contactId2": "id exact du deuxieme contact",
       "contactName2": "Nom du deuxieme",
-      "reason": "Explication de la synergie"
+      "reason": "Explication concrète et actionnable de la synergie, même indirecte"
     }
   ],
   "keyCompetencies": ["mot cle 1", "mot cle 2"]
 }
+</output_format>`;
 
-Contacts du lot :
-${batchData}
-
-Règle absolue : Réponds UNIQUEMENT avec le JSON valide, sans markdown additionnel.`;
-
-  let text = await callMistral(prompt, true);
-  const parsed = safeParseJSON(text);
-  if (parsed && parsed.immediateSynergies) {
-    return parsed as MistralBatchResult;
+  try {
+    const text = await callMistral(prompt, true, MAP_REDUCE_MODEL);
+    const parsed = safeParseJSON(text);
+    if (parsed && Array.isArray(parsed.immediateSynergies) && Array.isArray(parsed.recurrentNeeds) && Array.isArray(parsed.keyCompetencies)) {
+      return parsed as MistralBatchResult;
+    }
+    console.error('Mistral MAP: réponse JSON invalide ou incomplète, fallback appliqué.', text);
+    return { ...FALLBACK_BATCH_RESULT };
+  } catch (err) {
+    console.error('Mistral MAP batch failure:', err);
+    return { ...FALLBACK_BATCH_RESULT };
   }
-  return { recurrentNeeds: [], immediateSynergies: [], keyCompetencies: [] };
 }
 
 // ============================================================================
@@ -982,11 +1029,29 @@ Règle absolue : Réponds UNIQUEMENT avec le JSON valide, sans markdown addition
 async function synthesizeNetwork(batchResults: MistralBatchResult[]): Promise<MistralGlobalSynthesis> {
   const aggregatedData = JSON.stringify(batchResults, null, 2);
 
-  const prompt = `Tu es un super-cerveau réseau. 
-Voici les résultats d'analyses locales (par lots) d'un grand réseau de contacts.
-Fais-en une synthèse globale (Reduce) pour identifier les grandes forces du réseau.
+  const prompt = `<role>
+Tu es "Oracle REDUCE", un super-cerveau stratégique spécialisé dans la consolidation d'analyses de réseaux professionnels. Ta mission est de fusionner des dizaines d'analyses locales (par lots) en une synthèse globale d'une qualité exceptionnelle.
+</role>
 
-Réponds au format JSON STRICT :
+<instructions>
+1. Fusionne les besoins similaires ou redondants détectés dans les différents lots en "Macro-Besoins" consolidés (ne liste pas les doublons séparément).
+2. Construis des chaînes de valeur globales (value chains) qui relient plusieurs contacts de lots DIFFÉRENTS entre eux autour d'un objectif business commun (ex : A a un besoin, B a la compétence, C a le réseau/financement pour industrialiser).
+3. Identifie les thèmes dominants et les synergies transversales (cross-batch).
+4. Propose un plan d'action concret et priorisé.
+</instructions>
+
+<rules>
+- INTERDICTION de renvoyer des tableaux vides ("globalThemes", "crossBatchSynergies", "macroNeeds") si les données agrégées contiennent au moins un besoin ou une synergie exploitable. Déduis des connexions même si elles ne sont pas explicites lot par lot.
+- Un "Macro-Besoin" doit regrouper au moins un besoin réel présent dans "mergedFrom", jamais inventé de toutes pièces.
+- Une "valueChain" doit contenir au moins 2 étapes (chain) reliant des contacts réellement mentionnés dans les données agrégées.
+- Réponds STRICTEMENT avec un objet JSON valide respectant le format ci-dessous, sans markdown ni texte additionnel.
+</rules>
+
+<aggregated_batch_data>
+${aggregatedData}
+</aggregated_batch_data>
+
+<output_format>
 {
   "globalThemes": ["thème dominant 1", "thème dominant 2"],
   "crossBatchSynergies": [
@@ -996,21 +1061,48 @@ Réponds au format JSON STRICT :
       "potentialImpact": "Estimation de l'impact (ex: Fort potentiel commercial)"
     }
   ],
+  "macroNeeds": [
+    {
+      "label": "Nom du besoin consolidé (ex: Recrutement Tech Senior)",
+      "mergedFrom": ["besoin brut 1", "besoin brut 2"],
+      "affectedContactsCount": 3,
+      "priority": "high"
+    }
+  ],
+  "valueChains": [
+    {
+      "title": "Nom de la chaîne de valeur",
+      "description": "Comment ces contacts s'enchaînent pour créer de la valeur",
+      "chain": [
+        { "step": 1, "contactName": "Nom", "role": "Poste", "contribution": "Ce qu'il apporte à la chaîne" }
+      ],
+      "estimatedImpact": "Estimation de l'impact business"
+    }
+  ],
   "networkStrength": "Résumé en 1-2 phrases de la force principale de ce réseau",
   "recommendedActionPlan": ["Action 1", "Action 2"]
 }
+</output_format>`;
 
-Données agrégées des lots :
-${aggregatedData}
-
-Règle absolue : Réponds UNIQUEMENT avec le JSON valide.`;
-
-  let text = await callMistral(prompt, true);
-  const parsed = safeParseJSON(text);
-  if (parsed && parsed.globalThemes) {
-    return parsed as MistralGlobalSynthesis;
+  try {
+    const text = await callMistral(prompt, true, MAP_REDUCE_MODEL);
+    const parsed = safeParseJSON(text);
+    if (parsed && Array.isArray(parsed.globalThemes)) {
+      return {
+        globalThemes: parsed.globalThemes ?? [],
+        crossBatchSynergies: parsed.crossBatchSynergies ?? [],
+        networkStrength: parsed.networkStrength ?? FALLBACK_SYNTHESIS.networkStrength,
+        recommendedActionPlan: parsed.recommendedActionPlan ?? [],
+        macroNeeds: parsed.macroNeeds ?? [],
+        valueChains: parsed.valueChains ?? []
+      };
+    }
+    console.error('Mistral REDUCE: réponse JSON invalide ou incomplète, fallback appliqué.', text);
+    return { ...FALLBACK_SYNTHESIS };
+  } catch (err) {
+    console.error('Mistral REDUCE synthesis failure:', err);
+    return { ...FALLBACK_SYNTHESIS };
   }
-  return { globalThemes: [], crossBatchSynergies: [], networkStrength: "Analyse échouée.", recommendedActionPlan: [] };
 }
 
 // ============================================================================
@@ -1062,7 +1154,7 @@ export async function computeMistralEmbeddings(
 // ORCHESTRATOR: Run full Map-Reduce Pipeline
 // ============================================================================
 export function getCachedMistralPipelineResult(contacts: any[]): MistralPipelineResult | null {
-  const cacheKey = `circl_mistral_v4_${contacts.length}_${contacts.map(c => c.id).sort().join(',').substring(0, 100)}`;
+  const cacheKey = `circl_mistral_v5_${contacts.length}_${contacts.map(c => c.id).sort().join(',').substring(0, 100)}`;
   const cached = localStorage.getItem(cacheKey);
   if (cached) {
     try {
@@ -1082,6 +1174,7 @@ export async function runMistralOracleBatchPipeline(
 ): Promise<MistralPipelineResult> {
   resetGlobalUsage();
 
+  // MAP step: 20-30 contacts per batch max to avoid overloading mistral-large-latest.
   const BATCH_SIZE = 25;
   const batches = [];
   
@@ -1112,7 +1205,7 @@ export async function runMistralOracleBatchPipeline(
     timestamp: Date.now()
   };
   
-  const cacheKey = `circl_mistral_v4_${contacts.length}_${contacts.map(c => c.id).sort().join(',').substring(0, 100)}`;
+  const cacheKey = `circl_mistral_v5_${contacts.length}_${contacts.map(c => c.id).sort().join(',').substring(0, 100)}`;
   localStorage.setItem(cacheKey, JSON.stringify(result));
 
   return result;

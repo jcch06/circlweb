@@ -62,7 +62,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
     setLoading(true);
 
     if (forceRefresh) {
-      const keys = Object.keys(localStorage).filter(k => k.startsWith('circl_mistral_v4_'));
+      const keys = Object.keys(localStorage).filter(k => k.startsWith('circl_mistral_v5_'));
       keys.forEach(k => localStorage.removeItem(k));
     }
 
@@ -114,7 +114,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
       <div style={styles.header}>
         <div>
           <h2 style={styles.title}>Analyse IA</h2>
-          <p style={styles.subtitle}>Mistral Small - Map/Reduce</p>
+          <p style={styles.subtitle}>Mistral Large - Map/Reduce</p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -240,6 +240,64 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                         ))}
                       </div>
                     </div>
+
+                    {/* Macro-Besoins */}
+                    {v3Result.synthesis.macroNeeds && v3Result.synthesis.macroNeeds.length > 0 && (
+                      <div>
+                        <h3 style={{ color: 'var(--neon-green)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <Target size={20} /> Macro-Besoins Consolidés
+                        </h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                          {v3Result.synthesis.macroNeeds.map((mn, i) => (
+                            <div key={i} className="glass-card" style={{ padding: 20 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                                <h4 style={{ color: '#fff', margin: 0, fontSize: '1rem' }}>{mn.label}</h4>
+                                <span style={{
+                                  fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', padding: '2px 8px', borderRadius: 4,
+                                  color: mn.priority === 'high' ? '#facc15' : mn.priority === 'medium' ? '#38bdf8' : 'var(--text-muted)',
+                                  background: mn.priority === 'high' ? 'rgba(250, 204, 21, 0.1)' : mn.priority === 'medium' ? 'rgba(56, 189, 248, 0.1)' : 'rgba(255,255,255,0.05)'
+                                }}>{mn.priority}</span>
+                              </div>
+                              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 8 }}>
+                                {mn.affectedContactsCount} contact(s) concerné(s) · fusionne : {mn.mergedFrom.join(', ')}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Chaînes de Valeur */}
+                    {v3Result.synthesis.valueChains && v3Result.synthesis.valueChains.length > 0 && (
+                      <div>
+                        <h3 style={{ color: 'var(--neon-blue)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <Workflow size={20} /> Chaînes de Valeur Globales
+                        </h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                          {v3Result.synthesis.valueChains.map((vc, i) => (
+                            <div key={i} className="glass-card" style={{ padding: 20 }}>
+                              <h4 style={{ color: '#fff', marginBottom: 4, fontSize: '1.05rem' }}>{vc.title}</h4>
+                              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 12 }}>{vc.description}</p>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                                {vc.chain.map((link, j) => (
+                                  <React.Fragment key={j}>
+                                    <div style={{ padding: '6px 12px', background: 'rgba(168,85,247,0.1)', border: '1px solid rgba(168,85,247,0.2)', borderRadius: 8, fontSize: '0.8rem' }}>
+                                      <b style={{ color: '#fff' }}>{link.contactName}</b>
+                                      <span style={{ color: 'var(--text-muted)' }}> ({link.role})</span>
+                                      <div style={{ color: 'var(--text-secondary)' }}>{link.contribution}</div>
+                                    </div>
+                                    {j < vc.chain.length - 1 && <span style={{ color: 'var(--text-muted)' }}>→</span>}
+                                  </React.Fragment>
+                                ))}
+                              </div>
+                              <div style={{ display: 'inline-block', background: 'rgba(250, 204, 21, 0.1)', color: '#facc15', padding: '4px 10px', borderRadius: 6, fontSize: '0.8rem', fontWeight: 600 }}>
+                                Impact : {vc.estimatedImpact}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Synergies Cross-Batch */}
                     <div>
@@ -408,7 +466,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
       {v3Result && v3Result.synthesis && v3Result.synthesis.tokenUsage && (
         <div style={{ marginTop: 32, padding: 12, borderRadius: 8, background: 'rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, border: '1px solid rgba(255,255,255,0.05)' }}>
           <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-            ⚡ <b>Consommation API (Mistral Small) :</b> {v3Result.synthesis.tokenUsage.totalTokens.toLocaleString()} jetons
+            ⚡ <b>Consommation API (Mistral Large) :</b> {v3Result.synthesis.tokenUsage.totalTokens.toLocaleString()} jetons
           </div>
           <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>|</div>
           <div style={{ color: 'var(--neon-green)', fontSize: '0.8rem', fontWeight: 600 }}>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Zap, Copy, Check, Target, Key, Brain, Workflow, Award, Scale, Share2, History, GitCompare, Trash2, ArrowRight } from 'lucide-react';
+import { Zap, Copy, Check, Target, Key, Brain, Workflow, Award, Scale, Share2, History, GitCompare, Trash2, ArrowRight, Lock } from 'lucide-react';
 import type { MistralPipelineResult, AnalysisHistoryEntry, AnalysisDelta } from '../lib/mistral';
 import {
   suggestWarmIntros,
@@ -342,10 +342,10 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                     {viewingArchiveId && (
                       <div style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-                        padding: '12px 20px', borderRadius: 10,
-                        background: 'rgba(250, 204, 21, 0.08)', border: '1px solid rgba(250, 204, 21, 0.25)'
+                        padding: '12px 20px', borderRadius: 8,
+                        background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-hover)'
                       }}>
-                        <span style={{ fontSize: '0.85rem', color: '#facc15' }}>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>
                           <History size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
                           Vous consultez une analyse archivée
                           {(() => {
@@ -360,12 +360,12 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                     )}
 
                     {/* Synthèse */}
-                    <div className="glass-card" style={{ padding: 32, background: 'linear-gradient(145deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.4) 100%)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div className="glass-card" style={{ padding: 32, background: 'linear-gradient(145deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)', border: '1px solid var(--border)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-                        <Brain size={28} color="var(--neon-green)" />
-                        <h3 style={{ margin: 0, fontSize: '1.4rem' }}>Force du Réseau</h3>
+                        <Brain size={24} color="var(--text-primary)" />
+                        <h3 style={{ margin: 0, fontSize: '1.25rem' }}>Force du Réseau</h3>
                       </div>
-                      <p style={{ fontSize: '1.1rem', color: '#e2e8f0', lineHeight: 1.6 }}>
+                      <p style={{ fontSize: '1.05rem', color: 'var(--text-primary)', lineHeight: 1.6 }}>
                         {v3Result.synthesis.networkStrength}
                       </p>
                     </div>
@@ -373,8 +373,8 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                     {/* Contacts-Ponts */}
                     {v3Result.bridgeContacts && v3Result.bridgeContacts.length > 0 && (
                       <div>
-                        <h3 style={{ color: 'var(--neon-purple)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <Share2 size={20} /> Contacts-Ponts Stratégiques
+                        <h3 style={styles.sectionTitle}>
+                          <Share2 size={18} /> Contacts-Ponts Stratégiques
                         </h3>
                         <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 16 }}>
                           Ces contacts relient des groupes autrement séparés de votre réseau — les meilleurs candidats pour des introductions à fort impact.
@@ -385,13 +385,13 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                             return (
                             <div key={i} className="glass-card" style={{ padding: 16 }}>
                               <div style={{ fontWeight: 600, color: '#fff', marginBottom: 4 }}>{b.name}</div>
-                              <div style={{ fontSize: '0.8rem', color: isLocked ? '#facc15' : 'var(--text-secondary)', marginBottom: 10 }}>
-                                {isLocked ? '🔒 Accès non accordé — consultez ce contact pour le demander' : `${b.role} · ${b.company}`}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', color: isLocked ? 'var(--text-secondary)' : 'var(--text-secondary)', marginBottom: 10 }}>
+                                {isLocked ? (<><Lock size={12} /> Accès non accordé — consultez ce contact pour le demander</>) : `${b.role} · ${b.company}`}
                               </div>
                               <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${Math.round(b.centralityScore * 100)}%`, background: 'var(--neon-purple)', borderRadius: 99 }} />
+                                <div style={{ height: '100%', width: `${Math.round(b.centralityScore * 100)}%`, background: '#fff', borderRadius: 99 }} />
                               </div>
-                              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4, textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: 'var(--font-mono)' }}>
                                 Score de connexion : {Math.round(b.centralityScore * 100)}%
                               </div>
                             </div>
@@ -403,12 +403,12 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
 
                     {/* Thèmes Globaux */}
                     <div>
-                      <h3 style={{ color: 'var(--neon-blue)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Target size={20} /> Thèmes Dominants
+                      <h3 style={styles.sectionTitle}>
+                        <Target size={18} /> Thèmes Dominants
                       </h3>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                         {v3Result.synthesis.globalThemes.map((theme, i) => (
-                          <div key={i} style={{ padding: '8px 16px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: 24, color: '#38bdf8' }}>
+                          <div key={i} style={styles.pill}>
                             {theme}
                           </div>
                         ))}
@@ -418,18 +418,19 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                     {/* Macro-Besoins */}
                     {v3Result.synthesis.macroNeeds && v3Result.synthesis.macroNeeds.length > 0 && (
                       <div>
-                        <h3 style={{ color: 'var(--neon-green)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <Target size={20} /> Macro-Besoins Consolidés
+                        <h3 style={styles.sectionTitle}>
+                          <Target size={18} /> Macro-Besoins Consolidés
                         </h3>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
                           {v3Result.synthesis.macroNeeds.map((mn, i) => (
                             <div key={i} className="glass-card" style={{ padding: 20 }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, gap: 8 }}>
                                 <h4 style={{ color: '#fff', margin: 0, fontSize: '1rem' }}>{mn.label}</h4>
                                 <span style={{
-                                  fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', padding: '2px 8px', borderRadius: 4,
-                                  color: mn.priority === 'high' ? '#facc15' : mn.priority === 'medium' ? '#38bdf8' : 'var(--text-muted)',
-                                  background: mn.priority === 'high' ? 'rgba(250, 204, 21, 0.1)' : mn.priority === 'medium' ? 'rgba(56, 189, 248, 0.1)' : 'rgba(255,255,255,0.05)'
+                                  fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', padding: '3px 8px', borderRadius: 5, flexShrink: 0,
+                                  color: mn.priority === 'high' ? '#000' : mn.priority === 'medium' ? 'var(--text-primary)' : 'var(--text-muted)',
+                                  background: mn.priority === 'high' ? '#fff' : mn.priority === 'medium' ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.04)',
+                                  border: mn.priority === 'low' ? '1px solid var(--border)' : 'none'
                                 }}>{mn.priority}</span>
                               </div>
                               <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 8 }}>
@@ -444,8 +445,8 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                     {/* Chaînes de Valeur */}
                     {v3Result.synthesis.valueChains && v3Result.synthesis.valueChains.length > 0 && (
                       <div>
-                        <h3 style={{ color: 'var(--neon-blue)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <Workflow size={20} /> Chaînes de Valeur Globales
+                        <h3 style={styles.sectionTitle}>
+                          <Workflow size={18} /> Chaînes de Valeur Globales
                         </h3>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                           {v3Result.synthesis.valueChains.map((vc, i) => (
@@ -455,7 +456,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                                 {vc.chain.map((link, j) => (
                                   <React.Fragment key={j}>
-                                    <div style={{ padding: '6px 12px', background: 'rgba(168,85,247,0.1)', border: '1px solid rgba(168,85,247,0.2)', borderRadius: 8, fontSize: '0.8rem' }}>
+                                    <div style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', borderRadius: 7, fontSize: '0.8rem' }}>
                                       <b style={{ color: '#fff' }}>{link.contactName}</b>
                                       <span style={{ color: 'var(--text-muted)' }}> ({link.role})</span>
                                       <div style={{ color: 'var(--text-secondary)' }}>{link.contribution}</div>
@@ -464,7 +465,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                                   </React.Fragment>
                                 ))}
                               </div>
-                              <div style={{ display: 'inline-block', background: 'rgba(250, 204, 21, 0.1)', color: '#facc15', padding: '4px 10px', borderRadius: 6, fontSize: '0.8rem', fontWeight: 600 }}>
+                              <div style={styles.impactBadge}>
                                 Impact : {vc.estimatedImpact}
                               </div>
                             </div>
@@ -475,15 +476,15 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
 
                     {/* Synergies Cross-Batch */}
                     <div>
-                      <h3 style={{ color: 'var(--neon-yellow)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Zap size={20} /> Synergies Globales Croisées
+                      <h3 style={styles.sectionTitle}>
+                        <Zap size={18} /> Synergies Globales Croisées
                       </h3>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
                         {v3Result.synthesis.crossBatchSynergies.map((syn, i) => (
                           <div key={i} className="glass-card" style={{ padding: 20 }}>
-                            <h4 style={{ color: '#fff', marginBottom: 8, fontSize: '1.1rem' }}>{syn.theme}</h4>
+                            <h4 style={{ color: '#fff', marginBottom: 8, fontSize: '1.05rem' }}>{syn.theme}</h4>
                             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 12 }}>{syn.description}</p>
-                            <div style={{ display: 'inline-block', background: 'rgba(250, 204, 21, 0.1)', color: '#facc15', padding: '4px 10px', borderRadius: 6, fontSize: '0.8rem', fontWeight: 600 }}>
+                            <div style={styles.impactBadge}>
                               Impact : {syn.potentialImpact}
                             </div>
                           </div>
@@ -492,9 +493,9 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                     </div>
 
                     {/* Plan d'action */}
-                    <div className="glass-card" style={{ padding: 24, borderColor: 'var(--neon-purple)' }}>
-                      <h3 style={{ color: 'var(--neon-purple)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Award size={20} /> Plan d'Action Recommandé
+                    <div className="glass-card" style={{ padding: 24, borderColor: 'var(--border-hover)' }}>
+                      <h3 style={styles.sectionTitle}>
+                        <Award size={18} /> Plan d'Action Recommandé
                       </h3>
                       <ul style={{ paddingLeft: 20, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                         {v3Result.synthesis.recommendedActionPlan.map((action, i) => (
@@ -552,24 +553,24 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                     </p>
 
                     {v3Result.batches.map((batch, i) => (
-                      <div key={i} className="glass-card" style={{ padding: 24, borderLeft: '4px solid var(--neon-blue)' }}>
-                        <h3 style={{ margin: '0 0 16px 0', color: '#fff' }}>Lot d'Analyse #{i + 1}</h3>
-                        
+                      <div key={i} className="glass-card" style={{ padding: 24, borderLeft: '3px solid var(--border-hover)' }}>
+                        <h3 style={{ margin: '0 0 16px 0', color: '#fff', fontFamily: 'var(--font-mono)', fontSize: '1rem' }}>Lot d'Analyse #{i + 1}</h3>
+
                         <div style={{ marginBottom: 16 }}>
-                          <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700 }}>Besoins Récurrents</span>
+                          <span style={styles.eyebrow}>Besoins Récurrents</span>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
                             {batch.recurrentNeeds.map((need, j) => (
-                              <span key={j} style={{ padding: '4px 8px', background: 'rgba(255,255,255,0.05)', borderRadius: 4, fontSize: '0.8rem' }}>{need}</span>
+                              <span key={j} style={{ padding: '4px 10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 6, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{need}</span>
                             ))}
                           </div>
                         </div>
 
                         {batch.immediateSynergies && batch.immediateSynergies.length > 0 && (
                           <div style={{ marginBottom: 16 }}>
-                            <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--neon-green)', fontWeight: 700 }}>Synergies Immédiates</span>
+                            <span style={styles.eyebrow}>Synergies Immédiates</span>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
                               {batch.immediateSynergies.map((syn, j) => (
-                                <div key={j} style={{ padding: 12, background: 'rgba(34, 197, 94, 0.05)', borderRadius: 8, border: '1px solid rgba(34, 197, 94, 0.1)' }}>
+                                <div key={j} style={{ padding: 12, background: 'rgba(255,255,255,0.03)', borderRadius: 8, border: '1px solid var(--border)' }}>
                                   <div style={{ fontWeight: 600, color: '#fff', marginBottom: 4 }}>
                                     {syn.contactName1} <span style={{ color: 'var(--text-muted)' }}>&</span> {syn.contactName2}
                                   </div>
@@ -581,10 +582,10 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                         )}
 
                         <div>
-                          <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700 }}>Mots-Clés</span>
+                          <span style={styles.eyebrow}>Mots-Clés</span>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
                             {batch.keyCompetencies.map((comp, j) => (
-                              <span key={j} style={{ color: 'var(--neon-purple)', fontSize: '0.8rem' }}>#{comp}</span>
+                              <span key={j} style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}>#{comp}</span>
                             ))}
                           </div>
                         </div>
@@ -639,7 +640,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                             <div style={styles.connectorName}>{intro.connectorName}</div>
                             <div style={styles.introTarget}>Cible: {intro.targetName} ({intro.targetCompany})</div>
                           </div>
-                          <div style={styles.closenessBadge}>Force: {intro.connectorCloseness}/5</div>
+                          <div style={styles.closenessBadge}>Force : {intro.connectorCloseness}/5</div>
                         </div>
                         <p style={styles.introReason}>{intro.reason}</p>
                         
@@ -669,8 +670,8 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
 
                   {/* Delta comparison */}
                   <div className="glass-card" style={{ padding: 24 }}>
-                    <h3 style={{ color: 'var(--neon-purple)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <GitCompare size={20} /> Comparer deux analyses
+                    <h3 style={styles.sectionTitle}>
+                      <GitCompare size={18} /> Comparer deux analyses
                     </h3>
                     {history.length < 2 ? (
                       <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
@@ -716,14 +717,14 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
 
                         {delta && (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginTop: 8 }}>
-                            <p style={{ fontSize: '1rem', color: '#e2e8f0', lineHeight: 1.6 }}>
+                            <p style={{ fontSize: '1rem', color: 'var(--text-primary)', lineHeight: 1.6 }}>
                               {delta.networkEvolutionSummary}
                             </p>
 
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
                               {delta.newThemes.length > 0 && (
                                 <div>
-                                  <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--neon-green)', fontWeight: 700 }}>Nouveaux thèmes</span>
+                                  <span style={styles.eyebrow}>Nouveaux thèmes</span>
                                   <ul style={{ paddingLeft: 18, marginTop: 8, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                                     {delta.newThemes.map((t, i) => <li key={i}>{t}</li>)}
                                   </ul>
@@ -731,7 +732,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                               )}
                               {delta.resolvedThemes.length > 0 && (
                                 <div>
-                                  <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700 }}>Thèmes résolus / disparus</span>
+                                  <span style={styles.eyebrow}>Thèmes résolus / disparus</span>
                                   <ul style={{ paddingLeft: 18, marginTop: 8, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                                     {delta.resolvedThemes.map((t, i) => <li key={i}>{t}</li>)}
                                   </ul>
@@ -739,7 +740,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                               )}
                               {delta.newMacroNeeds.length > 0 && (
                                 <div>
-                                  <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#38bdf8', fontWeight: 700 }}>Nouveaux macro-besoins</span>
+                                  <span style={styles.eyebrow}>Nouveaux macro-besoins</span>
                                   <ul style={{ paddingLeft: 18, marginTop: 8, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                                     {delta.newMacroNeeds.map((t, i) => <li key={i}>{t}</li>)}
                                   </ul>
@@ -747,7 +748,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                               )}
                               {delta.emergingSynergies.length > 0 && (
                                 <div>
-                                  <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#facc15', fontWeight: 700 }}>Synergies émergentes</span>
+                                  <span style={styles.eyebrow}>Synergies émergentes</span>
                                   <ul style={{ paddingLeft: 18, marginTop: 8, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                                     {delta.emergingSynergies.map((t, i) => <li key={i}>{t}</li>)}
                                   </ul>
@@ -755,7 +756,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                               )}
                               {delta.bridgeContactChanges.length > 0 && (
                                 <div>
-                                  <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--neon-purple)', fontWeight: 700 }}>Connecteurs clés</span>
+                                  <span style={styles.eyebrow}>Connecteurs clés</span>
                                   <ul style={{ paddingLeft: 18, marginTop: 8, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                                     {delta.bridgeContactChanges.map((t, i) => <li key={i}>{t}</li>)}
                                   </ul>
@@ -764,8 +765,8 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                             </div>
 
                             {delta.recommendedNextSteps.length > 0 && (
-                              <div className="glass-card" style={{ padding: 20, borderColor: 'var(--neon-purple)' }}>
-                                <h4 style={{ color: 'var(--neon-purple)', marginBottom: 12 }}>Prochaines étapes recommandées</h4>
+                              <div className="glass-card" style={{ padding: 20, borderColor: 'var(--border-hover)' }}>
+                                <h4 style={{ color: 'var(--text-primary)', marginBottom: 12, fontSize: '0.95rem' }}>Prochaines étapes recommandées</h4>
                                 <ul style={{ paddingLeft: 20, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                                   {delta.recommendedNextSteps.map((s, i) => <li key={i} style={{ marginBottom: 6 }}>{s}</li>)}
                                 </ul>
@@ -779,8 +780,8 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
 
                   {/* History list */}
                   <div>
-                    <h3 style={{ color: 'var(--text-secondary)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <History size={20} /> Analyses archivées
+                    <h3 style={styles.sectionTitle}>
+                      <History size={18} /> Analyses archivées
                     </h3>
                     {loadingHistory ? (
                       <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Chargement...</p>
@@ -798,7 +799,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                             className="glass-card"
                             style={{
                               padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-                              borderLeft: viewingArchiveId === h.id ? '3px solid var(--neon-purple)' : '3px solid transparent'
+                              borderLeft: viewingArchiveId === h.id ? '3px solid #fff' : '3px solid transparent'
                             }}
                           >
                             <div>
@@ -835,12 +836,12 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
 
       {/* API Cost Tracker */}
       {v3Result && v3Result.synthesis && v3Result.synthesis.tokenUsage && (
-        <div style={{ marginTop: 32, padding: 12, borderRadius: 8, background: 'rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, border: '1px solid rgba(255,255,255,0.05)' }}>
+        <div style={{ marginTop: 32, padding: 12, borderRadius: 8, background: 'rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, border: '1px solid var(--border)', fontFamily: 'var(--font-mono)' }}>
           <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-            ⚡ <b>Consommation API (Mistral Large) :</b> {v3Result.synthesis.tokenUsage.totalTokens.toLocaleString()} jetons
+            <b style={{ color: 'var(--text-secondary)' }}>Consommation API (Mistral Large) :</b> {v3Result.synthesis.tokenUsage.totalTokens.toLocaleString()} jetons
           </div>
           <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>|</div>
-          <div style={{ color: 'var(--neon-green)', fontSize: '0.8rem', fontWeight: 600 }}>
+          <div style={{ color: 'var(--text-primary)', fontSize: '0.8rem', fontWeight: 600 }}>
             Coût estimé : ${(v3Result.synthesis.tokenUsage.totalTokens / 1000000 * 0.2).toFixed(4)}
           </div>
         </div>
@@ -871,11 +872,45 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
     background: 'rgba(255,255,255,0.02)',
-    padding: 24,
-    borderRadius: 16,
-    border: '1px solid rgba(255,255,255,0.05)',
+    padding: '20px 24px',
+    borderRadius: 12,
+    border: '1px solid var(--border)',
+  },
+  sectionTitle: {
+    color: 'var(--text-primary)',
+    marginBottom: 16,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    fontSize: '1rem',
+    fontWeight: 600,
+  },
+  eyebrow: {
+    fontSize: '0.72rem',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    color: 'var(--text-muted)',
+    fontWeight: 700,
+  },
+  pill: {
+    padding: '8px 16px',
+    background: 'rgba(255,255,255,0.05)',
+    border: '1px solid var(--border)',
+    borderRadius: 24,
+    color: 'var(--text-primary)',
+    fontSize: '0.85rem',
+  },
+  impactBadge: {
+    display: 'inline-block',
+    background: 'rgba(255,255,255,0.08)',
+    color: 'var(--text-primary)',
+    padding: '4px 10px',
+    borderRadius: 6,
+    fontSize: '0.8rem',
+    fontWeight: 600,
+    border: '1px solid var(--border)',
   },
   titleContainer: {
     display: 'flex',
@@ -890,7 +925,6 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 0 20px rgba(0, 240, 255, 0.3)',
   },
   title: {
     margin: 0,
@@ -945,8 +979,8 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'all 0.2s ease',
   },
   tabBtnActive: {
-    background: 'rgba(0, 240, 255, 0.1)',
-    color: 'var(--neon-blue)',
+    background: 'rgba(255,255,255,0.08)',
+    color: '#fff',
   },
   tabContentContainer: {
     position: 'relative',
@@ -1076,12 +1110,14 @@ const styles: Record<string, React.CSSProperties> = {
   },
   closenessBadge: {
     marginLeft: 'auto',
-    background: 'rgba(168, 85, 247, 0.1)',
-    color: '#a855f7',
+    background: 'rgba(255,255,255,0.08)',
+    border: '1px solid var(--border)',
+    color: 'var(--text-primary)',
     padding: '4px 12px',
     borderRadius: 20,
     fontSize: '0.8rem',
     fontWeight: 600,
+    fontFamily: 'var(--font-mono)',
   },
   introReason: {
     color: 'var(--text-primary)',

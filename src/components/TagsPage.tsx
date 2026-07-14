@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { Briefcase, Users, Info, Clock, Tag as TagGlyph } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 
@@ -78,11 +79,21 @@ export const TagsPage: React.FC<TagsPageProps> = ({
 
   const getCategoryLabel = (cat: string) => {
     switch (cat) {
-      case 'industrie': return '�️ Secteur / Compétence (Liaisons Actives)';
-      case 'relation': return '� Type de Relation (Liaisons Actives)';
-      case 'contexte': return '� Source / Contexte (Métadonnées)';
-      case 'statut': return '⏳ Statut d\'Activité (Veille)';
+      case 'industrie': return 'Secteur / Compétence (Liaisons Actives)';
+      case 'relation': return 'Type de Relation (Liaisons Actives)';
+      case 'contexte': return 'Source / Contexte (Métadonnées)';
+      case 'statut': return 'Statut d\'Activité (Veille)';
       default: return 'Tag';
+    }
+  };
+
+  const getCategoryIcon = (cat: string) => {
+    switch (cat) {
+      case 'industrie': return Briefcase;
+      case 'relation': return Users;
+      case 'contexte': return Info;
+      case 'statut': return Clock;
+      default: return TagGlyph;
     }
   };
 
@@ -173,11 +184,12 @@ export const TagsPage: React.FC<TagsPageProps> = ({
         {(Object.keys(groupedTags) as Array<keyof typeof groupedTags>).map(catKey => {
           const categoryTags = groupedTags[catKey];
           const color = getCategoryColor(catKey);
+          const CategoryIcon = getCategoryIcon(catKey);
 
           return (
             <div key={catKey} className="glass-panel" style={styles.categoryPanel}>
               <div style={{ ...styles.panelHeader, borderBottom: `2px solid ${color}` }}>
-                
+                <CategoryIcon size={15} color={color} />
                 <h3 style={styles.panelTitle}>{getCategoryLabel(catKey)}</h3>
               </div>
 
@@ -305,6 +317,7 @@ const styles: Record<string, React.CSSProperties> = {
   panelHeader: {
     display: 'flex',
     alignItems: 'center',
+    gap: 8,
     paddingBottom: 8,
   },
   panelTitle: {

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Pencil, Check, X, Mic, MicOff, Lock } from 'lucide-react';
+import { Pencil, Check, X, Mic, MicOff, Lock, ListChecks, Building2, Tag as TagGlyph } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { detectContactSynergies, enrichProfileFromScraping, autoEnrichContact, isMistralConfigured, isPerplexityConfigured } from '../lib/mistral';
 import type { ContactSynergy } from '../lib/mistral';
@@ -37,6 +37,10 @@ async function persistEnrichmentExtras(
   }
 }
 
+
+// Monochrome, brightness-ranked palette used to distinguish spaces/circles
+// in list views — no hue, only luminance steps.
+const SPACE_COLORS = ['#ffffff', '#c7c7c7', '#9a9a9a', '#767676', '#565656', '#3d3d3d'];
 
 interface ContactsPageProps {
   contacts: any[];
@@ -901,7 +905,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
             </div>
             {bulkProgress.current && (
               <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                � Analyse IA : <b style={{ color: '#fff' }}>{bulkProgress.current}</b>
+                Analyse IA : <b style={{ color: '#fff' }}>{bulkProgress.current}</b>
               </span>
             )}
           </div>
@@ -1049,10 +1053,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
             onChange={(e) => setFilterType(e.target.value as any)}
             style={{ ...styles.input, width: 'auto', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glow)', minWidth: 220 }}
           >
-            <option value="all" style={{ background: '#1a1a2e' }}>Tous les contacts</option>
-            <option value="enriched" style={{ background: '#1a1a2e' }}> Déjà enrichis</option>
-            <option value="not_enriched" style={{ background: '#1a1a2e' }}>❌ Non enrichis (données valides)</option>
-            <option value="invalid" style={{ background: '#1a1a2e' }}>⚠️ Données insuffisantes (à corriger)</option>
+            <option value="all" style={{ background: '#161616' }}>Tous les contacts</option>
+            <option value="enriched" style={{ background: '#161616' }}>Déjà enrichis</option>
+            <option value="not_enriched" style={{ background: '#161616' }}>Non enrichis (données valides)</option>
+            <option value="invalid" style={{ background: '#161616' }}>Données insuffisantes (à corriger)</option>
           </select>
         </div>
 
@@ -1084,7 +1088,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
         {bulkSelectedIds.length > 0 && (
           <div className="glass-panel" style={styles.bulkActionBar}>
             <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: 6 }}>
-              �️ Action en Masse ({bulkSelectedIds.length} contact(s) sélectionné(s))
+              <ListChecks size={15} />
+              Action en Masse ({bulkSelectedIds.length} contact(s) sélectionné(s))
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <select 
@@ -1136,10 +1141,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
               const spaceName = spaces.find(s => s.id === c.space_id)?.name || 'Espace inconnu';
               const isSelected = selectedContactId === c.id;
               
-              // Color index based on space
+              // Brightness index based on space (monochrome — no hue)
               const spaceIndex = spaces.findIndex(s => s.id === c.space_id);
-              const colors = ['#4F8EF7', '#9F61E8', '#EC6F8B', '#30C060', '#D4A030', '#E89030'];
-              const color = colors[spaceIndex % colors.length] || '#9F61E8';
+              const color = SPACE_COLORS[spaceIndex % SPACE_COLORS.length] || SPACE_COLORS[0];
  
               return (
                 <div 
@@ -1294,10 +1298,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                   <div style={{
                     display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center', textAlign: 'center',
                     padding: '16px 20px', marginBottom: 16, borderRadius: 10,
-                    background: 'rgba(250, 204, 21, 0.06)', border: '1px solid rgba(250, 204, 21, 0.2)'
+                    background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-hover)'
                   }}>
-                    <Lock size={20} color="#facc15" />
-                    <span style={{ fontSize: '0.85rem', color: '#facc15' }}>
+                    <Lock size={20} color="var(--text-primary)" />
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>
                       Contact verrouillé{contactDetails.owner_display_name ? ` — appartient à ${contactDetails.owner_display_name}` : ''}.
                       Vous ne voyez que son nom tant que l'accès ne vous a pas été accordé.
                     </span>
@@ -1507,7 +1511,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                             }
                           }}
                         />
-                        <span>{s.name} ({s.type === 'personal' ? '� Perso' : '� Partagé'})</span>
+                        <span>{s.name} ({s.type === 'personal' ? 'Perso' : 'Partagé'})</span>
                       </label>
                     );
                   })}
@@ -1599,11 +1603,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                       </div>
                       <div style={styles.connectionDetails}>
                         <span style={styles.connectionName}>{contact.first_name} {contact.last_name}</span>
-                        <span style={styles.connectionReason}>
-                          {type === 'company' ? '� ' : '�️ '}
-                          {reason}
-                        </span>
+                        <span style={styles.connectionReason}>{reason}</span>
                       </div>
+                      {type === 'company' ? <Building2 size={12} color="var(--text-muted)" style={{ flexShrink: 0 }} /> : <TagGlyph size={12} color="var(--text-muted)" style={{ flexShrink: 0 }} />}
                       
                     </div>
                   ))
@@ -1998,9 +2000,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     borderLeft: '1px solid var(--border-glow)',
-    background: 'rgba(10, 10, 18, 0.95)',
+    background: 'rgba(10, 10, 10, 0.97)',
     boxShadow: '-10px 0 30px rgba(0, 0, 0, 0.5)',
-    backdropFilter: 'blur(12px)',
   },
   drawerHeader: {
     padding: '20px 24px',
@@ -2056,8 +2057,8 @@ const styles: Record<string, React.CSSProperties> = {
     width: 68,
     height: 68,
     borderRadius: '20px',
-    background: 'rgba(159, 97, 232, 0.1)',
-    border: '2px solid var(--neon-purple)',
+    background: 'rgba(255, 255, 255, 0.05)',
+    border: '2px solid var(--border-hover)',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
@@ -2124,9 +2125,9 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.45,
   },
   aiContextBlock: {
-    background: 'rgba(159, 97, 232, 0.05)',
-    border: '1px solid rgba(159, 97, 232, 0.2)',
-    borderRadius: 12,
+    background: 'rgba(255, 255, 255, 0.03)',
+    border: '1px solid var(--border)',
+    borderRadius: 10,
     padding: 16,
     display: 'flex',
     flexDirection: 'column',
@@ -2236,8 +2237,8 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 12,
   },
   synergySubCard: {
-    background: 'rgba(159, 97, 232, 0.03)',
-    border: '1px solid rgba(159, 97, 232, 0.15)',
+    background: 'rgba(255, 255, 255, 0.02)',
+    border: '1px solid var(--border)',
     borderRadius: 10,
     padding: 14,
     display: 'flex',
@@ -2289,10 +2290,10 @@ const styles: Record<string, React.CSSProperties> = {
     borderLeft: '2.5px solid var(--neon-purple)',
   },
   synergyIntroBox: {
-    background: 'rgba(79, 142, 247, 0.04)',
+    background: 'rgba(255, 255, 255, 0.03)',
     padding: 10,
     borderRadius: 6,
-    borderLeft: '2.5px solid var(--neon-blue)',
+    borderLeft: '2.5px solid var(--border-hover)',
   },
   synergyBoxTitle: {
     fontSize: '0.65rem',
@@ -2385,13 +2386,12 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '12px 18px',
-    background: 'rgba(159, 97, 232, 0.08)',
-    border: '1px solid rgba(159, 97, 232, 0.3)',
-    borderRadius: 12,
+    background: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid var(--border-hover)',
+    borderRadius: 10,
     marginBottom: 16,
     flexWrap: 'wrap',
     gap: 12,
-    boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
   },
   selectSmallBulk: {
     background: 'rgba(0,0,0,0.3)',

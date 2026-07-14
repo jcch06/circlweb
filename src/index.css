@@ -86,8 +86,8 @@ button, input, textarea, select {
 .glass-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 4px;
-  transition: var(--transition-smooth);
+  border-radius: 10px;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .glass-card:hover {
@@ -108,7 +108,7 @@ button, input, textarea, select {
 .glass-panel {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 10px;
   backdrop-filter: none;
 }
 
@@ -153,13 +153,13 @@ button, input, textarea, select {
   background: #ffffff !important;
   color: #000000 !important;
   border: none !important;
-  padding: 10px 20px;
-  border-radius: 4px;
+  padding: 10px 18px;
+  border-radius: 7px;
   font-weight: 600;
   font-size: 0.85rem;
   cursor: pointer;
   box-shadow: none !important;
-  transition: var(--transition-smooth);
+  transition: background-color 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
 }
 
 .btn-primary:hover,
@@ -171,12 +171,18 @@ button, input, textarea, select {
   filter: none;
 }
 
+.btn-primary:active,
+.glow-button:active {
+  transform: scale(0.98);
+}
+
 .btn-primary:disabled,
 .glow-button:disabled,
 .glow-button.primary:disabled {
   background: #333333 !important;
   color: #666666 !important;
   cursor: not-allowed;
+  transform: none;
 }
 
 .btn-secondary,
@@ -184,17 +190,23 @@ button, input, textarea, select {
   background: transparent !important;
   color: var(--text-primary) !important;
   border: 1px solid var(--border) !important;
-  padding: 10px 20px;
-  border-radius: 4px;
+  padding: 10px 18px;
+  border-radius: 7px;
   font-weight: 500;
   cursor: pointer;
-  transition: var(--transition-smooth);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .btn-secondary:hover,
 .glass-button:hover {
   background: rgba(255,255,255,0.05) !important;
   border-color: var(--border-hover) !important;
+}
+
+.btn-secondary:disabled,
+.glass-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* Spinner */
@@ -236,6 +248,11 @@ button, input, textarea, select {
   transform: none;
 }
 
+.nav-item-hover:hover {
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: #fff !important;
+}
+
 .hover-glow:hover {
   box-shadow: none !important;
 }
@@ -245,11 +262,23 @@ input, textarea, select {
   background: var(--bg-input) !important;
   border: 1px solid var(--border) !important;
   color: var(--text-primary) !important;
-  border-radius: 4px !important;
+  border-radius: 7px !important;
   outline: none;
   transition: border-color 0.15s ease;
 }
 
 input:focus, textarea:focus, select:focus {
   border-color: #555 !important;
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--text-muted);
+}
+
+/* Scrollable panels: never let overflow silently clip content in a flex
+   column — a flex item's default min-height is its content height, which
+   defeats overflow-y:auto unless min-height:0 is set explicitly. */
+.scroll-y {
+  overflow-y: auto;
+  min-height: 0;
 }

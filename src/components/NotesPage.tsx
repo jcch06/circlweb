@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { Calendar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 
@@ -121,8 +122,8 @@ export const NotesPage: React.FC<NotesPageProps> = ({
                 required 
                 style={styles.select}
               >
-                <option value="professional">� Professionnel</option>
-                <option value="personal">� Personnel / Informel</option>
+                <option value="professional">Professionnel</option>
+                <option value="personal">Personnel / Informel</option>
               </select>
             </div>
             <div style={{ ...styles.formGroup, gridColumn: 'span 2' }}>
@@ -186,14 +187,14 @@ export const NotesPage: React.FC<NotesPageProps> = ({
                   <div style={styles.metaRow}>
                     <span style={{
                       ...styles.contextBadge,
-                      color: isProfessional ? 'var(--neon-blue)' : 'var(--neon-yellow)',
-                      backgroundColor: isProfessional ? 'rgba(79, 142, 247, 0.08)' : 'rgba(212, 160, 48, 0.08)'
+                      color: 'var(--text-primary)',
+                      backgroundColor: 'rgba(255,255,255,0.06)'
                     }}>
                       {isProfessional ? 'Pro' : 'Perso'}
                     </span>
-                    
+
                     <span style={styles.dateLabel}>
-                      
+                      <Calendar size={11} style={{ marginRight: 4 }} />
                       {new Date(n.created_at).toLocaleDateString('fr-FR', {
                         day: 'numeric',
                         month: 'short',

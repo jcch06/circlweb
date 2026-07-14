@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Users, Layers, Tag, StickyNote, Sparkles, Network } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface DashboardProps {
@@ -113,6 +114,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       <div style={styles.metricsGrid}>
         <div className="glass-card" onClick={() => setActiveTab('contacts')} style={styles.metricCard}>
           <div style={styles.metricHeader}>
+            <Users size={15} style={styles.metricIcon} />
             <span style={styles.metricTitle}>Contacts</span>
           </div>
           <span style={styles.metricValue}>{displayedContacts.length}</span>
@@ -120,6 +122,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         <div className="glass-card" onClick={() => setActiveTab('spaces')} style={styles.metricCard}>
           <div style={styles.metricHeader}>
+            <Layers size={15} style={styles.metricIcon} />
             <span style={styles.metricTitle}>Espaces</span>
           </div>
           <span style={styles.metricValue}>{spaces.length}</span>
@@ -127,6 +130,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         <div className="glass-card" onClick={() => setActiveTab('tags')} style={styles.metricCard}>
           <div style={styles.metricHeader}>
+            <Tag size={15} style={styles.metricIcon} />
             <span style={styles.metricTitle}>Tags</span>
           </div>
           <span style={styles.metricValue}>{tags.filter(t => selectedSpaceId ? t.space_id === selectedSpaceId : true).length}</span>
@@ -134,6 +138,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         <div className="glass-card" onClick={() => setActiveTab('notes')} style={styles.metricCard}>
           <div style={styles.metricHeader}>
+            <StickyNote size={15} style={styles.metricIcon} />
             <span style={styles.metricTitle}>Notes</span>
           </div>
           <span style={styles.metricValue}>{displayedNotes.length}</span>
@@ -147,10 +152,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
             L'IA connecte les profils, identifie les opportunités et suggère des actions concrètes.
           </p>
           <div style={styles.actions}>
-            <button onClick={() => setActiveTab('oracle')} className="btn-primary">
+            <button onClick={() => setActiveTab('oracle')} className="btn-primary" style={styles.iconBtn}>
+              <Sparkles size={14} />
               Lancer l'analyse
             </button>
-            <button onClick={() => setActiveTab('galaxy')} className="btn-secondary">
+            <button onClick={() => setActiveTab('galaxy')} className="btn-secondary" style={styles.iconBtn}>
+              <Network size={14} />
               Voir le graphe
             </button>
           </div>
@@ -158,7 +165,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         <div className="glass-card" style={styles.notesPanel}>
           <h3 style={styles.panelTitle}>Dernières notes</h3>
-          <div style={styles.notesList}>
+          <div className="scroll-y" style={styles.notesList}>
             {recentNotes.length === 0 ? (
               <div style={styles.emptyNotes}>
                 <span>Aucune note.</span>
@@ -214,43 +221,52 @@ const styles: Record<string, React.CSSProperties> = {
   },
   errorBox: {
     border: '1px solid #555',
+    borderRadius: 8,
     padding: '10px 16px',
     color: '#fff',
   },
   metricsGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-    gap: 20,
+    gap: 16,
   },
   metricCard: {
     padding: 20,
     display: 'flex',
     flexDirection: 'column',
-    gap: 12,
+    gap: 14,
     cursor: 'pointer',
   },
   metricHeader: {
     display: 'flex',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     alignItems: 'center',
+    gap: 8,
+  },
+  metricIcon: {
+    color: 'var(--text-muted)',
   },
   metricTitle: {
     fontSize: '0.75rem',
     fontWeight: 600,
     color: '#888',
     textTransform: 'uppercase',
+    letterSpacing: '0.03em',
   },
   metricValue: {
     fontSize: '2rem',
     fontWeight: 700,
     color: '#fff',
     lineHeight: 1,
+    fontFamily: 'var(--font-mono)',
   },
   contentRow: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
-    gap: 20,
-    alignItems: 'start',
+    gap: 16,
+    alignItems: 'stretch',
+    minHeight: 0,
+    flex: 1,
   },
   mainCard: {
     padding: 24,
@@ -260,7 +276,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: '100%',
   },
   cardTitle: {
-    fontSize: '1.25rem',
+    fontSize: '1.15rem',
     fontWeight: 600,
   },
   cardDesc: {
@@ -273,22 +289,29 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 10,
     marginTop: 'auto',
   },
+  iconBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
+  },
   notesPanel: {
     padding: 24,
     display: 'flex',
     flexDirection: 'column',
     gap: 16,
     height: '100%',
+    minHeight: 0,
   },
   panelTitle: {
-    fontSize: '1.25rem',
+    fontSize: '1.15rem',
     fontWeight: 600,
   },
   notesList: {
     display: 'flex',
     flexDirection: 'column',
     gap: 10,
-    overflowY: 'auto',
+    flex: 1,
+    minHeight: 0,
   },
   emptyNotes: {
     padding: 20,
@@ -298,6 +321,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   noteItem: {
     border: '1px solid var(--border)',
+    borderRadius: 8,
     padding: 12,
     display: 'flex',
     flexDirection: 'column',

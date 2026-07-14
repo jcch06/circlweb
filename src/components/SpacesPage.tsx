@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Inbox, Send, Check, User, Users } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { listIncomingRequests, respondToAccessRequest } from '../lib/contactAccess';
 import type { AccessRequest } from '../lib/contactAccess';
@@ -152,7 +153,7 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
 
       if (error) throw error;
 
-      alert("Félicitations ! Les galaxies ont été fusionnées avec succès. Vous partagez désormais cet Espace �");
+      alert("Félicitations ! Les galaxies ont été fusionnées avec succès. Vous partagez désormais cet Espace.");
       await onRefreshData();
       await fetchInvitations();
     } catch (err: any) {
@@ -273,8 +274,8 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
                 required 
                 style={styles.select}
               >
-                <option value="personal">� Espace Personnel (Uniquement visible par moi)</option>
-                <option value="team">� Espace Collaboratif / Team (Partageable avec d'autres utilisateurs)</option>
+                <option value="personal">Espace Personnel (Uniquement visible par moi)</option>
+                <option value="team">Espace Collaboratif / Team (Partageable avec d'autres utilisateurs)</option>
               </select>
             </div>
           </div>
@@ -338,18 +339,18 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
                   <div style={styles.cardHeader}>
                     <div style={{
                       ...styles.iconWrapper,
-                      background: isPersonal ? 'rgba(79, 142, 247, 0.1)' : 'rgba(48, 192, 96, 0.1)',
-                      border: `1.5px solid ${isPersonal ? 'var(--neon-blue)' : 'var(--neon-green)'}`
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1.5px solid var(--border-hover)'
                     }}>
-                      
+                      {isPersonal ? <User size={18} color="var(--text-secondary)" /> : <Users size={18} color="var(--text-secondary)" />}
                     </div>
                     <div>
                       <h3 style={styles.spaceName}>{s.name}</h3>
                       <div style={styles.typeBadgeRow}>
                         <span style={{
                           ...styles.typeBadge,
-                          color: isPersonal ? 'var(--neon-blue)' : 'var(--neon-green)',
-                          backgroundColor: isPersonal ? 'rgba(79, 142, 247, 0.08)' : 'rgba(48, 192, 96, 0.08)'
+                          color: 'var(--text-primary)',
+                          backgroundColor: 'rgba(255,255,255,0.06)'
                         }}>
                           {isPersonal ? 'Personnel' : 'Collaboratif'}
                         </span>
@@ -417,7 +418,7 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
         <div style={styles.invitationsLayout}>
           {/* Incoming */}
           <div className="glass-panel" style={styles.inviteSection}>
-            <h3 style={styles.sectionTitleInvite}>� Demandes de fusion reçues ({incomingInvites.length})</h3>
+            <h3 style={styles.sectionTitleInvite}><Inbox size={16} /> Demandes de fusion reçues ({incomingInvites.length})</h3>
             <div style={styles.invitesList}>
               {incomingInvites.length === 0 ? (
                 <span style={styles.emptyText}>Aucune demande de fusion en attente.</span>
@@ -436,7 +437,7 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
                       className="btn-primary"
                       style={styles.acceptBtn}
                     >
-                      Accepter la Fusion �
+                      <Check size={14} /> Accepter la Fusion
                     </button>
                   </div>
                 ))
@@ -446,7 +447,7 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
 
           {/* Outgoing */}
           <div className="glass-panel" style={styles.inviteSection}>
-            <h3 style={styles.sectionTitleInvite}>� Invitations de fusion envoyées ({outgoingInvites.length})</h3>
+            <h3 style={styles.sectionTitleInvite}><Send size={16} /> Invitations de fusion envoyées ({outgoingInvites.length})</h3>
             <div style={styles.invitesList}>
               {outgoingInvites.length === 0 ? (
                 <span style={styles.emptyText}>Aucune invitation envoyée.</span>
@@ -675,7 +676,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '0.65rem',
     fontWeight: 700,
     color: '#fff',
-    backgroundColor: 'rgba(159, 97, 232, 0.08)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
     padding: '3px 8px',
     borderRadius: 4,
     display: 'inline-flex',
@@ -693,8 +694,8 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--text-muted)',
   },
   syncBtn: {
-    background: 'rgba(48, 192, 96, 0.1)',
-    border: '1px solid rgba(48, 192, 96, 0.3)',
+    background: 'rgba(255,255,255,0.06)',
+    border: '1px solid var(--border-hover)',
     color: '#fff',
     fontSize: '0.7rem',
     fontWeight: 600,
@@ -731,6 +732,9 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '1.05rem',
     fontWeight: 700,
     color: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
   },
   invitesList: {
     display: 'flex',
@@ -757,6 +761,9 @@ const styles: Record<string, React.CSSProperties> = {
   acceptBtn: {
     padding: '8px 16px',
     fontSize: '0.8rem',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
   },
   statusBlock: {
     display: 'flex',

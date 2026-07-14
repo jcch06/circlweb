@@ -40,7 +40,7 @@ const styles = {
     overflowY: 'auto' as const,
     padding: 24,
     position: 'relative' as const,
-    boxShadow: '0 0 40px rgba(138, 43, 226, 0.15)',
+    boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
   },
   header: {
     display: 'flex',
@@ -112,8 +112,8 @@ const styles = {
     marginTop: 8,
   },
   tag: {
-    background: 'rgba(138, 43, 226, 0.15)',
-    border: '1px solid rgba(138, 43, 226, 0.3)',
+    background: 'rgba(255,255,255,0.08)',
+    border: '1px solid var(--border-hover)',
     color: '#fff',
     padding: '2px 8px',
     borderRadius: 99,
@@ -128,8 +128,8 @@ const styles = {
   },
   autoBtn: {
     width: '100%',
-    background: 'linear-gradient(90deg, rgba(79, 142, 247, 0.1), rgba(138, 43, 226, 0.1))',
-    border: '1px solid rgba(138, 43, 226, 0.3)',
+    background: 'rgba(255,255,255,0.05)',
+    border: '1px solid var(--border-hover)',
     color: '#fff',
     padding: '12px',
     borderRadius: 8,

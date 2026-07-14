@@ -1,5 +1,5 @@
 import React from 'react';
-import { LogOut } from 'lucide-react';
+import { LogOut, LayoutDashboard, Network, Sparkles, Upload, Users, Globe2, Tag, StickyNote } from 'lucide-react';
 
 export type TabType = 'dashboard' | 'galaxy' | 'oracle' | 'ingestion' | 'contacts' | 'spaces' | 'tags' | 'notes';
 
@@ -37,6 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div style={styles.spaceList}>
           <button
             onClick={() => setSelectedSpaceId(null)}
+            className="nav-item-hover"
             style={{
               ...styles.spaceItem,
               ...(selectedSpaceId === null ? styles.spaceItemActive : {}),
@@ -57,6 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 key={space.id}
                 onClick={() => setSelectedSpaceId(space.id)}
+                className="nav-item-hover"
                 style={{
                   ...styles.spaceItem,
                   ...(isActive ? styles.spaceItemActive : {}),
@@ -82,19 +84,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {([
-          { key: 'dashboard', label: 'Tableau de bord' },
-          { key: 'galaxy', label: 'Graphe' },
-          { key: 'oracle', label: 'Analyse IA' },
-          { key: 'ingestion', label: 'Ingestion' },
-        ] as { key: TabType; label: string }[]).map(item => (
+          { key: 'dashboard', label: 'Tableau de bord', Icon: LayoutDashboard },
+          { key: 'galaxy', label: 'Graphe', Icon: Network },
+          { key: 'oracle', label: 'Analyse IA', Icon: Sparkles },
+          { key: 'ingestion', label: 'Ingestion', Icon: Upload },
+        ] as { key: TabType; label: string; Icon: typeof LayoutDashboard }[]).map(item => (
           <button
             key={item.key}
             onClick={() => setActiveTab(item.key)}
+            className="nav-item-hover"
             style={{
               ...styles.navItem,
               ...(activeTab === item.key ? styles.navItemActive : {}),
             }}
           >
+            <item.Icon size={15} />
             {item.label}
           </button>
         ))}
@@ -104,19 +108,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {([
-          { key: 'contacts', label: 'Contacts' },
-          { key: 'spaces', label: 'Espaces' },
-          { key: 'tags', label: 'Tags' },
-          { key: 'notes', label: 'Notes' },
-        ] as { key: TabType; label: string }[]).map(item => (
+          { key: 'contacts', label: 'Contacts', Icon: Users },
+          { key: 'spaces', label: 'Espaces', Icon: Globe2 },
+          { key: 'tags', label: 'Tags', Icon: Tag },
+          { key: 'notes', label: 'Notes', Icon: StickyNote },
+        ] as { key: TabType; label: string; Icon: typeof LayoutDashboard }[]).map(item => (
           <button
             key={item.key}
             onClick={() => setActiveTab(item.key)}
+            className="nav-item-hover"
             style={{
               ...styles.navItem,
               ...(activeTab === item.key ? styles.navItemActive : {}),
             }}
           >
+            <item.Icon size={15} />
             {item.label}
           </button>
         ))}
@@ -140,7 +146,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 const styles: Record<string, React.CSSProperties> = {
   sidebar: {
     width: 220,
-    height: '100vh',
+    height: '100%',
     display: 'flex',
     flexDirection: 'column',
     padding: '20px 12px',
@@ -186,12 +192,13 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '8px 10px',
     background: 'transparent',
     border: 'none',
-    borderRadius: 4,
+    borderRadius: 6,
     cursor: 'pointer',
     textAlign: 'left',
+    transition: 'background-color 0.15s ease',
   },
   spaceItemActive: {
-    background: 'rgba(255, 255, 255, 0.06)',
+    background: 'rgba(255, 255, 255, 0.08)',
   },
   spaceName: {
     fontSize: '0.82rem',
@@ -208,18 +215,20 @@ const styles: Record<string, React.CSSProperties> = {
   navItem: {
     display: 'flex',
     alignItems: 'center',
+    gap: 10,
     padding: '9px 10px',
     background: 'none',
     border: 'none',
-    borderRadius: 4,
+    borderRadius: 6,
     color: '#888',
     fontSize: '0.82rem',
     fontWeight: 400,
     cursor: 'pointer',
     textAlign: 'left',
+    transition: 'background-color 0.15s ease, color 0.15s ease',
   },
   navItemActive: {
-    background: 'rgba(255, 255, 255, 0.06)',
+    background: 'rgba(255, 255, 255, 0.08)',
     color: '#fff',
     fontWeight: 600,
   },

@@ -976,17 +976,34 @@ export interface AnalysisHistoryMeta {
   label?: string;
 }
 
+async function postOracleStep<T>(path: string, body: any): Promise<T> {
+  const authHeader = await getAuthHeader();
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader },
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `Oracle proxy error ${response.status} (${path})`);
+  }
+  return response.json();
+}
+
 /**
- * Runs the full Map-Reduce Oracle pipeline server-side (api/oracle/run-analysis.ts):
- * embeddings, semantic clustering, MAP, REDUCE, and supply/demand all execute
- * with FULL contact data (never sent to this client), and the server redacts
- * anything involving a contact the caller doesn't have full access to before
- * returning — this is what makes cross-network analysis safe even when some
+ * Runs the full Map-Reduce Oracle pipeline server-side, as 4 short calls
+ * orchestrated from here instead of one monolithic function — a single
+ * do-everything endpoint (the original design) hit 504 Gateway Timeouts in
+ * production because a full pipeline is several sequential Mistral Large
+ * calls. Each step still fetches FULL contact data server-side (never sent
+ * to this client) using the caller's own JWT, and redacts anything
+ * involving a contact the caller doesn't have full access to before
+ * returning — this is what keeps cross-network analysis safe even when some
  * contacts are locked (see the confidentialité inter-réseaux migration).
  *
- * `contacts` is still used here for the local cache key and history bookkeeping
- * (count/ids), not sent to the pipeline itself — the server fetches its own
- * authoritative copy scoped to `historyMeta.spaceId`.
+ * `contacts` is still used here for the local cache key and history
+ * bookkeeping (count/ids), not sent to the pipeline itself — the server
+ * fetches its own authoritative copy scoped to `historyMeta.spaceId`.
  */
 export async function runMistralOracleBatchPipeline(
   contacts: any[],
@@ -996,23 +1013,50 @@ export async function runMistralOracleBatchPipeline(
   historyMeta?: AnalysisHistoryMeta
 ): Promise<MistralPipelineResult> {
   resetGlobalUsage();
-  onProgress?.(10);
+  const spaceId = historyMeta?.spaceId ?? null;
+  onProgress?.(5);
 
-  const authHeader = await getAuthHeader();
-  const response = await fetch('/api/oracle/run-analysis', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeader },
-    body: JSON.stringify({ spaceId: historyMeta?.spaceId ?? null, userProfile })
-  });
+  const topology = await postOracleStep<{
+    batches: string[][];
+    bridgeContacts: BridgeContact[];
+    lockedContactNames: string[];
+  }>('/api/oracle/topology', { spaceId });
+  onProgress?.(15);
 
-  onProgress?.(90);
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || `Oracle analysis proxy error ${response.status}`);
+  const batchResults: MistralBatchResult[] = [];
+  const totalBatches = topology.batches.length;
+  for (let i = 0; i < totalBatches; i++) {
+    const batchResult = await postOracleStep<MistralBatchResult>('/api/oracle/map-batch', {
+      contactIds: topology.batches[i],
+      lockedContactNames: topology.lockedContactNames,
+      userProfile
+    });
+    batchResults.push(batchResult);
+    onProgress?.(15 + Math.round(((i + 1) / Math.max(totalBatches, 1)) * 55));
   }
 
-  const result: MistralPipelineResult = await response.json();
+  const synthesis = await postOracleStep<MistralGlobalSynthesis>('/api/oracle/reduce', {
+    batchResults,
+    bridgeContacts: topology.bridgeContacts,
+    lockedContactNames: topology.lockedContactNames,
+    userProfile
+  });
+  onProgress?.(85);
+
+  const supplyDemand = await postOracleStep<SupplyDemandEntry[]>('/api/oracle/supply-demand', {
+    spaceId,
+    userProfile
+  });
+  onProgress?.(95);
+
+  const result: MistralPipelineResult = {
+    batches: batchResults,
+    synthesis,
+    supplyDemand,
+    bridgeContacts: topology.bridgeContacts,
+    timestamp: Date.now()
+  };
+
   onProgress?.(100);
 
   const cacheKey = `circl_mistral_v7_${contacts.length}_${contacts.map(c => c.id).sort().join(',').substring(0, 100)}`;

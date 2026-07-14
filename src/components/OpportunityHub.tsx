@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Zap, Copy, Check, Target, Key, Brain, Workflow, Award, Scale } from 'lucide-react';
+import { Zap, Copy, Check, Target, Key, Brain, Workflow, Award, Scale, Share2 } from 'lucide-react';
 import type { MistralPipelineResult } from '../lib/mistral';
 import {
   suggestWarmIntros,
@@ -76,7 +76,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
     setLoading(true);
 
     if (forceRefresh) {
-      const keys = Object.keys(localStorage).filter(k => k.startsWith('circl_mistral_v6_'));
+      const keys = Object.keys(localStorage).filter(k => k.startsWith('circl_mistral_v7_'));
       keys.forEach(k => localStorage.removeItem(k));
     }
 
@@ -213,7 +213,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                   </div>
                   <h3 style={{ margin: '16px 0 8px 0' }}>Analyse Mistral Map-Reduce...</h3>
                   <p style={{ color: 'var(--text-secondary)', marginBottom: 24, fontSize: '0.9rem', textAlign: 'center' }}>
-                    Le réseau est découpé en lots. Chaque lot est analysé, puis une synthèse globale est générée.
+                    Le réseau est cartographié sémantiquement puis découpé en lots cohérents. Chaque lot est analysé, puis une synthèse globale est générée.
                   </p>
                   
                   <div style={styles.progressBarBg}>
@@ -249,6 +249,32 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                         {v3Result.synthesis.networkStrength}
                       </p>
                     </div>
+
+                    {/* Contacts-Ponts */}
+                    {v3Result.bridgeContacts && v3Result.bridgeContacts.length > 0 && (
+                      <div>
+                        <h3 style={{ color: 'var(--neon-purple)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <Share2 size={20} /> Contacts-Ponts Stratégiques
+                        </h3>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 16 }}>
+                          Ces contacts relient des groupes autrement séparés de votre réseau — les meilleurs candidats pour des introductions à fort impact.
+                        </p>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
+                          {v3Result.bridgeContacts.map((b, i) => (
+                            <div key={i} className="glass-card" style={{ padding: 16 }}>
+                              <div style={{ fontWeight: 600, color: '#fff', marginBottom: 4 }}>{b.name}</div>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 10 }}>{b.role} · {b.company}</div>
+                              <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${Math.round(b.centralityScore * 100)}%`, background: 'var(--neon-purple)', borderRadius: 99 }} />
+                              </div>
+                              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                Score de connexion : {Math.round(b.centralityScore * 100)}%
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Thèmes Globaux */}
                     <div>

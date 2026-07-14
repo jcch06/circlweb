@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { supabase } from '../lib/supabase';
-import { enrichProfileFromScraping, isMistralConfigured, detectContactSynergies } from '../lib/mistral';
-import type { ContactSynergy } from '../lib/mistral';
+import { enrichProfileFromScraping, isMistralConfigured, detectContactSynergies, getCachedMistralPipelineResult } from '../lib/mistral';
+import type { ContactSynergy, BridgeContact } from '../lib/mistral';
 
 
 interface GalaxyVisualizerProps {
@@ -182,6 +182,16 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
       : contacts;
   }, [contacts, selectedSpaceId]);
 
+  // Bridge contacts (strategic connectors) surfaced by a cached Oracle analysis, if any.
+  // Read-only lookup — never triggers a new (paid) analysis from the galaxy view.
+  const bridgeContactMap = useMemo(() => {
+    const map = new Map<string, BridgeContact>();
+    if (activeContacts.length === 0) return map;
+    const cached = getCachedMistralPipelineResult(activeContacts);
+    cached?.bridgeContacts?.forEach(b => map.set(b.id, b));
+    return map;
+  }, [activeContacts]);
+
   // Floating Search and Selection State
   const [searchQuery, setSearchQuery] = useState('');
   const [mouseDownCoords, setMouseDownCoords] = useState<{ x: number; y: number } | null>(null);
@@ -303,11 +313,14 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
       const spaceIndex = spaces.findIndex(s => s.id === c.space_id);
       const colors = ['#4F8EF7', '#9F61E8', '#EC6F8B', '#30C060', '#D4A030', '#E89030'];
       const color = colors[spaceIndex % colors.length] || '#9F61E8';
+      const bridge = bridgeContactMap.get(c.id);
 
       return {
         ...c,
         id: c.id,
         color,
+        isBridge: Boolean(bridge),
+        centralityScore: bridge?.centralityScore ?? 0,
       };
     });
 
@@ -352,7 +365,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
     }
 
     return { nodes, links };
-  }, [activeContacts, spaces, contactTags, selectedSpaceId]);
+  }, [activeContacts, spaces, contactTags, selectedSpaceId, bridgeContactMap]);
 
   // Fetch full details for the selected contact drawer (including notes and tags)
   const contactDetails = useMemo(() => {
@@ -645,7 +658,21 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
                 return;
               }
               const size = 4;
-              
+
+              // 0. Bridge contacts (strategic connectors from the Oracle analysis) get a glowing ring
+              if (node.isBridge) {
+                const ringSize = size + 3 + node.centralityScore * 3;
+                ctx.save();
+                ctx.shadowColor = '#a855f7';
+                ctx.shadowBlur = 8;
+                ctx.strokeStyle = 'rgba(168, 85, 247, 0.85)';
+                ctx.lineWidth = 1.5 / globalScale;
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, ringSize, 0, 2 * Math.PI, false);
+                ctx.stroke();
+                ctx.restore();
+              }
+
               // 1. Draw solid circle star (extremely fast)
               ctx.fillStyle = node.color || '#9F61E8';
               ctx.beginPath();
@@ -653,12 +680,14 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
               ctx.fill();
 
               // 2. Draw text label below it (always visible, viewport-independent sizing and spacing)
-              const label = `${node.first_name} ${node.last_name}`;
+              const label = node.isBridge
+                ? `★ ${node.first_name} ${node.last_name}`
+                : `${node.first_name} ${node.last_name}`;
               const fontSize = 13 / globalScale;
               ctx.font = `${fontSize}px Inter, sans-serif`;
               ctx.textAlign = 'center';
               ctx.textBaseline = 'top';
-              ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+              ctx.fillStyle = node.isBridge ? '#d8b4fe' : 'rgba(255, 255, 255, 0.9)';
               // Use scale-dependent offset to keep the text always exactly 6px below the star on screen
               ctx.fillText(label, node.x, node.y + size + 6 / globalScale);
             }}
@@ -683,7 +712,18 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
                 
               </div>
               <h2 style={styles.profileName}>{contactDetails.first_name} {contactDetails.last_name}</h2>
-              
+
+              {contactDetails.isBridge && (
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '3px 10px', borderRadius: 99, marginTop: 4,
+                  background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.3)',
+                  color: '#d8b4fe', fontSize: '0.75rem', fontWeight: 600
+                }}>
+                  ★ Connecteur clé du réseau
+                </div>
+              )}
+
               {contactDetails.job_title && (
                 <div style={styles.profileRole}>
                   

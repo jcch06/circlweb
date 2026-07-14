@@ -1,4 +1,5 @@
 import { Mistral } from '@mistralai/mistralai';
+import { buildSimilarityMatrix, findOptimalK, kMeansClustering, computeBetweennessCentrality } from './vectorMath';
 
 export interface TokenUsage {
   promptTokens: number;
@@ -950,6 +951,7 @@ export interface MistralPipelineResult {
   batches: MistralBatchResult[];
   synthesis: MistralGlobalSynthesis;
   supplyDemand: SupplyDemandEntry[];
+  bridgeContacts: BridgeContact[];
   timestamp: number;
 }
 
@@ -1041,16 +1043,23 @@ ${batchData}
 // ============================================================================
 // REDUCE: Synthesize all batch results
 // ============================================================================
-async function synthesizeNetwork(batchResults: MistralBatchResult[], userContext: string = ''): Promise<MistralGlobalSynthesis> {
+async function synthesizeNetwork(
+  batchResults: MistralBatchResult[],
+  userContext: string = '',
+  bridgeContacts: BridgeContact[] = []
+): Promise<MistralGlobalSynthesis> {
   const aggregatedData = JSON.stringify(batchResults, null, 2);
+  const bridgeContext = bridgeContacts.length > 0
+    ? `\n<bridge_contacts>\nCes contacts relient structurellement des parties autrement séparées du réseau (calculé par centralité d'intermédiarité). Ce sont les meilleurs candidats pour des introductions stratégiques et des chaînes de valeur inter-groupes :\n${bridgeContacts.map(b => `- ${b.name} (${b.role} chez ${b.company})`).join('\n')}\n</bridge_contacts>\n`
+    : '';
 
   const prompt = `<role>
 Tu es "Oracle REDUCE", un super-cerveau stratégique spécialisé dans la consolidation d'analyses de réseaux professionnels. Ta mission est de fusionner des dizaines d'analyses locales (par lots) en une synthèse globale d'une qualité exceptionnelle.
 </role>
-${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}
+${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${bridgeContext}
 <instructions>
 1. Fusionne les besoins similaires ou redondants détectés dans les différents lots en "Macro-Besoins" consolidés (ne liste pas les doublons séparément).
-2. Construis des chaînes de valeur globales (value chains) qui relient plusieurs contacts de lots DIFFÉRENTS entre eux autour d'un objectif business commun (ex : A a un besoin, B a la compétence, C a le réseau/financement pour industrialiser).
+2. Construis des chaînes de valeur globales (value chains) qui relient plusieurs contacts de lots DIFFÉRENTS entre eux autour d'un objectif business commun (ex : A a un besoin, B a la compétence, C a le réseau/financement pour industrialiser). Quand c'est pertinent, utilise les <bridge_contacts> comme maillons de connexion entre groupes.
 3. Identifie les thèmes dominants et les synergies transversales (cross-batch).
 4. Propose un plan d'action concret et priorisé.
 </instructions>
@@ -1260,11 +1269,168 @@ export async function computeMistralEmbeddings(
   return results;
 }
 
+export interface BridgeContact {
+  id: string;
+  name: string;
+  role: string;
+  company: string;
+  centralityScore: number;
+}
+
+interface NetworkTopology {
+  /** Contacts grouped into semantically coherent batches (20-30 contacts each) for the MAP step. */
+  batches: any[][];
+  /** Contacts that structurally bridge otherwise-separate clusters of the network (betweenness centrality). */
+  bridgeContacts: BridgeContact[];
+}
+
+const MIN_MAP_BATCH = 15;
+const MAX_MAP_BATCH = 30;
+
+/** Naive fallback: chunk contacts into fixed-size slices, ignoring semantics. */
+function chunkNaive(contacts: any[], size: number = 25): any[][] {
+  const batches: any[][] = [];
+  for (let i = 0; i < contacts.length; i += size) {
+    batches.push(contacts.slice(i, i + size));
+  }
+  return batches;
+}
+
+/**
+ * Packs cluster-grouped contact id lists into batches of 20-30, preserving
+ * cluster boundaries where possible so each MAP batch is thematically coherent.
+ * Small leftover groups get merged into the previous batch rather than sent
+ * alone (a lone/duo batch starves the MAP prompt's anti-empty-synergy rule).
+ */
+function packClustersIntoBatches(clusterGroups: any[][]): any[][] {
+  const batches: any[][] = [];
+  let buffer: any[] = [];
+
+  for (const group of clusterGroups) {
+    let idx = 0;
+    while (idx < group.length) {
+      const space = MAX_MAP_BATCH - buffer.length;
+      const slice = group.slice(idx, idx + space);
+      buffer.push(...slice);
+      idx += slice.length;
+      if (buffer.length >= MAX_MAP_BATCH) {
+        batches.push(buffer);
+        buffer = [];
+      }
+    }
+  }
+
+  if (buffer.length > 0) {
+    if (batches.length > 0 && buffer.length < MIN_MAP_BATCH) {
+      batches[batches.length - 1] = batches[batches.length - 1].concat(buffer);
+    } else {
+      batches.push(buffer);
+    }
+  }
+
+  return batches;
+}
+
+/**
+ * Computes network topology ahead of the MAP step:
+ * 1. Embeds every contact (mistral-embed).
+ * 2. K-means clusters them so MAP batches are thematically coherent instead of
+ *    arbitrary array slices (a batch mixing a politician, a dev and a mason
+ *    struggles to find real synergies; a batch of semantically close profiles doesn't).
+ * 3. Runs betweenness centrality on the similarity graph to surface "bridge"
+ *    contacts — the people structurally connecting otherwise separate parts
+ *    of the network (highest strategic introduction value).
+ *
+ * Falls back to naive fixed-size chunking (previous behavior) if embeddings
+ * fail, are only partially available, or the network is too small to cluster.
+ */
+async function computeNetworkTopology(
+  contacts: any[],
+  notes: any[],
+  onProgress?: (pct: number) => void
+): Promise<NetworkTopology> {
+  // `onProgress` here is local to this phase (0-100); the caller rescales it
+  // to whatever share of the overall pipeline this phase represents.
+  if (contacts.length < 6) {
+    onProgress?.(100);
+    return { batches: chunkNaive(contacts), bridgeContacts: [] };
+  }
+
+  let embeddings: { contactId: string; vector: number[] }[] = [];
+  try {
+    // Embeddings are the slow part of this phase: give them 0-85% of the local scale.
+    embeddings = await computeMistralEmbeddings(contacts, notes, (pct) => onProgress?.(pct * 0.85));
+  } catch (err) {
+    console.error('computeNetworkTopology: embedding failure, falling back to naive batching.', err);
+    onProgress?.(100);
+    return { batches: chunkNaive(contacts), bridgeContacts: [] };
+  }
+
+  if (embeddings.length < 6) {
+    onProgress?.(100);
+    return { batches: chunkNaive(contacts), bridgeContacts: [] };
+  }
+
+  const embeddedIds = new Set(embeddings.map(e => e.contactId));
+  const contactById = new Map(contacts.map(c => [c.id, c]));
+  const vectors = embeddings.map(e => e.vector);
+
+  let clusterGroups: any[][];
+  let bridgeContacts: BridgeContact[] = [];
+
+  try {
+    const k = findOptimalK(vectors);
+    const { clusters } = kMeansClustering(vectors, k);
+
+    const groupsById = new Map<number, any[]>();
+    embeddings.forEach((e, idx) => {
+      const clusterId = clusters[idx];
+      const contact = contactById.get(e.contactId);
+      if (!contact) return;
+      if (!groupsById.has(clusterId)) groupsById.set(clusterId, []);
+      groupsById.get(clusterId)!.push(contact);
+    });
+    clusterGroups = Array.from(groupsById.values());
+
+    const similarityMatrix = buildSimilarityMatrix(vectors);
+    const centrality = computeBetweennessCentrality(similarityMatrix, 0.5);
+    const maxCentrality = Math.max(...centrality, 0);
+
+    if (maxCentrality > 0) {
+      bridgeContacts = embeddings
+        .map((e, idx) => ({ e, score: centrality[idx] }))
+        .filter(({ score }) => score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 6)
+        .map(({ e, score }) => {
+          const c = contactById.get(e.contactId);
+          return {
+            id: e.contactId,
+            name: c?.name || `${c?.first_name || ''} ${c?.last_name || ''}`.trim(),
+            role: c?.job_title || 'Inconnu',
+            company: c?.company || 'Inconnue',
+            centralityScore: Math.round((score / maxCentrality) * 100) / 100
+          };
+        });
+    }
+  } catch (err) {
+    console.error('computeNetworkTopology: clustering failure, falling back to a single naive group.', err);
+    clusterGroups = [contacts.filter(c => embeddedIds.has(c.id))];
+  }
+
+  // Contacts whose embedding failed still need to be analyzed — append them as their own group(s).
+  const unembedded = contacts.filter(c => !embeddedIds.has(c.id));
+  if (unembedded.length > 0) clusterGroups.push(unembedded);
+
+  onProgress?.(100);
+  return { batches: packClustersIntoBatches(clusterGroups), bridgeContacts };
+}
+
 // ============================================================================
 // ORCHESTRATOR: Run full Map-Reduce Pipeline
 // ============================================================================
 export function getCachedMistralPipelineResult(contacts: any[]): MistralPipelineResult | null {
-  const cacheKey = `circl_mistral_v6_${contacts.length}_${contacts.map(c => c.id).sort().join(',').substring(0, 100)}`;
+  const cacheKey = `circl_mistral_v7_${contacts.length}_${contacts.map(c => c.id).sort().join(',').substring(0, 100)}`;
   const cached = localStorage.getItem(cacheKey);
   if (cached) {
     try {
@@ -1287,18 +1453,18 @@ export async function runMistralOracleBatchPipeline(
 
   const userContext = userProfile ? buildUserContext(userProfile) : '';
 
-  // MAP step: 20-30 contacts per batch max to avoid overloading mistral-large-latest.
-  const BATCH_SIZE = 25;
-  const batches = [];
-
-  for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
-    batches.push(contacts.slice(i, i + BATCH_SIZE));
-  }
+  // Embeddings + semantic clustering + bridge-contact detection ahead of MAP,
+  // so batches are thematically coherent instead of arbitrary array slices.
+  const { batches, bridgeContacts } = await computeNetworkTopology(
+    contacts,
+    notes,
+    (pct) => onProgress?.(pct * 0.3) // 0-30%: topology phase
+  );
 
   const batchResults: MistralBatchResult[] = [];
 
   for (let i = 0; i < batches.length; i++) {
-    onProgress?.((i / batches.length) * 60);
+    onProgress?.(30 + (i / batches.length) * 35); // 30-65%: MAP
     const res = await processContactBatch(batches[i], notes, userContext);
     batchResults.push(res);
     if (i < batches.length - 1) {
@@ -1307,7 +1473,7 @@ export async function runMistralOracleBatchPipeline(
   }
 
   onProgress?.(70);
-  const synthesis = await synthesizeNetwork(batchResults, userContext);
+  const synthesis = await synthesizeNetwork(batchResults, userContext, bridgeContacts);
 
   onProgress?.(85);
   const supplyDemand = await buildSupplyDemandMatrix(contacts, notes, userContext);
@@ -1319,10 +1485,11 @@ export async function runMistralOracleBatchPipeline(
     batches: batchResults,
     synthesis,
     supplyDemand,
+    bridgeContacts,
     timestamp: Date.now()
   };
 
-  const cacheKey = `circl_mistral_v6_${contacts.length}_${contacts.map(c => c.id).sort().join(',').substring(0, 100)}`;
+  const cacheKey = `circl_mistral_v7_${contacts.length}_${contacts.map(c => c.id).sort().join(',').substring(0, 100)}`;
   localStorage.setItem(cacheKey, JSON.stringify(result));
 
   return result;

@@ -1,6 +1,29 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Mistral } from '@mistralai/mistralai';
-import { authenticateRequest } from '../_lib/auth';
+import { createClient } from '@supabase/supabase-js';
+
+// Auth is inlined (not imported from a shared file) so this function has no
+// cross-file dependency for Vercel's bundler to trace — each api/ file is
+// fully self-contained, matching the pre-existing api/enrich-linkedin.ts pattern.
+async function authenticateRequest(req: VercelRequest): Promise<string | null> {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) return null;
+
+  const supabaseUrl = process.env.VITE_SUPABASE_URL;
+  const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) return null;
+
+  try {
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data.user) return null;
+    return data.user.id;
+  } catch (err) {
+    console.error('authenticateRequest: unexpected failure verifying token', err);
+    return null;
+  }
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');

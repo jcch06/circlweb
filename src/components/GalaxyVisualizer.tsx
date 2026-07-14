@@ -468,6 +468,24 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
 
       if (updateError) throw updateError;
 
+      // Best-effort: also persist skills / inferred_needs as columns so the synergy
+      // and supply/demand engines have structured material. Guarded so a missing
+      // column (migration not yet applied) never breaks the enrichment flow.
+      try {
+        const extras: Record<string, string[]> = {};
+        if (Array.isArray(enrichment.skills) && enrichment.skills.length > 0) {
+          extras.skills = enrichment.skills.filter((s: string) => s && s !== 'null');
+        }
+        if (Array.isArray(enrichment.inferredNeeds) && enrichment.inferredNeeds.length > 0) {
+          extras.inferred_needs = enrichment.inferredNeeds.filter((n: string) => n && n !== 'null');
+        }
+        if (Object.keys(extras).length > 0) {
+          await supabase.from('contacts').update(extras).eq('id', selectedNode.id);
+        }
+      } catch (extrasErr) {
+        console.warn('Persistance skills/inferred_needs ignorée (migration manquante ?)', extrasErr);
+      }
+
       // Seed newly extracted tags if they don't exist, and associate them
       for (const skill of enrichment.skills) {
         // Try to find if tag exists in this space

@@ -846,39 +846,49 @@ export interface OracleV3Result {
  * Build a dynamic user context string for prompts based on the user's bio/profile
  */
 export function buildUserContext(userProfile: any): string {
-  const bio = userProfile?.bio || userProfile?.description || '';
-  const skills = userProfile?.skills || [];
+  // Supports the UserProfilePopup shape { name, company, role, skills[], currentProjects, needs }
+  // as well as looser bio/title fallbacks.
   const name = userProfile?.name || 'Utilisateur';
-  const title = userProfile?.title || userProfile?.job_title || '';
-  
-  // Always-included generic monetization angles
+  const role = userProfile?.role || userProfile?.title || userProfile?.job_title || '';
+  const company = userProfile?.company || '';
+  const skills: string[] = userProfile?.skills || [];
+  const projects = userProfile?.currentProjects || userProfile?.bio || userProfile?.description || '';
+  const needs = userProfile?.needs || '';
+
+  // Always-included generic monetization angles.
   const genericAngles = [
     'mise en relation / apport d\'affaires (commission)',
-    'consulting & conseil strat├®gique',
+    'consulting & conseil stratégique',
     'freelance & prestations de service',
-    'lev├®e de fonds & recherche d\'investisseurs',
-    '├®v├®nementiel & networking (d├«ners priv├®s, masterclasses)',
+    'levée de fonds & recherche d\'investisseurs',
+    'événementiel & networking (dîners privés, masterclasses)',
     'vente de formations & coaching',
-    'cr├®ation de produits num├®riques (SaaS, outils, templates)',
+    'création de produits numériques (SaaS, outils, templates)',
     'lobbying & influence politique',
     'recrutement & chasse de talents',
     'partenariats commerciaux & co-entreprises',
-    'affiliation & recommandation r├®mun├®r├®e',
-    'management de communaut├® & cercles premium',
+    'affiliation & recommandation rémunérée',
+    'management de communauté & cercles premium',
     'courtage immobilier & investissement',
     'gestion de patrimoine & conseil financier',
     'relations presse & personal branding'
   ];
 
-  return `## PROFIL DE L'UTILISATEUR ÔÇö ${name}
-${title ? `Poste : ${title}` : ''}
-${bio ? `Bio : ${bio}` : ''}
-${skills.length > 0 ? `Comp├®tences : ${skills.join(', ')}` : ''}
+  const lines = [
+    `## PROFIL DE L'UTILISATEUR — ${name}`,
+    role ? `Poste : ${role}` : '',
+    company ? `Entreprise : ${company}` : '',
+    skills.length > 0 ? `Compétences : ${skills.join(', ')}` : '',
+    projects ? `Projets en cours : ${projects}` : '',
+    needs ? `Besoins / objectifs déclarés : ${needs}` : ''
+  ].filter(Boolean);
 
-L'utilisateur veut MON├ëTISER son r├®seau. Voici les angles de mon├®tisation ├á explorer en priorit├® :
+  return `${lines.join('\n')}
+
+L'utilisateur veut MONÉTISER et VALORISER son réseau. Angles de valeur à explorer en priorité :
 ${genericAngles.map((a, i) => `${i + 1}. ${a}`).join('\n')}
 
-ADAPTE ton analyse au profil sp├®cifique de l'utilisateur ci-dessus. Si sa bio mentionne un domaine pr├®cis (ex: "architecte" ÔåÆ opportunit├®s dans l'immobilier/urbanisme, "d├®veloppeur" ÔåÆ consulting tech, "avocat" ÔåÆ conseil juridique), priorise les opportunit├®s ALIGN├ëES avec son expertise.`;
+ADAPTE ton analyse au profil ci-dessus. Si le poste/les compétences pointent vers un domaine précis (ex : "architecte" → immobilier/urbanisme, "développeur" → consulting tech, "avocat" → conseil juridique, "élu/politique" → influence & coalitions, "dirigeant associatif" → mécénat & partenariats), PRIORISE les opportunités ALIGNÉES avec son expertise et ses objectifs déclarés.`;
 }
 
 /**
@@ -939,6 +949,7 @@ export interface MistralGlobalSynthesis {
 export interface MistralPipelineResult {
   batches: MistralBatchResult[];
   synthesis: MistralGlobalSynthesis;
+  supplyDemand: SupplyDemandEntry[];
   timestamp: number;
 }
 
@@ -960,13 +971,17 @@ const FALLBACK_SYNTHESIS: MistralGlobalSynthesis = {
   valueChains: []
 };
 
-async function processContactBatch(batch: any[], notes: any[]): Promise<MistralBatchResult> {
+async function processContactBatch(batch: any[], notes: any[], userContext: string = ''): Promise<MistralBatchResult> {
   const batchData = batch.map(c => {
     const contactNotes = notes.filter(n => n.contact_id === c.id || n.contactId === c.id).map(n => n.content).join(' | ');
+    const skills: string[] = Array.isArray(c.skills) ? c.skills : [];
+    const needs: string[] = Array.isArray(c.inferred_needs) ? c.inferred_needs : [];
     return `<contact id="${c.id}">
   <name>${c.name || (c.first_name + ' ' + c.last_name)}</name>
   <role>${c.job_title || 'Inconnu'}</role>
   <company>${c.company || 'Inconnue'}</company>
+  <skills>${skills.length > 0 ? skills.join(', ') : 'Non renseignées'}</skills>
+  <needs>${needs.length > 0 ? needs.join(', ') : 'Non renseignés'}</needs>
   <notes>${contactNotes || 'Aucune note disponible'}</notes>
 </contact>`;
   }).join('\n');
@@ -974,7 +989,7 @@ async function processContactBatch(batch: any[], notes: any[]): Promise<MistralB
   const prompt = `<role>
 Tu es "Oracle MAP", un analyste expert en réseaux professionnels et en détection de synergies business cachées. Tu es reconnu pour ta capacité à relier des profils en apparence très différents autour d'un besoin, d'une ressource ou d'une compétence complémentaire non évidente.
 </role>
-
+${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}
 <instructions>
 Analyse EN PROFONDEUR le lot de contacts fourni ci-dessous et extrais :
 1. Les besoins récurrents ou latents (explicites dans les notes, ou déduits du poste/secteur/contexte).
@@ -1026,13 +1041,13 @@ ${batchData}
 // ============================================================================
 // REDUCE: Synthesize all batch results
 // ============================================================================
-async function synthesizeNetwork(batchResults: MistralBatchResult[]): Promise<MistralGlobalSynthesis> {
+async function synthesizeNetwork(batchResults: MistralBatchResult[], userContext: string = ''): Promise<MistralGlobalSynthesis> {
   const aggregatedData = JSON.stringify(batchResults, null, 2);
 
   const prompt = `<role>
 Tu es "Oracle REDUCE", un super-cerveau stratégique spécialisé dans la consolidation d'analyses de réseaux professionnels. Ta mission est de fusionner des dizaines d'analyses locales (par lots) en une synthèse globale d'une qualité exceptionnelle.
 </role>
-
+${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}
 <instructions>
 1. Fusionne les besoins similaires ou redondants détectés dans les différents lots en "Macro-Besoins" consolidés (ne liste pas les doublons séparément).
 2. Construis des chaînes de valeur globales (value chains) qui relient plusieurs contacts de lots DIFFÉRENTS entre eux autour d'un objectif business commun (ex : A a un besoin, B a la compétence, C a le réseau/financement pour industrialiser).
@@ -1106,6 +1121,101 @@ ${aggregatedData}
 }
 
 // ============================================================================
+// SUPPLY / DEMAND: Cross-match needs (demand) with skills (supply) network-wide
+// ============================================================================
+async function buildSupplyDemandMatrix(
+  contacts: any[],
+  notes: any[],
+  userContext: string = ''
+): Promise<SupplyDemandEntry[]> {
+  if (!contacts || contacts.length === 0) return [];
+
+  // Compact catalog of every contact's supply (skills) and demand (needs).
+  // Truncated defensively to keep the single consolidation call affordable.
+  const catalog = contacts.slice(0, 200).map(c => {
+    const contactNotes = notes
+      .filter(n => n.contact_id === c.id || n.contactId === c.id)
+      .map(n => n.content)
+      .join(' | ')
+      .substring(0, 400);
+    const skills: string[] = Array.isArray(c.skills) ? c.skills : [];
+    const needs: string[] = Array.isArray(c.inferred_needs) ? c.inferred_needs : [];
+    return {
+      id: c.id,
+      name: c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim(),
+      role: c.job_title || 'Inconnu',
+      company: c.company || 'Inconnue',
+      skills,
+      needs,
+      notes: contactNotes
+    };
+  });
+
+  const prompt = `<role>
+Tu es "Oracle MARKET", un analyste spécialisé dans la cartographie OFFRE / DEMANDE d'un réseau professionnel. Tu construis une matrice qui, pour chaque besoin identifié dans le réseau, liste QUI le demande et QUI peut le fournir.
+</role>
+${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}
+<instructions>
+1. Parcours le catalogue de contacts (chacun a des compétences = OFFRE, et des besoins = DEMANDE).
+2. Regroupe les besoins similaires en une même ligne "need" (ex : "trouver un développeur" et "besoin technique" → "Développement / compétence technique").
+3. Pour chaque besoin, liste les "demanders" (contacts qui expriment ce besoin) et les "suppliers" (contacts dont les compétences y répondent, même indirectement).
+4. Évalue le "gapLevel" :
+   - "opportunity" : forte demande mais aucun/peu de fournisseur dans le réseau (manque à combler = opportunité).
+   - "partial" : demande partiellement couverte.
+   - "covered" : demande bien couverte par plusieurs fournisseurs.
+5. Mets "opportunityForUser" à true si l'utilisateur (voir user_context) est bien placé pour capter cette opportunité (via ses compétences, ou en jouant l'intermédiaire rémunéré).
+</instructions>
+
+<rules>
+- INTERDICTION de renvoyer un tableau vide si le catalogue contient au moins un besoin exploitable. Déduis les correspondances offre/demande même quand elles ne sont pas littérales.
+- Utilise UNIQUEMENT les id/noms fournis dans le catalogue pour demanders/suppliers.
+- Priorise les lignes à fort intérêt business (opportunités pour l'utilisateur, gaps de marché).
+- Limite-toi aux ~12 lignes les plus pertinentes.
+- Réponds STRICTEMENT avec un objet JSON valide, sans markdown ni texte additionnel.
+</rules>
+
+<catalog>
+${JSON.stringify(catalog, null, 2)}
+</catalog>
+
+<output_format>
+{
+  "supplyDemand": [
+    {
+      "need": "Nom clair du besoin consolidé",
+      "demanders": [{ "id": "id exact", "name": "Nom" }],
+      "suppliers": [{ "id": "id exact", "name": "Nom" }],
+      "gapLevel": "opportunity",
+      "opportunityForUser": true
+    }
+  ]
+}
+</output_format>`;
+
+  try {
+    const text = await callMistral(prompt, true, MAP_REDUCE_MODEL);
+    const parsed = safeParseJSON(text);
+    if (parsed && Array.isArray(parsed.supplyDemand)) {
+      // Defensive normalization so the UI never crashes on a malformed row.
+      return parsed.supplyDemand
+        .filter((e: any) => e && typeof e.need === 'string')
+        .map((e: any) => ({
+          need: e.need,
+          demanders: Array.isArray(e.demanders) ? e.demanders : [],
+          suppliers: Array.isArray(e.suppliers) ? e.suppliers : [],
+          gapLevel: ['covered', 'partial', 'opportunity'].includes(e.gapLevel) ? e.gapLevel : 'partial',
+          opportunityForUser: Boolean(e.opportunityForUser)
+        })) as SupplyDemandEntry[];
+    }
+    console.error('Mistral SUPPLY/DEMAND: réponse JSON invalide, fallback vide appliqué.', text);
+    return [];
+  } catch (err) {
+    console.error('Mistral SUPPLY/DEMAND failure:', err);
+    return [];
+  }
+}
+
+// ============================================================================
 // Embeddings (Mistral Embed)
 // ============================================================================
 export async function computeMistralEmbeddings(
@@ -1154,7 +1264,7 @@ export async function computeMistralEmbeddings(
 // ORCHESTRATOR: Run full Map-Reduce Pipeline
 // ============================================================================
 export function getCachedMistralPipelineResult(contacts: any[]): MistralPipelineResult | null {
-  const cacheKey = `circl_mistral_v5_${contacts.length}_${contacts.map(c => c.id).sort().join(',').substring(0, 100)}`;
+  const cacheKey = `circl_mistral_v6_${contacts.length}_${contacts.map(c => c.id).sort().join(',').substring(0, 100)}`;
   const cached = localStorage.getItem(cacheKey);
   if (cached) {
     try {
@@ -1170,31 +1280,37 @@ export function getCachedMistralPipelineResult(contacts: any[]): MistralPipeline
 export async function runMistralOracleBatchPipeline(
   contacts: any[],
   notes: any[],
+  userProfile?: any,
   onProgress?: (pct: number) => void
 ): Promise<MistralPipelineResult> {
   resetGlobalUsage();
 
+  const userContext = userProfile ? buildUserContext(userProfile) : '';
+
   // MAP step: 20-30 contacts per batch max to avoid overloading mistral-large-latest.
   const BATCH_SIZE = 25;
   const batches = [];
-  
+
   for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
     batches.push(contacts.slice(i, i + BATCH_SIZE));
   }
 
   const batchResults: MistralBatchResult[] = [];
-  
+
   for (let i = 0; i < batches.length; i++) {
-    onProgress?.((i / batches.length) * 70);
-    const res = await processContactBatch(batches[i], notes);
+    onProgress?.((i / batches.length) * 60);
+    const res = await processContactBatch(batches[i], notes, userContext);
     batchResults.push(res);
     if (i < batches.length - 1) {
       await sleep(1500);
     }
   }
 
-  onProgress?.(80);
-  const synthesis = await synthesizeNetwork(batchResults);
+  onProgress?.(70);
+  const synthesis = await synthesizeNetwork(batchResults, userContext);
+
+  onProgress?.(85);
+  const supplyDemand = await buildSupplyDemandMatrix(contacts, notes, userContext);
   onProgress?.(100);
 
   synthesis.tokenUsage = globalTokenUsage || undefined;
@@ -1202,10 +1318,11 @@ export async function runMistralOracleBatchPipeline(
   const result = {
     batches: batchResults,
     synthesis,
+    supplyDemand,
     timestamp: Date.now()
   };
-  
-  const cacheKey = `circl_mistral_v5_${contacts.length}_${contacts.map(c => c.id).sort().join(',').substring(0, 100)}`;
+
+  const cacheKey = `circl_mistral_v6_${contacts.length}_${contacts.map(c => c.id).sort().join(',').substring(0, 100)}`;
   localStorage.setItem(cacheKey, JSON.stringify(result));
 
   return result;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Zap, Copy, Check, Target, Key, Brain, Workflow, Award } from 'lucide-react';
+import { Zap, Copy, Check, Target, Key, Brain, Workflow, Award, Scale } from 'lucide-react';
 import type { MistralPipelineResult } from '../lib/mistral';
 import {
   suggestWarmIntros,
@@ -8,6 +8,7 @@ import {
   getCachedMistralPipelineResult
 } from '../lib/mistral';
 import { UserProfilePopup } from './UserProfilePopup';
+import { SupplyDemandMatrix } from './SupplyDemandMatrix';
 
 interface OpportunityHubProps {
   contacts: any[];
@@ -18,8 +19,21 @@ interface OpportunityHubProps {
   user: any;
 }
 
+/** Resolve the user's Oracle profile from auth metadata or localStorage fallback. */
+function loadUserProfile(user: any): any | null {
+  if (!user) return null;
+  const metaProfile = user.user_metadata?.oracle_profile;
+  if (metaProfile) return metaProfile;
+  try {
+    const saved = localStorage.getItem(`circl_user_profile_${user.id}`);
+    return saved ? JSON.parse(saved) : null;
+  } catch {
+    return null;
+  }
+}
+
 export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes, user }) => {
-  const [activeMode, setActiveMode] = useState<'network' | 'opportunities' | 'intros' | 'radar'>('network');
+  const [activeMode, setActiveMode] = useState<'network' | 'opportunities' | 'market' | 'intros' | 'radar'>('network');
   
   const [loading, setLoading] = useState(false);
   const [pipelineRunning, setPipelineRunning] = useState(false);
@@ -62,14 +76,16 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
     setLoading(true);
 
     if (forceRefresh) {
-      const keys = Object.keys(localStorage).filter(k => k.startsWith('circl_mistral_v5_'));
+      const keys = Object.keys(localStorage).filter(k => k.startsWith('circl_mistral_v6_'));
       keys.forEach(k => localStorage.removeItem(k));
     }
 
     try {
+      const userProfile = loadUserProfile(user);
       const result = await runMistralOracleBatchPipeline(
         contacts,
         notes,
+        userProfile,
         (progress) => {
           setPipelineProgress(progress);
         }
@@ -163,15 +179,22 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
               <Brain size={16} />
               Synthèse Globale (Reduce)
             </button>
-            <button 
-              onClick={() => setActiveMode('opportunities')} 
+            <button
+              onClick={() => setActiveMode('market')}
+              style={{ ...styles.tabBtn, ...(activeMode === 'market' ? styles.tabBtnActive : {}) }}
+            >
+              <Scale size={16} />
+              Offre / Demande
+            </button>
+            <button
+              onClick={() => setActiveMode('opportunities')}
               style={{ ...styles.tabBtn, ...(activeMode === 'opportunities' ? styles.tabBtnActive : {}) }}
             >
               <Workflow size={16} />
               Résultats par Lots (Map)
             </button>
-            <button 
-              onClick={() => setActiveMode('intros')} 
+            <button
+              onClick={() => setActiveMode('intros')}
               style={{ ...styles.tabBtn, ...(activeMode === 'intros' ? styles.tabBtnActive : {}) }}
             >
               <Target size={16} />
@@ -329,6 +352,35 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                       </ul>
                     </div>
 
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 1b. SUPPLY / DEMAND TAB */}
+            {activeMode === 'market' && (
+              <div style={styles.tabContent}>
+                {!v3Result ? (
+                  <div style={styles.emptyState}>
+                    <Scale size={48} color="rgba(255,255,255,0.1)" />
+                    <h3>Aucune matrice Offre / Demande</h3>
+                    <p>Lancez l'analyse pour cartographier qui demande quoi et qui peut le fournir dans votre réseau.</p>
+                  </div>
+                ) : v3Result.supplyDemand && v3Result.supplyDemand.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                      Pour chaque besoin détecté, qui le <b>demande</b> et qui peut le <b>fournir</b>. Les lignes marquées comme opportunités sont celles où vous êtes le mieux placé pour créer de la valeur.
+                    </p>
+                    <SupplyDemandMatrix
+                      data={v3Result.supplyDemand}
+                      userName={loadUserProfile(user)?.name || user?.user_metadata?.full_name || 'Vous'}
+                    />
+                  </div>
+                ) : (
+                  <div style={styles.emptyState}>
+                    <Scale size={48} color="rgba(255,255,255,0.1)" />
+                    <h3>Aucune correspondance offre / demande détectée</h3>
+                    <p>Enrichissez vos contacts (compétences & besoins) pour alimenter cette matrice, puis relancez l'analyse.</p>
                   </div>
                 )}
               </div>

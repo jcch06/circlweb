@@ -3,6 +3,38 @@ import { supabase } from '../lib/supabase';
 import { detectContactSynergies, enrichProfileFromScraping, autoEnrichContact, isMistralConfigured, isPerplexityConfigured } from '../lib/mistral';
 import type { ContactSynergy } from '../lib/mistral';
 
+/**
+ * Persist the skills / inferred_needs extracted during enrichment so the synergy
+ * and supply/demand engines have real material to work with.
+ *
+ * Best-effort by design: written in a separate call wrapped in try/catch so that
+ * if the `skills` / `inferred_needs` columns don't exist yet (migration not run),
+ * the core enrichment (bio / ai_context / industry) still succeeds. See
+ * supabase/migrations for the schema this expects.
+ */
+async function persistEnrichmentExtras(
+  contactId: string,
+  result: { skills?: string[]; inferredNeeds?: string[] }
+): Promise<void> {
+  const extras: Record<string, string[]> = {};
+  if (Array.isArray(result.skills) && result.skills.length > 0) {
+    extras.skills = result.skills.filter(s => s && s !== 'null');
+  }
+  if (Array.isArray(result.inferredNeeds) && result.inferredNeeds.length > 0) {
+    extras.inferred_needs = result.inferredNeeds.filter(n => n && n !== 'null');
+  }
+  if (Object.keys(extras).length === 0) return;
+
+  try {
+    const { error } = await supabase.from('contacts').update(extras).eq('id', contactId);
+    if (error) {
+      console.warn('persistEnrichmentExtras: skills/inferred_needs non enregistrés (migration manquante ?)', error.message);
+    }
+  } catch (err) {
+    console.warn('persistEnrichmentExtras: écriture ignorée', err);
+  }
+}
+
 
 interface ContactsPageProps {
   contacts: any[];
@@ -407,6 +439,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
         if (result.aiContext && result.aiContext !== 'null') updateData.ai_context = result.aiContext;
 
         await supabase.from('contacts').update(updateData).eq('id', c.id);
+        await persistEnrichmentExtras(c.id, result);
         successCount++;
       } catch (err) {
         errorCount++;
@@ -626,7 +659,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
     setAutoEnrichingSingle(true);
     try {
       const enrichedData = await autoEnrichContact(contactDetails);
-      
+
       const { error } = await supabase.from('contacts').update({
         bio: enrichedData.bio,
         ai_context: enrichedData.aiContext,
@@ -635,6 +668,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
       }).eq('id', contactDetails.id);
 
       if (error) throw error;
+
+      await persistEnrichmentExtras(contactDetails.id, enrichedData);
 
       alert("Recherche web terminée avec succès !");
       await onRefreshData();

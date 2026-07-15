@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Zap, Copy, Check, Target, Key, Brain, Workflow, Award, Scale, Share2, History, GitCompare, Trash2, ArrowRight, Lock } from 'lucide-react';
 import type { MistralPipelineResult, AnalysisHistoryEntry, AnalysisDelta } from '../lib/mistral';
 import {
@@ -61,6 +61,50 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
   const [targetRole, setTargetRole] = useState('');
 
   const hasApiKey = isMistralConfigured();
+
+  // Concrete cross-network introductions, derived DETERMINISTICALLY from the
+  // supply/demand matrix (which is already global across every cluster and
+  // grounded in real contact skills/needs). Zero extra LLM call, zero
+  // invention: for each need with both a demander and a supplier, we surface
+  // the pairwise "introduce X to Y" that the matrix implies but never spelled
+  // out. Works on archived analyses too (they carry supplyDemand).
+  const recommendedIntros = useMemo(() => {
+    const matrix = v3Result?.supplyDemand;
+    if (!Array.isArray(matrix) || matrix.length === 0) return [];
+    const contactById = new Map<string, any>((contacts || []).map(c => [c.id, c]));
+    const roleOf = (id: string, fallbackName: string) => {
+      const c = contactById.get(id);
+      if (!c) return '';
+      const bits = [c.job_title, c.company].filter((x: any) => typeof x === 'string' && x.trim() && x.trim().toLowerCase() !== 'null');
+      return bits.join(' · ') || (fallbackName ? '' : '');
+    };
+    const pairs: { demander: { id: string; name: string }; supplier: { id: string; name: string }; demanderRole: string; supplierRole: string; need: string; opportunityForUser: boolean }[] = [];
+    const seen = new Set<string>();
+    for (const entry of matrix) {
+      if (!entry || !Array.isArray(entry.demanders) || !Array.isArray(entry.suppliers)) continue;
+      for (const d of entry.demanders) {
+        for (const s of entry.suppliers) {
+          if (!d?.id || !s?.id || d.id === s.id) continue; // never pair a contact with themselves
+          const key = `${d.id}|${s.id}|${entry.need}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          pairs.push({
+            demander: d,
+            supplier: s,
+            demanderRole: roleOf(d.id, d.name),
+            supplierRole: roleOf(s.id, s.name),
+            need: entry.need,
+            opportunityForUser: Boolean(entry.opportunityForUser)
+          });
+        }
+      }
+    }
+    // Surface the ones that also matter for the user first, cap the list so it
+    // stays a shortlist of actionable intros rather than a combinatorial dump.
+    return pairs
+      .sort((a, b) => Number(b.opportunityForUser) - Number(a.opportunityForUser))
+      .slice(0, 12);
+  }, [v3Result, contacts]);
 
   useEffect(() => {
     if (user) {
@@ -505,6 +549,40 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                         ))}
                       </div>
                     </div>
+
+                    {/* Mises en relation concrètes dérivées de l'offre/demande */}
+                    {recommendedIntros.length > 0 && (
+                      <div>
+                        <h3 style={styles.sectionTitle}>
+                          <ArrowRight size={18} /> Mises en Relation à Fort Potentiel
+                        </h3>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 16 }}>
+                          Paires concrètes déduites de la matrice offre / demande : un contact exprime un besoin, un autre peut y répondre. Ce sont les introductions les plus directes à provoquer.
+                        </p>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
+                          {recommendedIntros.map((intro, i) => (
+                            <div key={i} className="glass-card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: '0.9rem' }}>
+                                <b style={{ color: 'var(--text-primary)' }}>{intro.supplier.name}</b>
+                                <ArrowRight size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                                <b style={{ color: 'var(--text-primary)' }}>{intro.demander.name}</b>
+                                {intro.opportunityForUser && (
+                                  <span style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', padding: '2px 6px', borderRadius: 4, background: 'var(--accent)', color: '#ffffff' }}>
+                                    Pour vous
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                                <b style={{ color: 'var(--text-primary)' }}>{intro.demander.name}</b>
+                                {intro.demanderRole ? ` (${intro.demanderRole})` : ''} recherche : <span style={{ color: 'var(--text-primary)' }}>{intro.need}</span>.
+                                {' '}<b style={{ color: 'var(--text-primary)' }}>{intro.supplier.name}</b>
+                                {intro.supplierRole ? ` (${intro.supplierRole})` : ''} peut y répondre.
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Plan d'action */}
                     <div className="glass-card" style={{ padding: 24, borderColor: 'var(--border-hover)' }}>

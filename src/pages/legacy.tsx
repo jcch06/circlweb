@@ -4,8 +4,6 @@ import { useData } from '../data';
 import { GalaxyVisualizer } from '../components/GalaxyVisualizer';
 import { OpportunityHub } from '../components/OpportunityHub';
 import { AIInput } from '../components/AIInput';
-import { NotesPage } from '../components/NotesPage';
-import { SpacesPage } from '../components/SpacesPage';
 
 // Adaptateurs des écrans pas encore refondus (lots 2 à 5).
 // Ils traduisent l'ancien contrat setActiveTab vers les routes,
@@ -81,33 +79,6 @@ export const LegacyCapture: React.FC = () => {
         user={data.user}
         selectedSpaceId={data.selectedSpaceId}
         spaces={data.spaces}
-      />
-    </Scroll>
-  );
-};
-
-export const LegacyJournal: React.FC = () => {
-  const { data } = useLegacyProps();
-  return (
-    <Scroll>
-      <NotesPage
-        notes={data.notes}
-        contacts={data.contacts}
-        user={data.user}
-        onRefreshData={data.refresh}
-      />
-    </Scroll>
-  );
-};
-
-export const LegacyCircles: React.FC = () => {
-  const { data } = useLegacyProps();
-  return (
-    <Scroll>
-      <SpacesPage
-        spaces={data.spaces}
-        user={data.user}
-        onRefreshData={data.refresh}
       />
     </Scroll>
   );

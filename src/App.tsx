@@ -8,10 +8,9 @@ import { AppShell } from './AppShell';
 import { ContactsPageV2 } from './pages/ContactsPageV2';
 import { UpdatesPage } from './pages/UpdatesPage';
 import { HomePage } from './pages/HomePage';
-import {
-  LegacyNetwork, LegacyOpportunities,
-  LegacyCapture, LegacyJournal, LegacyCircles,
-} from './pages/legacy';
+import { JournalPage } from './pages/JournalPage';
+import { CirclesPage } from './pages/CirclesPage';
+import { LegacyNetwork, LegacyOpportunities, LegacyCapture } from './pages/legacy';
 
 function App() {
   const [session, setSession] = useState<any>(null);
@@ -57,9 +56,9 @@ function App() {
               <Route path="/contacts/:id" element={<ContactsPageV2 />} />
               <Route path="/reseau" element={<LegacyNetwork />} />
               <Route path="/mises-a-jour" element={<UpdatesPage />} />
-              <Route path="/journal" element={<LegacyJournal />} />
+              <Route path="/journal" element={<JournalPage />} />
               <Route path="/opportunites" element={<LegacyOpportunities />} />
-              <Route path="/cercles" element={<LegacyCircles />} />
+              <Route path="/cercles" element={<CirclesPage />} />
               <Route path="/capture" element={<LegacyCapture />} />
               <Route path="*" element={<Navigate to="/accueil" replace />} />
             </Route>

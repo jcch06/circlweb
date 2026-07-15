@@ -6,6 +6,7 @@ import { useData } from '../data';
 import { useToast } from '../ui/Toast';
 import { Avatar, StatusPill, ConfirmModal } from '../ui/Bits';
 import { ContactDrawer } from '../ui/ContactDrawer';
+import { TagsPanel } from '../ui/TagsPanel';
 import { fullName, lastTouch, relStatus, relativeFR, circleColor, STATUS_META, type RelStatus } from '../ui/format';
 
 // Page Contacts (brief 4.2) : l'espace de travail central.
@@ -31,6 +32,7 @@ export const ContactsPageV2: React.FC = () => {
   const view = (searchParams.get('vue') as ViewKey) || 'all';
   const query = searchParams.get('q') ?? '';
   const statusFilter = searchParams.get('statut') as RelStatus | null;
+  const tagFilter = searchParams.get('tag');
   const [sort, setSort] = useState<SortKey>('name');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
@@ -38,6 +40,7 @@ export const ContactsPageV2: React.FC = () => {
   const [circlePicker, setCirclePicker] = useState(false);
   const [tagPicker, setTagPicker] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [showTags, setShowTags] = useState(false);
 
   const setParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(searchParams);
@@ -89,6 +92,7 @@ export const ContactsPageV2: React.FC = () => {
     if (view === 'due') out = out.filter((r) => r.status === 'due' || r.status === 'dormant');
     if (view === 'not_enriched') out = out.filter((r) => !r.c.enriched_at);
     if (statusFilter) out = out.filter((r) => r.status === statusFilter);
+    if (tagFilter) out = out.filter((r) => r.tags.some((t: any) => t.id === tagFilter));
 
     const bySort: Record<SortKey, (a: typeof out[0], b: typeof out[0]) => number> = {
       name: (a, b) => a.name.localeCompare(b.name, 'fr'),
@@ -97,7 +101,7 @@ export const ContactsPageV2: React.FC = () => {
     };
     out.sort(bySort[view === 'due' && sort === 'name' ? 'last' : sort]);
     return out;
-  }, [data, view, query, statusFilter, sort]);
+  }, [data, view, query, statusFilter, tagFilter, sort]);
 
   const siblingIds = useMemo(() => rows.map((r) => r.c.id), [rows]);
 
@@ -191,6 +195,12 @@ export const ContactsPageV2: React.FC = () => {
               {v.label}
             </button>
           ))}
+          {tagFilter && (
+            <button className="chip clickable chip-filter on" onClick={() => setParam('tag', null)}>
+              tag : {data.tags.find((t) => t.id === tagFilter)?.name ?? '?'} ✕
+            </button>
+          )}
+          <button className="chip clickable" onClick={() => setShowTags(true)}>Gérer les tags</button>
           <span style={{ width: 1, height: 18, background: 'var(--line-strong)', margin: '0 4px' }} />
           {(Object.keys(counts) as RelStatus[]).filter((s) => counts[s] > 0).map((s) => (
             <button
@@ -369,6 +379,13 @@ export const ContactsPageV2: React.FC = () => {
       )}
 
       {showCreate && <CreateContactModal onClose={() => setShowCreate(false)} />}
+
+      {showTags && (
+        <TagsPanel
+          onClose={() => setShowTags(false)}
+          onFilterTag={(tagId) => setParam('tag', tagId)}
+        />
+      )}
     </div>
   );
 };

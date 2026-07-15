@@ -981,11 +981,49 @@ function normalizeValueChain(vc: any): ValueChain {
   };
 }
 
+/**
+ * Several fields (globalThemes, recommendedActionPlan, a batch's
+ * recurrentNeeds/keyCompetencies) are rendered as `{entry}` directly — a
+ * bare string is expected. An older/non-compliant run can persist those as
+ * objects instead (e.g. `{action, priority, expectedOutcome}`), which React
+ * refuses to render as a child at all (error #31) and takes the whole page
+ * down with it. Coerces every entry down to a display string first.
+ */
+function normalizeStringArray(arr: any, objectKeys: string[] = ['label', 'action', 'name', 'theme', 'text']): string[] {
+  if (!Array.isArray(arr)) return [];
+  return arr.map(entry => {
+    if (typeof entry === 'string') return entry;
+    if (entry && typeof entry === 'object') {
+      const key = objectKeys.find(k => typeof entry[k] === 'string');
+      return key ? entry[key] : JSON.stringify(entry);
+    }
+    return String(entry ?? '');
+  });
+}
+
 function normalizeSynthesis(synthesis: MistralGlobalSynthesis): MistralGlobalSynthesis {
   return {
     ...synthesis,
+    globalThemes: normalizeStringArray(synthesis?.globalThemes),
+    recommendedActionPlan: normalizeStringArray(synthesis?.recommendedActionPlan),
     macroNeeds: Array.isArray(synthesis?.macroNeeds) ? synthesis.macroNeeds.map(normalizeMacroNeed) : [],
     valueChains: Array.isArray(synthesis?.valueChains) ? synthesis.valueChains.map(normalizeValueChain) : []
+  };
+}
+
+function normalizeBatchResult(batch: any): MistralBatchResult {
+  return {
+    recurrentNeeds: normalizeStringArray(batch?.recurrentNeeds),
+    immediateSynergies: Array.isArray(batch?.immediateSynergies) ? batch.immediateSynergies : [],
+    keyCompetencies: normalizeStringArray(batch?.keyCompetencies)
+  };
+}
+
+function normalizePipelineResult<T extends MistralPipelineResult>(result: T): T {
+  return {
+    ...result,
+    synthesis: normalizeSynthesis(result.synthesis),
+    batches: Array.isArray(result.batches) ? result.batches.map(normalizeBatchResult) : []
   };
 }
 
@@ -1104,14 +1142,14 @@ export async function runMistralOracleBatchPipeline(
   });
   onProgress?.(95);
 
-  const result: MistralPipelineResult = {
+  const result: MistralPipelineResult = normalizePipelineResult({
     batches: batchResults,
-    synthesis: normalizeSynthesis(synthesis),
+    synthesis,
     supplyDemand,
     bridgeContacts: topology.bridgeContacts,
     timestamp: Date.now(),
     cacheStats: { totalBatches, reusedBatches }
-  };
+  });
 
   onProgress?.(100);
 
@@ -1203,8 +1241,8 @@ export async function getAnalysisById(id: string): Promise<(MistralPipelineResul
     return null;
   }
 
-  const result = data.result as MistralPipelineResult;
-  return { ...result, synthesis: normalizeSynthesis(result.synthesis), id: data.id, label: data.label };
+  const result = normalizePipelineResult(data.result as MistralPipelineResult);
+  return { ...result, id: data.id, label: data.label };
 }
 
 export async function deleteAnalysis(id: string): Promise<void> {
@@ -1298,12 +1336,12 @@ ${JSON.stringify(compact(after), null, 2)}
     if (parsed && typeof parsed.networkEvolutionSummary === 'string') {
       return {
         networkEvolutionSummary: parsed.networkEvolutionSummary,
-        newThemes: parsed.newThemes ?? [],
-        resolvedThemes: parsed.resolvedThemes ?? [],
-        newMacroNeeds: parsed.newMacroNeeds ?? [],
-        emergingSynergies: parsed.emergingSynergies ?? [],
-        bridgeContactChanges: parsed.bridgeContactChanges ?? [],
-        recommendedNextSteps: parsed.recommendedNextSteps ?? []
+        newThemes: normalizeStringArray(parsed.newThemes),
+        resolvedThemes: normalizeStringArray(parsed.resolvedThemes),
+        newMacroNeeds: normalizeStringArray(parsed.newMacroNeeds),
+        emergingSynergies: normalizeStringArray(parsed.emergingSynergies),
+        bridgeContactChanges: normalizeStringArray(parsed.bridgeContactChanges),
+        recommendedNextSteps: normalizeStringArray(parsed.recommendedNextSteps)
       };
     }
     console.error('Mistral DELTA: réponse JSON invalide, fallback appliqué.', text);

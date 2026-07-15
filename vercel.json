@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "comment": "SPA : toute route non trouvée sur le disque retombe sur index.html, sinon un rafraîchissement sur /contacts/:id renvoie un 404. /api/* est exclu pour laisser passer les fonctions serverless (Mistral, Oracle, enrichissement).",
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

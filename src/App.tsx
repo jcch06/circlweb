@@ -10,7 +10,8 @@ import { UpdatesPage } from './pages/UpdatesPage';
 import { HomePage } from './pages/HomePage';
 import { JournalPage } from './pages/JournalPage';
 import { CirclesPage } from './pages/CirclesPage';
-import { LegacyNetwork, LegacyOpportunities, LegacyCapture } from './pages/legacy';
+import { NetworkPage } from './pages/NetworkPage';
+import { LegacyOpportunities, LegacyCapture } from './pages/legacy';
 
 function App() {
   const [session, setSession] = useState<any>(null);
@@ -54,7 +55,8 @@ function App() {
               <Route path="/accueil" element={<HomePage />} />
               <Route path="/contacts" element={<ContactsPageV2 />} />
               <Route path="/contacts/:id" element={<ContactsPageV2 />} />
-              <Route path="/reseau" element={<LegacyNetwork />} />
+              <Route path="/reseau" element={<NetworkPage />} />
+              <Route path="/reseau/:id" element={<NetworkPage />} />
               <Route path="/mises-a-jour" element={<UpdatesPage />} />
               <Route path="/journal" element={<JournalPage />} />
               <Route path="/opportunites" element={<LegacyOpportunities />} />

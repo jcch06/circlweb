@@ -168,6 +168,10 @@ export const ContactsPageV2: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
           <h1 className="t-page">Contacts</h1>
           <span className="t-sec tnum" style={{ color: 'var(--mut)' }}>{rows.length.toLocaleString('fr-FR')}</span>
+          <div style={{ display: 'inline-flex', gap: 2, marginLeft: 6 }}>
+            <button className="chip clickable chip-filter on">Table</button>
+            <button className="chip clickable" onClick={() => navigate('/reseau')}>Réseau</button>
+          </div>
           <span style={{ flex: 1 }} />
           <div style={{ position: 'relative' }}>
             <Search size={14} style={{ position: 'absolute', left: 10, top: 10, color: 'var(--faint)' }} />

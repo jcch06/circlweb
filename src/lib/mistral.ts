@@ -941,6 +941,8 @@ export interface MistralPipelineResult {
   supplyDemand: SupplyDemandEntry[];
   bridgeContacts: BridgeContact[];
   timestamp: number;
+  /** How much of this run was served from the incremental cache vs freshly computed. */
+  cacheStats?: { totalBatches: number; reusedBatches: number };
 }
 
 
@@ -1017,17 +1019,26 @@ export async function runMistralOracleBatchPipeline(
   onProgress?.(5);
 
   const topology = await postOracleStep<{
-    batches: string[][];
+    batches: { contactIds: string[]; clusterId: string | null; contactIdsHash: string | null; cached: MistralBatchResult | null }[];
     bridgeContacts: BridgeContact[];
     lockedContactNames: string[];
   }>('/api/oracle/topology', { spaceId });
   onProgress?.(15);
 
+  // Incremental: topology.ts already reused cached embeddings/clusters and
+  // returns a batch's prior MAP result inline (`cached`) whenever none of
+  // its contacts changed since that result was computed — those batches
+  // never need a round trip to Mistral at all.
   const batchResults: MistralBatchResult[] = [];
   const totalBatches = topology.batches.length;
+  const reusedBatches = topology.batches.filter(b => b.cached !== null).length;
   for (let i = 0; i < totalBatches; i++) {
-    const batchResult = await postOracleStep<MistralBatchResult>('/api/oracle/map-batch', {
-      contactIds: topology.batches[i],
+    const batch = topology.batches[i];
+    const batchResult = batch.cached ?? await postOracleStep<MistralBatchResult>('/api/oracle/map-batch', {
+      contactIds: batch.contactIds,
+      clusterId: batch.clusterId,
+      contactIdsHash: batch.contactIdsHash,
+      spaceId,
       lockedContactNames: topology.lockedContactNames,
       userProfile
     });
@@ -1054,7 +1065,8 @@ export async function runMistralOracleBatchPipeline(
     synthesis,
     supplyDemand,
     bridgeContacts: topology.bridgeContacts,
-    timestamp: Date.now()
+    timestamp: Date.now(),
+    cacheStats: { totalBatches, reusedBatches }
   };
 
   onProgress?.(100);

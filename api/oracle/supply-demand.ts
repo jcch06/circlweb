@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Mistral } from '@mistralai/mistralai';
 import { createClient } from '@supabase/supabase-js';
+import { createHash } from 'node:crypto';
 
 // Step 4/4 of the Oracle pipeline (see topology.ts, map-batch.ts, reduce.ts).
 // Its own contact+notes fetch (a full catalog of skills/needs across the
@@ -32,6 +33,24 @@ interface SupplyDemandEntry {
   suppliers: { id: string; name: string }[];
   gapLevel: 'covered' | 'partial' | 'opportunity';
   opportunityForUser: boolean;
+}
+
+// Same formula as topology.ts / map-batch.ts rely on transitively — if this
+// hash is unchanged for every contact in the scope, the cached matrix is
+// still valid and the Mistral call can be skipped entirely.
+function contactContentHash(c: any, notes: any[]): string {
+  const noteText = notes.filter((n: any) => n.contact_id === c.id).map((n: any) => n.content).sort().join('|');
+  const skills = Array.isArray(c.skills) ? [...c.skills].sort().join(',') : '';
+  const needs = Array.isArray(c.inferred_needs) ? [...c.inferred_needs].sort().join(',') : '';
+  const raw = [c.first_name, c.last_name, c.job_title, c.company, skills, needs, noteText].join('::');
+  return createHash('sha256').update(raw).digest('hex');
+}
+
+function scopeContactsHash(contacts: any[], notes: any[]): string {
+  const parts = contacts
+    .map(c => `${c.id}:${contactContentHash(c, notes)}`)
+    .sort();
+  return createHash('sha256').update(parts.join('|')).digest('hex');
 }
 
 const MAP_REDUCE_MODEL = 'mistral-large-latest';
@@ -230,11 +249,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const visibleIds = new Set((visibility || []).filter(v => v.is_unlocked).map(v => v.id));
     const lockedNames = contacts.filter(c => !visibleIds.has(c.id)).map(c => `${c.first_name} ${c.last_name}`);
 
+    const scopeKey = spaceId || `user:${auth.userId}`;
+    const contactsHash = scopeContactsHash(contacts, notes || []);
+
+    // Best-effort cache: if nothing in this scope changed since the last
+    // computation, skip the Mistral call entirely.
+    try {
+      const { data: cacheRow } = await userSupabase
+        .from('oracle_supply_demand_cache')
+        .select('contacts_hash, result')
+        .eq('scope_key', scopeKey)
+        .maybeSingle();
+      if (cacheRow && cacheRow.contacts_hash === contactsHash) {
+        res.status(200).json(cacheRow.result);
+        return;
+      }
+    } catch (err) {
+      console.warn('supply-demand: oracle_supply_demand_cache unavailable (non-fatal).', err);
+    }
+
     const client = new Mistral({ apiKey });
     const userContext = userProfile ? buildUserContext(userProfile) : '';
     const lockedContext = buildLockedContext(lockedNames);
 
     const supplyDemand = await buildSupplyDemandMatrix(client, contacts, notes || [], userContext, lockedContext);
+
+    try {
+      await userSupabase.from('oracle_supply_demand_cache').upsert({
+        scope_key: scopeKey,
+        space_id: spaceId || null,
+        owner_id: auth.userId,
+        contacts_hash: contactsHash,
+        result: supplyDemand,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'scope_key' });
+    } catch (err) {
+      console.warn('supply-demand: failed to persist oracle_supply_demand_cache (non-fatal).', err);
+    }
 
     // demanders/suppliers only carry id+name, already minimal — no further
     // redaction needed (a locked contact's name is already visible per the

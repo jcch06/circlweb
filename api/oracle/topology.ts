@@ -1,12 +1,22 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Mistral } from '@mistralai/mistralai';
 import { createClient } from '@supabase/supabase-js';
+import { createHash } from 'node:crypto';
 
 // Step 1/4 of the Oracle pipeline (see api/oracle/map-batch.ts, reduce.ts,
 // supply-demand.ts). Split into short calls, each well under any Vercel
 // plan's timeout, orchestrated from the client — a single do-everything
 // function (the original design) hit 504s in production because a full
 // pipeline is several sequential Mistral Large calls.
+//
+// Incremental: persists per-contact embeddings (contact_embeddings) and
+// cluster centroids (oracle_clusters) across runs. A contact whose content
+// hasn't changed since its embedding was computed never gets re-embedded; a
+// contact new to a scope gets assigned to its nearest existing cluster
+// instead of triggering a full re-cluster (which would reshuffle batch
+// membership and defeat the per-cluster MAP cache in map-batch.ts). Falls
+// back to the old "always full" behavior if the cache tables don't exist yet
+// (migration not applied) — never a hard failure.
 //
 // Self-contained on purpose — see map-batch.ts for why.
 
@@ -26,6 +36,24 @@ async function authenticateRequest(req: VercelRequest): Promise<{ userId: string
     console.error('authenticateRequest: unexpected failure verifying token', err);
     return null;
   }
+}
+
+// ─── Content hashing (shared formula with map-batch.ts / supply-demand.ts) ──
+// Captures everything that feeds either the embedding or the MAP/SUPPLY
+// prompts for a contact — if this hash is unchanged, the contact's prior
+// embedding and its cluster's cached MAP result are both still valid.
+
+function contactContentHash(c: any, notes: any[]): string {
+  const noteText = notes.filter(n => n.contact_id === c.id).map(n => n.content).sort().join('|');
+  const skills = Array.isArray(c.skills) ? [...c.skills].sort().join(',') : '';
+  const needs = Array.isArray(c.inferred_needs) ? [...c.inferred_needs].sort().join(',') : '';
+  const raw = [c.first_name, c.last_name, c.job_title, c.company, skills, needs, noteText].join('::');
+  return createHash('sha256').update(raw).digest('hex');
+}
+
+function clusterContactsHash(contactIds: string[], hashByContactId: Map<string, string>): string {
+  const parts = [...contactIds].sort().map(id => `${id}:${hashByContactId.get(id) || ''}`);
+  return createHash('sha256').update(parts.join('|')).digest('hex');
 }
 
 // ─── vectorMath (ported verbatim from src/lib/vectorMath.ts) ────────────────
@@ -214,17 +242,29 @@ function computeBetweennessCentrality(similarityMatrix: number[][], threshold: n
 }
 
 interface BridgeContact { id: string; name: string; role: string; company: string; centralityScore: number; }
+interface MistralBatchResult {
+  recurrentNeeds: string[];
+  immediateSynergies: { contactId1: string; contactName1: string; contactId2: string; contactName2: string; reason: string }[];
+  keyCompetencies: string[];
+}
+interface TopologyBatch { contactIds: string[]; clusterId: string | null; contactIdsHash: string | null; cached: MistralBatchResult | null; }
 
 const MIN_MAP_BATCH = 15;
 const MAX_MAP_BATCH = 30;
+// Above this fraction of contacts changed/new since the last clustering run
+// for this scope, a full re-cluster is worth the cost (incremental nearest-
+// centroid assignment would otherwise drift too far from an optimal split).
+const FULL_RECLUSTER_THRESHOLD = 0.4;
 
-function chunkNaive(contactIds: string[], size: number = 25): string[][] {
-  const batches: string[][] = [];
-  for (let i = 0; i < contactIds.length; i += size) batches.push(contactIds.slice(i, i + size));
+function chunkNaive(contactIds: string[], size: number = 25): TopologyBatch[] {
+  const batches: TopologyBatch[] = [];
+  for (let i = 0; i < contactIds.length; i += size) {
+    batches.push({ contactIds: contactIds.slice(i, i + size), clusterId: null, contactIdsHash: null, cached: null });
+  }
   return batches;
 }
 
-function packClustersIntoBatches(clusterGroups: string[][]): string[][] {
+function packClusterIdsIntoGroups(clusterGroups: string[][]): string[][] {
   const batches: string[][] = [];
   let buffer: string[] = [];
 
@@ -294,12 +334,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!supabaseUrl || !supabaseAnonKey) { res.status(500).json({ error: 'Supabase is not configured on the server' }); return; }
 
     const { spaceId } = req.body || {};
+    const scopeKey: string = spaceId || `user:${auth.userId}`;
 
     const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: `Bearer ${auth.token}` } }
     });
 
-    let contactsQuery = userSupabase.from('contacts').select('id, first_name, last_name, job_title, company').order('first_name');
+    let contactsQuery = userSupabase.from('contacts').select('id, first_name, last_name, job_title, company, skills, inferred_needs, space_id').order('first_name');
     if (spaceId) contactsQuery = contactsQuery.eq('space_id', spaceId);
     const { data: contacts, error: contactsError } = await contactsQuery;
     if (contactsError) { res.status(500).json({ error: contactsError.message }); return; }
@@ -318,7 +359,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (visibilityError) { res.status(500).json({ error: visibilityError.message }); return; }
 
     const visibleIds = new Set((visibility || []).filter(v => v.is_unlocked).map(v => v.id));
+    const isLocked = (id?: string) => Boolean(id) && !visibleIds.has(id as string);
     const lockedContactNames = contacts.filter(c => !visibleIds.has(c.id)).map(c => `${c.first_name} ${c.last_name}`);
+
+    const redactCached = (result: MistralBatchResult): MistralBatchResult => ({
+      ...result,
+      immediateSynergies: result.immediateSynergies.map(s => {
+        if (isLocked(s.contactId1) || isLocked(s.contactId2)) {
+          return { ...s, reason: "Synergie potentielle détectée — demandez l'accès aux contacts concernés pour voir les détails." };
+        }
+        return s;
+      })
+    });
 
     if (contacts.length < 6) {
       res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames });
@@ -326,73 +378,249 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const { data: notes } = await userSupabase.from('notes').select('*').in('contact_id', contactIds);
+    const notesList = notes || [];
+
+    const hashByContactId = new Map<string, string>();
+    contacts.forEach(c => hashByContactId.set(c.id, contactContentHash(c, notesList)));
+
+    // ── Incremental embedding cache ──────────────────────────────────────
+    // Best-effort: if the cache tables don't exist yet (migration not
+    // applied), every read below returns an error we swallow, and every
+    // contact is simply treated as "needs a fresh embedding" — identical to
+    // the pre-incremental behavior, just without the speedup.
+    let cachedEmbeddings = new Map<string, { vector: number[]; clusterId: string | null }>();
+    try {
+      const { data: cacheRows } = await userSupabase
+        .from('contact_embeddings')
+        .select('contact_id, content_hash, embedding, cluster_id')
+        .in('contact_id', contactIds);
+      (cacheRows || []).forEach((row: any) => {
+        if (row.content_hash === hashByContactId.get(row.contact_id)) {
+          cachedEmbeddings.set(row.contact_id, { vector: row.embedding as number[], clusterId: row.cluster_id });
+        }
+      });
+    } catch (err) {
+      console.warn('topology: contact_embeddings cache unavailable, falling back to full recompute.', err);
+    }
+
+    const contactById = new Map(contacts.map(c => [c.id, c]));
+    const needsEmbedding = contacts.filter(c => !cachedEmbeddings.has(c.id));
 
     const client = new Mistral({ apiKey });
-    let embeddings: { contactId: string; vector: number[] }[] = [];
-    try {
-      embeddings = await computeEmbeddings(client, contacts, notes || []);
-    } catch (err) {
-      console.error('topology: embedding failure, falling back to naive batching.', err);
+    let freshEmbeddings: { contactId: string; vector: number[] }[] = [];
+    if (needsEmbedding.length > 0) {
+      try {
+        freshEmbeddings = await computeEmbeddings(client, needsEmbedding, notesList);
+      } catch (err) {
+        console.error('topology: embedding failure, falling back to naive batching.', err);
+        res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames });
+        return;
+      }
+    }
+
+    // Persist freshly computed embeddings (best-effort — see above).
+    if (freshEmbeddings.length > 0) {
+      try {
+        const rows = freshEmbeddings.map(e => ({
+          contact_id: e.contactId,
+          space_id: contactById.get(e.contactId)?.space_id,
+          content_hash: hashByContactId.get(e.contactId),
+          embedding: e.vector,
+          updated_at: new Date().toISOString()
+        }));
+        await userSupabase.from('contact_embeddings').upsert(rows, { onConflict: 'contact_id' });
+      } catch (err) {
+        console.warn('topology: failed to persist contact_embeddings (non-fatal).', err);
+      }
+    }
+
+    // Combined embedding map (cached + fresh) for every contact we could embed.
+    const embeddingByContactId = new Map<string, number[]>();
+    cachedEmbeddings.forEach((v, k) => embeddingByContactId.set(k, v.vector));
+    freshEmbeddings.forEach(e => embeddingByContactId.set(e.contactId, e.vector));
+
+    if (embeddingByContactId.size < 6) {
       res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames });
       return;
     }
 
-    if (embeddings.length < 6) {
-      res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames });
-      return;
-    }
+    const embeddedIds = contactIds.filter(id => embeddingByContactId.has(id));
+    const vectors = embeddedIds.map(id => embeddingByContactId.get(id)!);
 
-    const embeddedIds = new Set(embeddings.map(e => e.contactId));
-    const contactById = new Map(contacts.map(c => [c.id, c]));
-    const vectors = embeddings.map(e => e.vector);
-
-    let clusterGroups: string[][];
     let bridgeContacts: BridgeContact[] = [];
-
     try {
-      const k = findOptimalK(vectors);
-      const { clusters } = kMeansClustering(vectors, k);
-
-      const groupsById = new Map<number, string[]>();
-      embeddings.forEach((e, idx) => {
-        const clusterId = clusters[idx];
-        if (!contactById.has(e.contactId)) return;
-        if (!groupsById.has(clusterId)) groupsById.set(clusterId, []);
-        groupsById.get(clusterId)!.push(e.contactId);
-      });
-      clusterGroups = Array.from(groupsById.values());
-
       const similarityMatrix = buildSimilarityMatrix(vectors);
       const centrality = computeBetweennessCentrality(similarityMatrix, 0.5);
       const maxCentrality = Math.max(...centrality, 0);
-
       if (maxCentrality > 0) {
-        bridgeContacts = embeddings
-          .map((e, idx) => ({ e, score: centrality[idx] }))
+        bridgeContacts = embeddedIds
+          .map((id, idx) => ({ id, score: centrality[idx] }))
           .filter(({ score }) => score > 0)
           .sort((a, b) => b.score - a.score)
           .slice(0, 6)
-          .map(({ e, score }) => {
-            const c = contactById.get(e.contactId);
-            const isLocked = !visibleIds.has(e.contactId);
+          .map(({ id, score }) => {
+            const c = contactById.get(id);
+            const locked = isLocked(id);
             return {
-              id: e.contactId,
+              id,
               name: `${c?.first_name || ''} ${c?.last_name || ''}`.trim(),
-              role: isLocked ? 'Verrouillé' : (c?.job_title || 'Inconnu'),
-              company: isLocked ? 'Verrouillé' : (c?.company || 'Inconnue'),
+              role: locked ? 'Verrouillé' : (c?.job_title || 'Inconnu'),
+              company: locked ? 'Verrouillé' : (c?.company || 'Inconnue'),
               centralityScore: Math.round((score / maxCentrality) * 100) / 100
             };
           });
       }
     } catch (err) {
-      console.error('topology: clustering failure, falling back to a single naive group.', err);
-      clusterGroups = [contactIds.filter(id => embeddedIds.has(id))];
+      console.error('topology: bridge-contact computation failure (non-fatal).', err);
     }
 
-    const unembedded = contactIds.filter(id => !embeddedIds.has(id));
-    if (unembedded.length > 0) clusterGroups.push(unembedded);
+    // ── Incremental clustering ───────────────────────────────────────────
+    let clusterOf = new Map<string, string>(); // contactId -> cluster row id (uuid string)
+    let clusterCacheAvailable = true;
 
-    res.status(200).json({ batches: packClustersIntoBatches(clusterGroups), bridgeContacts, lockedContactNames });
+    try {
+      const { data: existingClusters, error: clustersError } = await userSupabase
+        .from('oracle_clusters')
+        .select('id, centroid')
+        .eq('scope_key', scopeKey);
+      if (clustersError) throw clustersError;
+
+      const changedCount = embeddedIds.filter(id => !cachedEmbeddings.has(id)).length;
+      const changedRatio = embeddedIds.length > 0 ? changedCount / embeddedIds.length : 1;
+      const forceFullRecluster = !existingClusters || existingClusters.length === 0 || changedRatio > FULL_RECLUSTER_THRESHOLD;
+
+      if (forceFullRecluster) {
+        const k = findOptimalK(vectors);
+        const { clusters, centroids } = kMeansClustering(vectors, k);
+
+        // Replace this scope's cluster set atomically-ish: delete then reinsert.
+        // Cascades to oracle_batch_cache (every cluster's cache is invalidated —
+        // correct, since cluster membership itself just changed wholesale).
+        await userSupabase.from('oracle_clusters').delete().eq('scope_key', scopeKey);
+
+        const newClusterRows = centroids.map(centroid => ({
+          owner_id: auth.userId,
+          space_id: spaceId || null,
+          scope_key: scopeKey,
+          centroid,
+          updated_at: new Date().toISOString()
+        }));
+        const { data: inserted, error: insertError } = await userSupabase
+          .from('oracle_clusters')
+          .insert(newClusterRows)
+          .select('id');
+        if (insertError) throw insertError;
+
+        const clusterIds = (inserted || []).map(r => r.id as string);
+        embeddedIds.forEach((id, idx) => {
+          const clusterIdx = clusters[idx];
+          const clusterId = clusterIds[clusterIdx];
+          if (clusterId) clusterOf.set(id, clusterId);
+        });
+      } else {
+        const centroidRows = existingClusters as { id: string; centroid: number[] }[];
+        // Keep every contact whose embedding is unchanged (and already has a
+        // cluster) exactly where it was — this is what keeps most clusters'
+        // contact sets stable across runs, so their MAP cache stays valid.
+        embeddedIds.forEach(id => {
+          const cached = cachedEmbeddings.get(id);
+          if (cached?.clusterId && centroidRows.some(c => c.id === cached.clusterId)) {
+            clusterOf.set(id, cached.clusterId);
+          }
+        });
+        // New/changed contacts: assign to the nearest existing centroid.
+        embeddedIds.forEach(id => {
+          if (clusterOf.has(id)) return;
+          const vec = embeddingByContactId.get(id)!;
+          let bestId: string | null = null;
+          let bestDist = Infinity;
+          for (const c of centroidRows) {
+            const d = distanceSquared(vec, c.centroid);
+            if (d < bestDist) { bestDist = d; bestId = c.id; }
+          }
+          if (bestId) clusterOf.set(id, bestId);
+        });
+      }
+
+      // Persist the final cluster_id assignment for every contact we touched.
+      const assignmentRows = embeddedIds
+        .filter(id => clusterOf.has(id))
+        .map(id => ({
+          contact_id: id,
+          space_id: contactById.get(id)?.space_id,
+          content_hash: hashByContactId.get(id),
+          embedding: embeddingByContactId.get(id),
+          cluster_id: clusterOf.get(id),
+          updated_at: new Date().toISOString()
+        }));
+      if (assignmentRows.length > 0) {
+        await userSupabase.from('contact_embeddings').upsert(assignmentRows, { onConflict: 'contact_id' });
+      }
+    } catch (err) {
+      console.warn('topology: cluster persistence unavailable, falling back to one-shot clustering (non-fatal).', err);
+      clusterCacheAvailable = false;
+      try {
+        const k = findOptimalK(vectors);
+        const { clusters } = kMeansClustering(vectors, k);
+        embeddedIds.forEach((id, idx) => clusterOf.set(id, `local-${clusters[idx]}`));
+      } catch (clusterErr) {
+        console.error('topology: clustering failure, falling back to a single naive group.', clusterErr);
+        clusterOf = new Map(embeddedIds.map(id => [id, 'local-0']));
+      }
+    }
+
+    // Group contacts by final cluster assignment.
+    const groupsByCluster = new Map<string, string[]>();
+    embeddedIds.forEach(id => {
+      const clusterId = clusterOf.get(id);
+      if (!clusterId) return;
+      if (!groupsByCluster.has(clusterId)) groupsByCluster.set(clusterId, []);
+      groupsByCluster.get(clusterId)!.push(id);
+    });
+
+    const unembedded = contactIds.filter(id => !embeddingByContactId.has(id));
+
+    // ── Per-cluster MAP result cache ─────────────────────────────────────
+    let cachedResults = new Map<string, { result: MistralBatchResult; hash: string }>();
+    if (clusterCacheAvailable && groupsByCluster.size > 0) {
+      try {
+        const clusterIds = Array.from(groupsByCluster.keys());
+        const { data: batchCacheRows } = await userSupabase
+          .from('oracle_batch_cache')
+          .select('cluster_id, contact_ids_hash, result')
+          .in('cluster_id', clusterIds);
+        (batchCacheRows || []).forEach((row: any) => {
+          cachedResults.set(row.cluster_id, { result: row.result as MistralBatchResult, hash: row.contact_ids_hash });
+        });
+      } catch (err) {
+        console.warn('topology: oracle_batch_cache unavailable (non-fatal).', err);
+      }
+    }
+
+    // Groups that are too small to be their own MAP batch get packed together
+    // with others below MIN_MAP_BATCH — those packed batches are never cached
+    // (their membership isn't a single stable cluster), same as unembedded
+    // contacts. Only groups that survive as their OWN batch 1:1 are cacheable.
+    const clusterGroupEntries = Array.from(groupsByCluster.entries());
+    const clusterContactGroups = clusterGroupEntries.map(([, ids]) => ids);
+    if (unembedded.length > 0) clusterContactGroups.push(unembedded);
+    const packedGroups = packClusterIdsIntoGroups(clusterContactGroups);
+
+    const batches: TopologyBatch[] = packedGroups.map(group => {
+      // Only treat this as a cacheable single-cluster batch if it wasn't
+      // merged/split by the packing step (exact membership match).
+      const matchingEntry = clusterGroupEntries.find(([, ids]) => ids.length === group.length && ids.every(id => group.includes(id)));
+      if (!matchingEntry) {
+        return { contactIds: group, clusterId: null, contactIdsHash: null, cached: null };
+      }
+      const [clusterId] = matchingEntry;
+      const contactIdsHash = clusterContactsHash(group, hashByContactId);
+      const cacheEntry = cachedResults.get(clusterId);
+      const cached = cacheEntry && cacheEntry.hash === contactIdsHash ? redactCached(cacheEntry.result) : null;
+      return { contactIds: group, clusterId, contactIdsHash, cached };
+    });
+
+    res.status(200).json({ batches, bridgeContacts, lockedContactNames });
   } catch (err: any) {
     console.error('Oracle topology failure:', err);
     res.status(500).json({ error: err.message || 'Oracle topology failed' });

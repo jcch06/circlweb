@@ -205,7 +205,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
     if (!supabaseUrl || !supabaseAnonKey) { res.status(500).json({ error: 'Supabase is not configured on the server' }); return; }
 
-    const { contactIds, lockedContactNames, userProfile } = req.body || {};
+    const { contactIds, lockedContactNames, userProfile, clusterId, contactIdsHash, spaceId } = req.body || {};
     if (!Array.isArray(contactIds) || contactIds.length === 0) {
       res.status(400).json({ error: 'contactIds must be a non-empty array' });
       return;
@@ -239,6 +239,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const lockedContext = buildLockedContext(Array.isArray(lockedContactNames) ? lockedContactNames : []);
 
     const result = await processContactBatch(client, contacts, notes || [], userContext, lockedContext);
+
+    // Persist the RAW (unredacted) result for reuse by future incremental
+    // runs, keyed by this cluster and the exact content hash of its members
+    // at compute time — best-effort, never blocks the response.
+    if (clusterId && contactIdsHash) {
+      try {
+        await userSupabase.from('oracle_batch_cache').upsert({
+          cluster_id: clusterId,
+          scope_key: spaceId || `user:${auth.userId}`,
+          space_id: spaceId || null,
+          owner_id: auth.userId,
+          contact_ids_hash: contactIdsHash,
+          result,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'cluster_id' });
+      } catch (err) {
+        console.warn('map-batch: failed to persist oracle_batch_cache (non-fatal).', err);
+      }
+    }
 
     const redacted: MistralBatchResult = {
       ...result,

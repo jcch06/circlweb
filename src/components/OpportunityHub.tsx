@@ -834,6 +834,19 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
         </>
       )}
 
+      {/* Incremental analysis stats */}
+      {v3Result && v3Result.cacheStats && v3Result.cacheStats.totalBatches > 0 && (
+        <div style={{ marginTop: 32, padding: 12, borderRadius: 8, background: 'rgba(27, 23, 37, 0.03)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: '1px solid var(--border)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
+          <span style={{ color: 'var(--text-muted)' }}>Analyse incrémentale :</span>
+          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+            {v3Result.cacheStats.reusedBatches}/{v3Result.cacheStats.totalBatches} lots réutilisés du cache
+          </span>
+          {v3Result.cacheStats.reusedBatches === v3Result.cacheStats.totalBatches && (
+            <span style={{ color: 'var(--text-muted)' }}>— rien n'a changé depuis la dernière analyse</span>
+          )}
+        </div>
+      )}
+
       {/* API Cost Tracker */}
       {v3Result && v3Result.synthesis && v3Result.synthesis.tokenUsage && (
         <div style={{ marginTop: 32, padding: 12, borderRadius: 8, background: 'rgba(27, 23, 37, 0.03)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, border: '1px solid var(--border)', fontFamily: 'var(--font-mono)' }}>

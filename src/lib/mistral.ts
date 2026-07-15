@@ -952,6 +952,43 @@ export interface MistralPipelineResult {
   cacheStats?: { totalBatches: number; reusedBatches: number };
 }
 
+/**
+ * The Reduce step's JSON schema (macroNeeds/valueChains as nested objects)
+ * is only a prompt convention, not something Mistral is guaranteed to follow —
+ * a run can persist a macroNeed/valueChain as a bare string. That's harmless
+ * until the UI calls a method on the expected nested field (`mn.mergedFrom.join`,
+ * `vc.chain.map`) and crashes. Coerces any non-compliant entry back into shape
+ * so archived analyses stay renderable no matter what got saved.
+ */
+function normalizeMacroNeed(mn: any): MacroNeed {
+  if (mn && typeof mn === 'object') {
+    return {
+      label: typeof mn.label === 'string' ? mn.label : String(mn.label ?? ''),
+      mergedFrom: Array.isArray(mn.mergedFrom) ? mn.mergedFrom : [],
+      affectedContactsCount: typeof mn.affectedContactsCount === 'number' ? mn.affectedContactsCount : 0,
+      priority: mn.priority === 'high' || mn.priority === 'low' ? mn.priority : 'medium'
+    };
+  }
+  return { label: String(mn ?? ''), mergedFrom: [], affectedContactsCount: 0, priority: 'medium' };
+}
+
+function normalizeValueChain(vc: any): ValueChain {
+  return {
+    title: typeof vc?.title === 'string' ? vc.title : '',
+    description: typeof vc?.description === 'string' ? vc.description : '',
+    chain: Array.isArray(vc?.chain) ? vc.chain : [],
+    estimatedImpact: typeof vc?.estimatedImpact === 'string' ? vc.estimatedImpact : ''
+  };
+}
+
+function normalizeSynthesis(synthesis: MistralGlobalSynthesis): MistralGlobalSynthesis {
+  return {
+    ...synthesis,
+    macroNeeds: Array.isArray(synthesis?.macroNeeds) ? synthesis.macroNeeds.map(normalizeMacroNeed) : [],
+    valueChains: Array.isArray(synthesis?.valueChains) ? synthesis.valueChains.map(normalizeValueChain) : []
+  };
+}
+
 
 export interface BridgeContact {
   id: string;
@@ -1069,7 +1106,7 @@ export async function runMistralOracleBatchPipeline(
 
   const result: MistralPipelineResult = {
     batches: batchResults,
-    synthesis,
+    synthesis: normalizeSynthesis(synthesis),
     supplyDemand,
     bridgeContacts: topology.bridgeContacts,
     timestamp: Date.now(),
@@ -1166,7 +1203,8 @@ export async function getAnalysisById(id: string): Promise<(MistralPipelineResul
     return null;
   }
 
-  return { ...(data.result as MistralPipelineResult), id: data.id, label: data.label };
+  const result = data.result as MistralPipelineResult;
+  return { ...result, synthesis: normalizeSynthesis(result.synthesis), id: data.id, label: data.label };
 }
 
 export async function deleteAnalysis(id: string): Promise<void> {

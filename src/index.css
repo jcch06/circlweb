@@ -114,6 +114,19 @@ button, input, textarea, select { font-family: inherit; }
   height: 100vh;
   background: var(--card);
 }
+
+/* Below this width a fixed 290px rail leaves too little room for the main
+   content (drawers/panels get squeezed and clip) — narrow the sidebar to an
+   icon rail and let it scroll its own contents instead of the whole page. */
+@media (max-width: 760px) {
+  .side { width: 64px; padding: 16px 8px; }
+  .brand .nm, .nav-i .t, .sec, .search input, .kbd, .side .foot .nm, .side .foot .pl {
+    display: none;
+  }
+  .search { justify-content: center; padding: 10px; }
+  .nav-i { justify-content: center; padding: 10px; }
+  .side .foot { justify-content: center; }
+}
 .brandrow { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; padding: 0 4px; }
 .brand { display: flex; align-items: center; gap: 11px; }
 .brand .mk { width: 34px; height: 34px; border-radius: 10px; background: var(--teal); display: grid; place-items: center; color: #fff; flex: none; }

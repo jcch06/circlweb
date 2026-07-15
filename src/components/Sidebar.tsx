@@ -117,7 +117,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <path d="M12 2l2.2 5.8L20 9l-5 3.7L16.5 19 12 15.6 7.5 19 9 12.7 4 9l5.8-1.2z" />
             </svg>
           </span>
-          <span className="nm">Circl</span>
+          <span className="nm">Circl Web</span>
         </div>
       </div>
 

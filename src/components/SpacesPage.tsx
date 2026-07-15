@@ -185,45 +185,81 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
 
       const { data: existingContacts, error: existError } = await supabase
         .from('contacts')
-        .select('first_name, last_name')
+        .select('first_name, last_name, phone, email')
         .eq('space_id', targetSpaceId);
 
       if (existError) throw existError;
 
-      const newContacts = personalContacts.filter(pc => 
-        !existingContacts.some(ec => 
-          ec.first_name.toLowerCase() === pc.first_name.toLowerCase() && 
+      // A blank phone/email can be stored as '' on older rows — normalize to
+      // null so it behaves like every other unset value (Postgres allows any
+      // number of NULLs under a unique constraint, but two '' rows still
+      // collide as duplicates).
+      const normalize = (value: any): string | null => (typeof value === 'string' && value.trim()) ? value.trim().toLowerCase() : null;
+
+      // contacts_unique_phone_per_space (and the equivalent for email) reject
+      // a second row with the same (space_id, phone/email) — a plain
+      // name-only dedup misses that, e.g. when a contact's name was typed
+      // differently but the phone/email matches an entry already in the
+      // space (added by another member, or under a slightly different
+      // spelling).
+      const existingPhones = new Set(existingContacts.map(ec => normalize(ec.phone)).filter((v): v is string => v !== null));
+      const existingEmails = new Set(existingContacts.map(ec => normalize(ec.email)).filter((v): v is string => v !== null));
+
+      const newContacts = personalContacts.filter(pc => {
+        const phone = normalize(pc.phone);
+        const email = normalize(pc.email);
+        return !existingContacts.some(ec =>
+          ec.first_name.toLowerCase() === pc.first_name.toLowerCase() &&
           ec.last_name.toLowerCase() === pc.last_name.toLowerCase()
-        )
-      );
+        ) && !(phone && existingPhones.has(phone)) && !(email && existingEmails.has(email));
+      });
 
       if (newContacts.length === 0) {
         alert("Tous vos contacts personnels sont déjà présents dans cet espace.");
         return;
       }
 
-      const insertPayload = newContacts.map(c => ({
-        space_id: targetSpaceId,
-        owner_id: user.id,
-        first_name: c.first_name,
-        last_name: c.last_name,
-        company: c.company,
-        job_title: c.job_title,
-        industry: c.industry,
-        location: c.location,
-        bio: c.bio,
-        email: c.email,
-        phone: c.phone,
-        linkedin: c.linkedin,
-        ai_context: c.ai_context,
-        source: 'manual'
-      }));
+      // The personal address book itself can hold two entries with the same
+      // phone/email (e.g. a duplicate saved under two names) — inserted
+      // together that self-conflicts on the same constraints, so only the
+      // first occurrence of a given phone/email survives into this batch.
+      const seenPhones = new Set<string>();
+      const seenEmails = new Set<string>();
+      const insertPayload = newContacts
+        .map(c => ({ ...c, phone: normalize(c.phone), email: normalize(c.email) }))
+        .filter(c => {
+          if (c.phone) {
+            if (seenPhones.has(c.phone)) return false;
+            seenPhones.add(c.phone);
+          }
+          if (c.email) {
+            if (seenEmails.has(c.email)) return false;
+            seenEmails.add(c.email);
+          }
+          return true;
+        })
+        .map(c => ({
+          space_id: targetSpaceId,
+          owner_id: user.id,
+          first_name: c.first_name,
+          last_name: c.last_name,
+          company: c.company,
+          job_title: c.job_title,
+          industry: c.industry,
+          location: c.location,
+          bio: c.bio,
+          email: c.email,
+          phone: c.phone,
+          linkedin: c.linkedin,
+          ai_context: c.ai_context,
+          source: 'manual'
+        }));
 
       const { error: insertError } = await supabase.from('contacts').insert(insertPayload);
       if (insertError) throw insertError;
 
       await onRefreshData();
-      alert(`${newContacts.length} contacts synchronisés avec succès dans cet espace !`);
+      alert(`${insertPayload.length} contacts synchronisés avec succès dans cet espace !`);
     } catch (err: any) {
       console.error(err);
       alert(`Erreur lors de la synchronisation : ${err.message}`);

@@ -328,14 +328,11 @@ a { color: var(--accent); text-decoration: none; }
 }
 
 /* ============================================================
-   COMPAT — ne sert plus qu'aux 4 composants pas encore refondus :
-   AuthScreen, OpportunityHub (+ SupplyDemandMatrix, UserProfilePopup).
-   La refonte d'Opportunités (lot 6) videra ce bloc ; AuthScreen suivra.
-   Tout ce qui servait aux 9 écrans supprimés a été purgé ici.
+   COMPAT — dernier vestige : AuthScreen et UserProfilePopup,
+   les deux seuls composants pas encore réécrits sur src/ui.
+   Tous les autres écrans utilisent directement les tokens.
    ============================================================ */
 :root {
-  --teal: var(--accent);
-  --accent-dim: var(--accent-hover);
   --bg-primary: var(--wash);
   --bg-space: var(--hover);
   --bg-input: var(--wash);
@@ -344,29 +341,17 @@ a { color: var(--accent); text-decoration: none; }
   --border: var(--line);
   --border-hover: var(--line-strong);
   --border-glow: var(--line);
-  --neon-blue: var(--circle-1);
   --text-primary: var(--ink);
   --text-secondary: var(--ink-2);
   --text-muted: var(--mut);
-  --font-mono: var(--mono);
   --transition-smooth: all var(--t-med) var(--ease);
 }
 
 .glass-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card); }
-.glass-button {
-  background: var(--card) !important; color: var(--ink) !important;
-  border: 1px solid var(--line-strong) !important;
-  padding: 9px 14px; border-radius: var(--r-el); font-weight: 500; font-size: 13.5px; cursor: pointer;
-}
-.glass-button:hover { background: var(--hover) !important; }
-.glow-button, .glow-button.primary {
-  background: var(--accent) !important; color: #fff !important; border: none !important;
-  padding: 9px 14px; border-radius: var(--r-el); font-weight: 600; font-size: 13.5px; cursor: pointer;
-}
-.glow-button:hover { background: var(--accent-hover) !important; }
-.glow-button:disabled { background: var(--faint) !important; cursor: not-allowed; }
 .hover-glow:hover { filter: brightness(0.97); }
-
-/* Pastilles de secteur et texte discret, encore utilisés par l'Oracle hérité. */
-.pill { display: inline-block; font-size: 12.5px; font-weight: 500; border-radius: 8px; padding: 3px 10px; }
-.muted { color: var(--faint); }
+.orbit-spinner {
+  width: 40px; height: 40px; border: 2px solid var(--line-strong);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin 1.2s infinite linear;
+}
+@keyframes spin { to { transform: rotate(360deg); } }

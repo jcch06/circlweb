@@ -178,6 +178,11 @@ export interface WarmIntroSuggestion {
   reason: string;
 }
 
+export interface EnrichmentCitation {
+  title: string;
+  url: string;
+}
+
 export interface EnrichmentResult {
   industry: string;
   companySize: string;
@@ -185,6 +190,7 @@ export interface EnrichmentResult {
   skills: string[];
   inferredNeeds: string[];
   aiContext: string;
+  citations?: EnrichmentCitation[];
 }
 
 export interface GroupSynergyResult {
@@ -575,19 +581,20 @@ Retourne UNIQUEMENT un objet JSON valide avec cette structure exacte, sans markd
 
   const data = await response.json();
   let text = data.text || '{}';
+  const citations: EnrichmentCitation[] = Array.isArray(data.citations) ? data.citations : [];
 
   // Sanitize markdown wrappers if present
   text = text.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
 
   try {
-    return JSON.parse(text);
+    return { ...JSON.parse(text), citations };
   } catch {
     // Cleanup common LLM JSON issues: trailing commas, etc.
     let cleaned = text.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
     const start = cleaned.indexOf('{');
     const end = cleaned.lastIndexOf('}');
     if (start !== -1 && end !== -1) cleaned = cleaned.substring(start, end + 1);
-    return JSON.parse(cleaned);
+    return { ...JSON.parse(cleaned), citations };
   }
 }
 

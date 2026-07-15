@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Pencil, Check, X, Mic, MicOff, Lock, ListChecks, Building2, Tag as TagGlyph } from 'lucide-react';
+import { Pencil, Check, X, Mic, MicOff, Lock, ListChecks, Building2, Tag as TagGlyph, Link2, ExternalLink } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { detectContactSynergies, enrichProfileFromScraping, autoEnrichContact, isMistralConfigured, isPerplexityConfigured } from '../lib/mistral';
 import type { ContactSynergy } from '../lib/mistral';
@@ -16,21 +16,24 @@ import { requestContactAccess, listMyPendingRequests } from '../lib/contactAcces
  */
 async function persistEnrichmentExtras(
   contactId: string,
-  result: { skills?: string[]; inferredNeeds?: string[] }
+  result: { skills?: string[]; inferredNeeds?: string[]; citations?: { title: string; url: string }[] }
 ): Promise<void> {
-  const extras: Record<string, string[]> = {};
+  const extras: Record<string, any> = {};
   if (Array.isArray(result.skills) && result.skills.length > 0) {
     extras.skills = result.skills.filter(s => s && s !== 'null');
   }
   if (Array.isArray(result.inferredNeeds) && result.inferredNeeds.length > 0) {
     extras.inferred_needs = result.inferredNeeds.filter(n => n && n !== 'null');
   }
+  if (Array.isArray(result.citations) && result.citations.length > 0) {
+    extras.enrichment_sources = result.citations;
+  }
   if (Object.keys(extras).length === 0) return;
 
   try {
     const { error } = await supabase.from('contacts').update(extras).eq('id', contactId);
     if (error) {
-      console.warn('persistEnrichmentExtras: skills/inferred_needs non enregistrés (migration manquante ?)', error.message);
+      console.warn('persistEnrichmentExtras: écriture non enregistrée (migration manquante ?)', error.message);
     }
   } catch (err) {
     console.warn('persistEnrichmentExtras: écriture ignorée', err);
@@ -1453,6 +1456,29 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                 ) : (
                   <p style={styles.aiContextText}>{contactDetails.ai_context}</p>
                 )}
+                {Array.isArray(contactDetails.enrichment_sources) && contactDetails.enrichment_sources.length > 0 && (
+                  <div style={styles.sourcesBlock}>
+                    <div style={styles.sourcesTitle}>
+                      <Link2 size={12} />
+                      <span>Sources</span>
+                    </div>
+                    <div style={styles.sourcesList}>
+                      {contactDetails.enrichment_sources.map((source: { title: string; url: string }, i: number) => (
+                        <a
+                          key={i}
+                          href={source.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={styles.sourceLink}
+                          title={source.url}
+                        >
+                          <ExternalLink size={11} />
+                          <span style={styles.sourceLinkText}>{source.title || source.url}</span>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2146,6 +2172,40 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '0.775rem',
     color: 'var(--text-secondary)',
     lineHeight: 1.4,
+  },
+  sourcesBlock: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTop: '1px solid var(--border)',
+  },
+  sourcesTitle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 5,
+    fontSize: '0.65rem',
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    color: 'var(--text-muted)',
+    marginBottom: 6,
+  },
+  sourcesList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4,
+  },
+  sourceLink: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 5,
+    fontSize: '0.7rem',
+    color: 'var(--text-secondary)',
+    textDecoration: 'none',
+  },
+  sourceLinkText: {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
   contactDetailsList: {
     display: 'flex',

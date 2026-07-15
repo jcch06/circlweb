@@ -77,7 +77,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const data: any = await response.json();
     const text = data.choices?.[0]?.message?.content || '';
-    res.status(200).json({ text });
+
+    // Perplexity's "sonar" models ground answers in a live web search and
+    // return the sources they used — `search_results` (richer: title/url/date)
+    // when available, else the older `citations` (URL-only) array. Surfacing
+    // these lets the user verify an AI-generated claim instead of trusting it
+    // blindly.
+    let citations: { title: string; url: string }[] = [];
+    if (Array.isArray(data.search_results)) {
+      citations = data.search_results
+        .filter((r: any) => r && typeof r.url === 'string')
+        .map((r: any) => ({ title: r.title || r.url, url: r.url }));
+    } else if (Array.isArray(data.citations)) {
+      citations = data.citations
+        .filter((url: any) => typeof url === 'string')
+        .map((url: string) => ({ title: url, url }));
+    }
+
+    res.status(200).json({ text, citations });
   } catch (err: any) {
     console.error('Perplexity proxy error:', err);
     res.status(500).json({ error: err.message || 'Perplexity API error' });

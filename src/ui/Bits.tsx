@@ -205,6 +205,36 @@ export const SectionLabel: React.FC<{ children: React.ReactNode; style?: React.C
 );
 
 /* ============================================================
+   Sélecteur de vue segmenté (composant 14).
+   Réservé aux changements de VUE sur la même donnée (Table |
+   Réseau), pas aux filtres — ceux-là restent des chips.
+   ============================================================ */
+export function Segmented<T extends string>({ options, value, onChange, size = 'md' }: {
+  options: { key: T; label: string; icon?: React.ComponentType<{ size?: number }> }[];
+  value: T;
+  onChange: (key: T) => void;
+  size?: 'sm' | 'md';
+}) {
+  return (
+    <div className="seg" role="tablist">
+      {options.map(({ key, label, icon: Icon }) => (
+        <button
+          key={key}
+          role="tab"
+          aria-selected={value === key}
+          className={`seg-btn${value === key ? ' on' : ''}`}
+          style={size === 'sm' ? { padding: '4px 10px', fontSize: 12.5 } : undefined}
+          onClick={() => onChange(key)}
+        >
+          {Icon && <Icon size={size === 'sm' ? 13 : 14} />}
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ============================================================
    Champ éditable en place. Le clic passe en édition, Entrée ou
    la perte de focus enregistre, Échap annule. Un champ vide
    affiche son invite en --faint plutôt qu'un blanc muet.

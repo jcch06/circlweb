@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ForceGraph2D from 'react-force-graph-2d';
-import { Search, X, Route as RouteIcon, PenLine } from 'lucide-react';
+import { Search, X, Route as RouteIcon, PenLine, Rows3, Share2 } from 'lucide-react';
 import { useData } from '../data';
 import { ContactDrawer } from '../ui/ContactDrawer';
 import { NoteComposer } from '../ui/NoteComposer';
-import { AICard, SectionLabel } from '../ui/Bits';
+import { AICard, SectionLabel, Segmented } from '../ui/Bits';
 import { fullName, avatarColor, circleColor, lastTouch, relStatus, STATUS_META, relativeFR } from '../ui/format';
 
 // Réseau (brief 4.3) : le graphe devient un outil de décision.
@@ -258,30 +258,22 @@ export const NetworkPage: React.FC = () => {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Barre d'outils */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 20px', borderBottom: '1px solid var(--line)', background: 'var(--card)', flexWrap: 'wrap' }}>
-        <div style={{ display: 'inline-flex', gap: 2 }}>
-          <button className="chip clickable" onClick={() => navigate('/contacts')}>Table</button>
-          <button className="chip clickable chip-filter on">Réseau</button>
-        </div>
+        <Segmented
+          options={[
+            { key: 'table', label: 'Table', icon: Rows3 },
+            { key: 'reseau', label: 'Réseau', icon: Share2 },
+          ]}
+          value="reseau"
+          onChange={(v) => { if (v === 'table') navigate(`/contacts${window.location.search}`); }}
+        />
         <span style={{ width: 1, height: 18, background: 'var(--line-strong)' }} />
         <span className="t-meta" style={{ color: 'var(--mut)' }}>Colorer par</span>
-        <div style={{ display: 'inline-flex', background: 'var(--hover)', borderRadius: 10, padding: 3 }}>
-          {MODES.map((m) => (
-            <button
-              key={m.key}
-              onClick={() => setMode(m.key)}
-              title={`Raccourci ${m.shortcut}`}
-              style={{
-                border: 'none', cursor: 'pointer', borderRadius: 8, padding: '4px 10px',
-                fontSize: 12.5, fontWeight: 600,
-                background: mode === m.key ? 'var(--card)' : 'transparent',
-                color: mode === m.key ? 'var(--ink)' : 'var(--mut)',
-                boxShadow: mode === m.key ? 'var(--shadow-1)' : 'none',
-              }}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          size="sm"
+          options={MODES.map((m) => ({ key: m.key, label: m.label }))}
+          value={mode}
+          onChange={setMode}
+        />
         <div style={{ position: 'relative', flex: 1, maxWidth: 260 }}>
           <Search size={13} style={{ position: 'absolute', left: 9, top: 9, color: 'var(--faint)' }} />
           <input

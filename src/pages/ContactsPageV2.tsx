@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Plus, Sparkles, Trash2, Layers, Tag as TagIcon, Search } from 'lucide-react';
+import { Plus, Sparkles, Trash2, Layers, Tag as TagIcon, Search, Rows3, Share2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useData } from '../data';
 import { useToast } from '../ui/Toast';
-import { Avatar, StatusPill, ConfirmModal } from '../ui/Bits';
+import { Avatar, StatusPill, ConfirmModal, Segmented } from '../ui/Bits';
 import { ContactDrawer } from '../ui/ContactDrawer';
 import { TagsPanel } from '../ui/TagsPanel';
 import { fullName, lastTouch, relStatus, relativeFR, circleColor, STATUS_META, type RelStatus } from '../ui/format';
@@ -196,10 +196,14 @@ export const ContactsPageV2: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
           <h1 className="t-page">Contacts</h1>
           <span className="t-sec tnum" style={{ color: 'var(--mut)' }}>{rows.length.toLocaleString('fr-FR')}</span>
-          <div style={{ display: 'inline-flex', gap: 2, marginLeft: 6 }}>
-            <button className="chip clickable chip-filter on">Table</button>
-            <button className="chip clickable" onClick={() => navigate('/reseau')}>Réseau</button>
-          </div>
+          <Segmented
+            options={[
+              { key: 'table', label: 'Table', icon: Rows3 },
+              { key: 'reseau', label: 'Réseau', icon: Share2 },
+            ]}
+            value="table"
+            onChange={(v) => { if (v === 'reseau') navigate(`/reseau${window.location.search}`); }}
+          />
           <span style={{ flex: 1 }} />
           <div style={{ position: 'relative' }}>
             <Search size={14} style={{ position: 'absolute', left: 10, top: 10, color: 'var(--faint)' }} />

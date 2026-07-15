@@ -4,7 +4,7 @@ import { CheckCheck, ChevronDown, ChevronRight, ExternalLink, RotateCcw } from '
 import { supabase } from '../lib/supabase';
 import { useData } from '../data';
 import { useToast } from '../ui/Toast';
-import { Avatar, DecisionPair, DiffLine, AICard, SectionLabel } from '../ui/Bits';
+import { Avatar, DecisionPair, DiffLine, AICard, SectionLabel, Segmented } from '../ui/Bits';
 import { fullName, relativeFR } from '../ui/format';
 
 // Page Mises à jour (brief 4.4) : trier tous les changements détectés en
@@ -223,23 +223,15 @@ export const UpdatesPage: React.FC = () => {
             </button>
           ))}
           <span style={{ flex: 1 }} />
-          <div style={{ display: 'inline-flex', background: 'var(--hover)', borderRadius: 10, padding: 3 }}>
-            {(['inbox', 'history'] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => { setTab(t); if (t === 'history' && history === null) loadHistory(); }}
-                style={{
-                  border: 'none', cursor: 'pointer', borderRadius: 8, padding: '5px 12px',
-                  fontSize: 12.5, fontWeight: 600,
-                  background: tab === t ? 'var(--card)' : 'transparent',
-                  color: tab === t ? 'var(--ink)' : 'var(--mut)',
-                  boxShadow: tab === t ? 'var(--shadow-1)' : 'none',
-                }}
-              >
-                {t === 'inbox' ? 'À traiter' : 'Historique'}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            size="sm"
+            options={[
+              { key: 'inbox', label: 'À traiter' },
+              { key: 'history', label: 'Historique' },
+            ]}
+            value={tab}
+            onChange={(t) => { setTab(t); if (t === 'history' && history === null) loadHistory(); }}
+          />
         </div>
 
         {tab === 'inbox' ? (

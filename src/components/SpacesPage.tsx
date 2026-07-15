@@ -639,7 +639,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'space-between',
-    height: '140px',
+    minHeight: '140px',
   },
   cardHeader: {
     display: 'flex',

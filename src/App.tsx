@@ -7,8 +7,9 @@ import { ToastProvider } from './ui/Toast';
 import { AppShell } from './AppShell';
 import { ContactsPageV2 } from './pages/ContactsPageV2';
 import { UpdatesPage } from './pages/UpdatesPage';
+import { HomePage } from './pages/HomePage';
 import {
-  LegacyHome, LegacyNetwork, LegacyOpportunities,
+  LegacyNetwork, LegacyOpportunities,
   LegacyCapture, LegacyJournal, LegacyCircles,
 } from './pages/legacy';
 
@@ -51,7 +52,7 @@ function App() {
           <Routes>
             <Route element={<AppShell onLogout={handleLogout} />}>
               <Route index element={<Navigate to="/accueil" replace />} />
-              <Route path="/accueil" element={<LegacyHome />} />
+              <Route path="/accueil" element={<HomePage />} />
               <Route path="/contacts" element={<ContactsPageV2 />} />
               <Route path="/contacts/:id" element={<ContactsPageV2 />} />
               <Route path="/reseau" element={<LegacyNetwork />} />

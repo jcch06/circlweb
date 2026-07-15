@@ -17,11 +17,13 @@ export interface DataApi {
   contactTags: any[];
   contactLinks: any[];
   pendingUpdates: any[];
+  followUps: any[];
   selectedSpaceId: string | null;
   setSelectedSpaceId: (id: string | null) => void;
   refresh: () => Promise<void>;
   /* Index dérivés */
   lastNoteByContact: Map<string, string>;
+  followUpsByContact: Map<string, any[]>;
   notesByContact: Map<string, any[]>;
   tagsByContact: Map<string, any[]>;
   linksByContact: Map<string, any[]>;
@@ -64,6 +66,7 @@ export const DataProvider: React.FC<{ session: any; children: React.ReactNode }>
   const [contactTags, setContactTags] = useState<any[]>([]);
   const [contactLinks, setContactLinks] = useState<any[]>([]);
   const [pendingUpdates, setPendingUpdates] = useState<any[]>([]);
+  const [followUps, setFollowUps] = useState<any[]>([]);
   const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -78,7 +81,7 @@ export const DataProvider: React.FC<{ session: any; children: React.ReactNode }>
       const spacesData = await fetchAll('spaces', 'name');
       setSpaces(spacesData);
       if (spacesData.length > 0) {
-        const [contactsData, notesData, tagsData, contactTagsData, linksData, updatesData] = await Promise.all([
+        const [contactsData, notesData, tagsData, contactTagsData, linksData, updatesData, followUpsData] = await Promise.all([
           fetchAll('contacts_visible', 'first_name'),
           fetchAll('notes_visible', 'created_at', false),
           fetchAll('tags', 'name'),
@@ -87,6 +90,9 @@ export const DataProvider: React.FC<{ session: any; children: React.ReactNode }>
           supabase.from('contact_updates').select('*').eq('status', 'pending')
             .order('created_at', { ascending: false }).limit(500)
             .then((r) => r.data ?? []),
+          supabase.from('follow_ups').select('*').eq('status', 'pending')
+            .order('due_date', { ascending: true }).limit(500)
+            .then((r) => r.data ?? []),
         ]);
         setContacts(contactsData);
         setNotes(notesData);
@@ -94,6 +100,7 @@ export const DataProvider: React.FC<{ session: any; children: React.ReactNode }>
         setContactTags(contactTagsData);
         setContactLinks(linksData);
         setPendingUpdates(updatesData);
+        setFollowUps(followUpsData);
       }
     } catch (err: any) {
       console.error('Erreur de chargement réseau:', err);
@@ -162,6 +169,16 @@ export const DataProvider: React.FC<{ session: any; children: React.ReactNode }>
     return m;
   }, [pendingUpdates]);
 
+  const followUpsByContact = useMemo(() => {
+    const m = new Map<string, any[]>();
+    for (const f of followUps) {
+      const arr = m.get(f.contact_id) ?? [];
+      arr.push(f);
+      m.set(f.contact_id, arr);
+    }
+    return m;
+  }, [followUps]);
+
   const spaceById = useMemo(() => new Map(spaces.map((s) => [s.id, s])), [spaces]);
   const contactById = useMemo(() => new Map(contacts.map((c) => [c.id, c])), [contacts]);
 
@@ -177,10 +194,12 @@ export const DataProvider: React.FC<{ session: any; children: React.ReactNode }>
     contactTags,
     contactLinks,
     pendingUpdates,
+    followUps,
     selectedSpaceId,
     setSelectedSpaceId,
     refresh,
     lastNoteByContact,
+    followUpsByContact,
     notesByContact,
     tagsByContact,
     linksByContact,

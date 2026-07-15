@@ -1,7 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../data';
-import { Dashboard } from '../components/Dashboard';
 import { GalaxyVisualizer } from '../components/GalaxyVisualizer';
 import { OpportunityHub } from '../components/OpportunityHub';
 import { AIInput } from '../components/AIInput';
@@ -36,26 +35,6 @@ function useLegacyProps() {
 const Scroll: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div style={{ height: '100%', overflowY: 'auto' }}>{children}</div>
 );
-
-export const LegacyHome: React.FC = () => {
-  const { data, navigate, setActiveTab } = useLegacyProps();
-  return (
-    <Scroll>
-      <Dashboard
-        contacts={data.contacts}
-        spaces={data.spaces}
-        notes={data.notes}
-        tags={data.tags}
-        selectedSpaceId={data.selectedSpaceId}
-        user={data.user}
-        onRefreshData={data.refresh}
-        setActiveTab={setActiveTab}
-        setSelectedSpaceId={data.setSelectedSpaceId}
-        onNewContact={() => navigate('/contacts')}
-      />
-    </Scroll>
-  );
-};
 
 export const LegacyNetwork: React.FC = () => {
   const { data } = useLegacyProps();

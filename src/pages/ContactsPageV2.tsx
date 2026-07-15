@@ -73,6 +73,7 @@ export const ContactsPageV2: React.FC = () => {
         status: relStatus(touch),
         tags: data.tagsByContact.get(c.id) ?? [],
         space: data.spaceById.get(c.space_id),
+        followUp: (data.followUpsByContact.get(c.id) ?? [])[0] ?? null,
         pendingCount: (data.pendingByContact.get(c.id) ?? []).length,
       };
     });
@@ -219,11 +220,12 @@ export const ContactsPageV2: React.FC = () => {
                   <th>Statut</th>
                   <th className="sortable" onClick={() => setSort('last')}>Dernier échange</th>
                   <th>Tags</th>
+                  <th>Relance</th>
                   {!data.selectedSpaceId && <th>Cercle</th>}
                 </tr>
               </thead>
               <tbody>
-                {rows.slice(0, 400).map(({ c, name, touch, status, tags, space, pendingCount }) => (
+                {rows.slice(0, 400).map(({ c, name, touch, status, tags, space, pendingCount, followUp }) => (
                   <tr
                     key={c.id}
                     className={selected.has(c.id) ? 'selected' : ''}
@@ -267,6 +269,15 @@ export const ContactsPageV2: React.FC = () => {
                         ))}
                         {tags.length > 2 && <span className="t-meta" style={{ color: 'var(--mut)' }}>+{tags.length - 2}</span>}
                       </span>
+                    </td>
+                    <td className="tnum t-sec" style={{ whiteSpace: 'nowrap' }}>
+                      {followUp ? (
+                        <span style={{ color: new Date(followUp.due_date) <= new Date() ? 'var(--orange)' : 'var(--ink-2)', fontWeight: new Date(followUp.due_date) <= new Date() ? 600 : 400 }}>
+                          {followUp.due_date}
+                        </span>
+                      ) : (
+                        <span className="muted" style={{ color: 'var(--faint)' }}>·</span>
+                      )}
                     </td>
                     {!data.selectedSpaceId && (
                       <td>

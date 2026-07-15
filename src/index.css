@@ -328,155 +328,45 @@ a { color: var(--accent); text-decoration: none; }
 }
 
 /* ============================================================
-   COMPAT — écrans pas encore refondus (lots 2 à 5) :
-   Dashboard, GalaxyVisualizer, OpportunityHub, AIInput,
-   NotesPage, SpacesPage, SupplyDemandMatrix, etc.
-   À purger au fil des lots.
+   COMPAT — ne sert plus qu'aux 4 composants pas encore refondus :
+   AuthScreen, OpportunityHub (+ SupplyDemandMatrix, UserProfilePopup).
+   La refonte d'Opportunités (lot 6) videra ce bloc ; AuthScreen suivra.
+   Tout ce qui servait aux 9 écrans supprimés a été purgé ici.
    ============================================================ */
 :root {
   --teal: var(--accent);
-  --teal-d: var(--accent-hover);
-  --teal-soft: var(--accent-soft);
-  --teal-soft-2: #D3E6E0;
-  --line-2: var(--line-strong);
-  --grey-soft: var(--hover);
-  --blue: #3B6FB5;
-  --blue-soft: #E3ECF6;
-  --blue-tx: #3B6FB5;
-  --orange-soft-legacy: var(--orange-soft);
-  --green: var(--status-fresh);
-  --green-soft: #E2F0E8;
-  --amber-tx: var(--amber);
-  --amber-soft-legacy: var(--amber-soft);
-  --violet: #7A5CC5;
-  --violet-soft: #EEE9F8;
-  --rose: #A64D79;
-  --rose-soft: #F6E8F0;
-  --red: var(--danger);
-  --r: var(--r-card);
   --accent-dim: var(--accent-hover);
   --bg-primary: var(--wash);
-  --bg-secondary: var(--hover);
+  --bg-space: var(--hover);
   --bg-input: var(--wash);
+  --bg-card: var(--card);
+  --card-bg: var(--card);
   --border: var(--line);
   --border-hover: var(--line-strong);
-  --border-active: var(--accent);
-  --card-bg: var(--card);
-  --font-mono: var(--mono);
-  --font-sans: var(--sans);
-  --font-display: var(--sans);
-  --bg-deep: var(--wash);
-  --bg-space: var(--hover);
-  --bg-card: var(--card);
-  --bg-card-hover: var(--card);
   --border-glow: var(--line);
-  --border-glow-active: var(--accent);
-  --neon-purple: #7A5CC5;
-  --neon-blue: #3B6FB5;
-  --neon-pink: #A64D79;
-  --neon-green: var(--status-fresh);
-  --neon-yellow: var(--orange);
-  --neon-orange: var(--orange);
+  --neon-blue: var(--circle-1);
   --text-primary: var(--ink);
   --text-secondary: var(--ink-2);
   --text-muted: var(--mut);
-  --glass-bg: var(--card);
-  --glass-blur: blur(12px);
-  --shadow-soft: var(--shadow-1);
-  --shadow-neon: var(--shadow-2);
-  --radius-card: var(--r-card);
-  --radius-el: var(--r-el);
-  --transition-smooth: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  --font-mono: var(--mono);
+  --transition-smooth: all var(--t-med) var(--ease);
 }
 
-.bg-grid, .bg-stars { display: none; }
 .glass-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card); }
-.glass-sidebar { background: var(--card); border-right: 1px solid var(--line); }
-.glass-panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-el); }
-.text-gradient-purple-blue, .text-gradient-pink-orange { background: none; -webkit-text-fill-color: currentColor; color: var(--ink); }
-.btn-secondary, .glass-button {
+.glass-button {
   background: var(--card) !important; color: var(--ink) !important;
   border: 1px solid var(--line-strong) !important;
   padding: 9px 14px; border-radius: var(--r-el); font-weight: 500; font-size: 13.5px; cursor: pointer;
 }
-.btn-secondary:hover, .glass-button:hover { background: var(--hover) !important; }
+.glass-button:hover { background: var(--hover) !important; }
 .glow-button, .glow-button.primary {
   background: var(--accent) !important; color: #fff !important; border: none !important;
   padding: 9px 14px; border-radius: var(--r-el); font-weight: 600; font-size: 13.5px; cursor: pointer;
 }
 .glow-button:hover { background: var(--accent-hover) !important; }
 .glow-button:disabled { background: var(--faint) !important; cursor: not-allowed; }
-.orbit-spinner {
-  width: 40px; height: 40px; border: 2px solid var(--line-strong);
-  border-top-color: var(--accent); border-radius: 50%;
-  animation: spin 1.2s infinite linear;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-@keyframes pulse-glow { 0%, 100% { box-shadow: none; } }
-@keyframes float { 0%, 100% { transform: translateY(0); } }
-@keyframes space-pulse { 0%, 100% { opacity: 0.6; } }
-@keyframes mic-pulse { from { transform: scale(1); } to { transform: scale(1.15); opacity: 0.7; } }
-.glow-active { animation: none; }
-.pulse-anim { animation: mic-pulse 1s infinite alternate; color: var(--accent) !important; }
-.connection-item:hover, .search-item-hover:hover { background: var(--hover) !important; }
-.synergy-party:hover { background: var(--accent-soft) !important; }
+.hover-glow:hover { filter: brightness(0.97); }
 
-/* --- compat Dashboard hérité (classes Wiko, purge au lot 2) --- */
-.main { padding: 24px 30px 40px; }
-.top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; gap: 12px; }
-.top .h { font-size: 25px; font-weight: 600; letter-spacing: -0.02em; }
-.top .sub { font-size: 13.5px; color: var(--mut); margin-top: 2px; }
-.toolbar { display: flex; align-items: center; gap: 10px; }
-.pillbtn { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line-strong); border-radius: 11px; padding: 9px 14px; font: inherit; font-size: 13.5px; color: var(--ink-2); font-weight: 500; background: var(--card); cursor: pointer; }
-.pillbtn:hover { background: var(--hover); }
-.btn-teal { display: inline-flex; align-items: center; gap: 7px; background: var(--accent); color: #fff; border: none; border-radius: 11px; padding: 10px 15px; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
-.btn-teal:hover { background: var(--accent-hover); }
-.btn-ghost2 { display: inline-flex; align-items: center; gap: 7px; background: var(--card); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 11px; padding: 10px 15px; font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; }
-.btn-ghost2:hover { background: var(--hover); }
-.main .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card); padding: 20px; }
-.ch { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; }
-.ch .t { font-size: 16px; font-weight: 600; }
-.dots { color: var(--faint); font-size: 20px; line-height: 1; cursor: pointer; }
-.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; }
-.tile { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card); padding: 16px 18px; }
-.tile .lab { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--mut); }
-.tile .ic { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; color: #fff; flex: none; }
-.tile .v { font-size: 27px; font-weight: 600; letter-spacing: -0.02em; margin-top: 9px; font-variant-numeric: tabular-nums; }
-.tile .d { font-size: 12.5px; font-weight: 500; margin-top: 2px; }
-.up { color: var(--status-fresh); }
-.flat { color: var(--mut); }
-.cols { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; margin-bottom: 16px; }
-@media (max-width: 1000px) { .cols { grid-template-columns: 1fr; } .tiles { grid-template-columns: 1fr 1fr; } }
-.att-big { display: flex; align-items: center; gap: 10px; }
-.att-big .n { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; }
-.att-big .p { display: flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--status-fresh); background: var(--green-soft); border-radius: 8px; padding: 3px 8px; }
-.att-sub { font-size: 13px; color: var(--mut); margin-top: 6px; }
-.heat { display: grid; grid-template-columns: auto repeat(6, 1fr); gap: 7px; margin-top: 18px; align-items: center; }
-.heat .yl { font-size: 11.5px; color: var(--mut); text-align: right; padding-right: 4px; }
-.heat .cell { aspect-ratio: 1; border-radius: 7px; background: var(--accent); }
-.heat .xl { font-size: 11.5px; color: var(--mut); text-align: center; padding-top: 4px; }
-.tcard { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden; }
-.tabs { display: flex; align-items: center; gap: 4px; padding: 12px 16px 0; border-bottom: 1px solid var(--line); }
-.tab { padding: 10px 14px; font-size: 14px; font-weight: 600; color: var(--mut); cursor: pointer; border: none; background: none; border-bottom: 2px solid transparent; margin-bottom: -1px; font-family: inherit; }
-.tab.on { color: var(--accent); border-bottom-color: var(--accent); }
-.tabs .upd { margin-left: auto; display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink-2); font-weight: 500; cursor: pointer; background: none; border: none; font-family: inherit; }
-.tcard table { width: 100%; border-collapse: collapse; }
-.tcard th { text-align: left; font-size: 13px; font-weight: 500; color: var(--mut); padding: 13px 16px; }
-.tcard td { padding: 11px 16px; font-size: 14px; border-top: 1px solid var(--line); }
-.who { display: flex; align-items: center; gap: 10px; }
-.main .av, .tcard .av, .note .av { width: 30px; height: 30px; border-radius: 9999px; display: grid; place-items: center; color: #fff; font-size: 11px; font-weight: 600; flex: none; }
-.who .nm { font-weight: 600; }
+/* Pastilles de secteur et texte discret, encore utilisés par l'Oracle hérité. */
 .pill { display: inline-block; font-size: 12.5px; font-weight: 500; border-radius: 8px; padding: 3px 10px; }
-.p-fin, .p-tech { background: var(--blue-soft); color: var(--blue-tx); }
-.p-pol, .p-ener { background: var(--hover); color: var(--ink-2); }
-.p-sante, .p-act { background: var(--green-soft); color: var(--status-fresh); }
-.p-relance { background: var(--amber-soft); color: var(--amber); }
 .muted { color: var(--faint); }
-.note { display: flex; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--line); }
-.note:last-child { border-bottom: none; }
-.note .body .hd { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
-.note .body .hd .nm { font-weight: 600; }
-.note .body .hd .dt { color: var(--mut); font-size: 12px; }
-.note .body .tx { font-size: 13.5px; color: var(--ink-2); margin-top: 4px; line-height: 1.6; }
-.mic { width: 88px; height: 88px; border-radius: 9999px; background: var(--accent-soft); display: grid; place-items: center; margin: 8px auto 0; }
-.mic .in { width: 64px; height: 64px; border-radius: 9999px; background: var(--accent); display: grid; place-items: center; color: #fff; }

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Plus, Sparkles, Trash2, Layers, Tag as TagIcon, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -41,6 +41,9 @@ export const ContactsPageV2: React.FC = () => {
   const [tagPicker, setTagPicker] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [showTags, setShowTags] = useState(false);
+  const [confirmEnrich, setConfirmEnrich] = useState(false);
+  const [enrichProgress, setEnrichProgress] = useState<{ done: number; total: number } | null>(null);
+  const cancelEnrich = useRef(false);
 
   const setParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(searchParams);
@@ -151,6 +154,31 @@ export const ContactsPageV2: React.FC = () => {
     if (error) { toast(`Tag impossible : ${error.message}`); return; }
     setSelected(new Set());
     toast(`Tag appliqué à ${rowsToInsert.length} contact${rowsToInsert.length > 1 ? 's' : ''}.`);
+    await data.refresh();
+  };
+
+  /* Enrichissement en masse : récapitulatif préalable, annulable en cours. */
+  const bulkEnrich = async () => {
+    setConfirmEnrich(false);
+    const ids = [...selected];
+    cancelEnrich.current = false;
+    setEnrichProgress({ done: 0, total: ids.length });
+    let ok = 0;
+    for (const id of ids) {
+      if (cancelEnrich.current) break;
+      try {
+        const res: any = await supabase.functions.invoke('enrich-contact', { body: { contact_id: id } });
+        if (!res.error) ok++;
+      } catch { /* on continue : un échec ne doit pas arrêter le lot */ }
+      setEnrichProgress((p) => (p ? { ...p, done: p.done + 1 } : null));
+    }
+    setEnrichProgress(null);
+    setSelected(new Set());
+    toast(
+      cancelEnrich.current
+        ? `Enrichissement interrompu. ${ok} fiche${ok > 1 ? 's' : ''} complétée${ok > 1 ? 's' : ''}.`
+        : `${ok} fiche${ok > 1 ? 's' : ''} enrichie${ok > 1 ? 's' : ''} sur ${ids.length}.`
+    );
     await data.refresh();
   };
 
@@ -352,6 +380,9 @@ export const ContactsPageV2: React.FC = () => {
               </div>
             )}
           </div>
+          <button onClick={() => setConfirmEnrich(true)}>
+            <Sparkles size={14} /> Enrichir
+          </button>
           <button onClick={() => setConfirmBulkDelete(true)} style={{ color: '#F1A9A3' }}>
             <Trash2 size={14} /> Supprimer
           </button>
@@ -380,6 +411,32 @@ export const ContactsPageV2: React.FC = () => {
           onConfirm={bulkDelete}
           onCancel={() => setConfirmBulkDelete(false)}
         />
+      )}
+
+      {confirmEnrich && (
+        <ConfirmModal
+          title={`Enrichir ${nbSel} fiche${nbSel > 1 ? 's' : ''} via l'IA ?`}
+          body={
+            <>
+              L'IA cherchera poste, entreprise et contexte pour chaque contact sélectionné.
+              Durée estimée : environ <b className="tnum">{Math.ceil(nbSel * 1.5)} secondes</b>.
+              Vous pourrez interrompre en cours de route.
+            </>
+          }
+          confirmLabel="Lancer l'enrichissement"
+          onConfirm={bulkEnrich}
+          onCancel={() => setConfirmEnrich(false)}
+        />
+      )}
+
+      {enrichProgress && (
+        <div className="bulkbar">
+          <span className="tnum">
+            Enrichissement… {enrichProgress.done}/{enrichProgress.total}
+          </span>
+          <span className="sep" />
+          <button onClick={() => { cancelEnrich.current = true; }}>Interrompre</button>
+        </div>
       )}
 
       {showCreate && <CreateContactModal onClose={() => setShowCreate(false)} />}

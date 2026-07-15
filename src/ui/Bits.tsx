@@ -203,3 +203,73 @@ export const ConfirmModal: React.FC<{
 export const SectionLabel: React.FC<{ children: React.ReactNode; style?: React.CSSProperties }> = ({ children, style }) => (
   <div className="t-label" style={{ marginBottom: 8, ...style }}>{children}</div>
 );
+
+/* ============================================================
+   Champ éditable en place. Le clic passe en édition, Entrée ou
+   la perte de focus enregistre, Échap annule. Un champ vide
+   affiche son invite en --faint plutôt qu'un blanc muet.
+   ============================================================ */
+export const EditableField: React.FC<{
+  value?: string | null;
+  placeholder: string;
+  multiline?: boolean;
+  disabled?: boolean;
+  onSave: (value: string) => void | Promise<void>;
+  render?: (value: string) => React.ReactNode;
+  style?: React.CSSProperties;
+}> = ({ value, placeholder, multiline, disabled, onSave, render, style }) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? '');
+  const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
+
+  useEffect(() => { setDraft(value ?? ''); }, [value]);
+  useEffect(() => { if (editing) ref.current?.focus(); }, [editing]);
+
+  const commit = async () => {
+    setEditing(false);
+    const next = draft.trim();
+    if (next === (value ?? '').trim()) return;
+    await onSave(next);
+  };
+
+  if (disabled) {
+    return <span className="t-sec" style={{ color: 'var(--ink-2)', ...style }}>{value || <span style={{ color: 'var(--faint)' }}>{placeholder}</span>}</span>;
+  }
+
+  if (editing) {
+    const common = {
+      ref: ref as never,
+      className: 'input',
+      value: draft,
+      placeholder,
+      onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setDraft(e.target.value),
+      onBlur: commit,
+      onKeyDown: (e: React.KeyboardEvent) => {
+        if (e.key === 'Escape') { setDraft(value ?? ''); setEditing(false); }
+        if (e.key === 'Enter' && !multiline) { e.preventDefault(); commit(); }
+        if (e.key === 'Enter' && multiline && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commit(); }
+      },
+      style: { padding: '4px 8px', fontSize: 13.5, ...style },
+    };
+    return multiline
+      ? <textarea {...common} rows={3} style={{ ...common.style, resize: 'vertical' }} />
+      : <input {...common} />;
+  }
+
+  return (
+    <span
+      onClick={() => setEditing(true)}
+      title="Cliquer pour modifier"
+      style={{
+        cursor: 'text', borderRadius: 6, padding: '2px 4px', margin: '-2px -4px',
+        display: 'inline-block', minWidth: 60, ...style,
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--hover)')}
+      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+    >
+      {value
+        ? (render ? render(value) : <span className="t-sec" style={{ color: 'var(--ink-2)' }}>{value}</span>)
+        : <span className="t-sec" style={{ color: 'var(--faint)' }}>{placeholder}</span>}
+    </span>
+  );
+};

@@ -5,6 +5,7 @@ import {
   Plus, Search, LogOut, ChevronDown, Check,
 } from 'lucide-react';
 import { useData } from './data';
+import { CommandPalette } from './ui/CommandPalette';
 import { circleColor } from './ui/format';
 
 // Coquille du redesign (brief 5.1) : sidebar 240 px, six destinations,
@@ -23,8 +24,21 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const data = useData();
   const navigate = useNavigate();
   const [circleOpen, setCircleOpen] = useState(false);
-  const [query, setQuery] = useState('');
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const circleRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setPaletteOpen((o) => !o); }
+      const target = e.target as HTMLElement;
+      if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && !e.metaKey && !e.ctrlKey && (e.key === 'c' || e.key === 'C')) {
+        // Raccourci global Capturer, hors champs de saisie
+        if (!paletteOpen) navigate('/capture');
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [paletteOpen, navigate]);
 
   useEffect(() => {
     if (!circleOpen) return;
@@ -41,12 +55,6 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     .split(/[\s@.]+/).slice(0, 2).map((p: string) => p.charAt(0).toUpperCase()).join('') || 'U';
 
   const pendingCount = data.pendingUpdates.length;
-
-  const submitSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const q = query.trim();
-    navigate(q ? `/contacts?q=${encodeURIComponent(q)}` : '/contacts');
-  };
 
   return (
     <div style={{ display: 'flex', height: '100vh', background: 'var(--wash)' }}>
@@ -124,17 +132,16 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           )}
         </div>
 
-        {/* Recherche */}
-        <form onSubmit={submitSearch} style={{ position: 'relative', marginBottom: 14 }}>
+        {/* Recherche : ouvre la palette (une seule surface, brief 5.3) */}
+        <button
+          className="input"
+          style={{ paddingLeft: 30, fontSize: 13.5, background: 'var(--wash)', textAlign: 'left', color: 'var(--faint)', position: 'relative', marginBottom: 14, cursor: 'pointer' }}
+          onClick={() => setPaletteOpen(true)}
+        >
           <Search size={14} style={{ position: 'absolute', left: 10, top: 10, color: 'var(--faint)' }} />
-          <input
-            className="input"
-            style={{ paddingLeft: 30, fontSize: 13.5, background: 'var(--wash)' }}
-            placeholder="Rechercher…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </form>
+          Rechercher…
+          <span className="t-meta" style={{ position: 'absolute', right: 10, top: 9, border: '1px solid var(--line-strong)', borderRadius: 5, padding: '0 5px', color: 'var(--faint)' }}>⌘K</span>
+        </button>
 
         {/* Destinations */}
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, overflowY: 'auto' }}>
@@ -171,6 +178,8 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           </button>
         </div>
       </aside>
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
 
       <main style={{ flex: 1, minWidth: 0, overflow: 'hidden', position: 'relative' }}>
         {data.errorMsg ? (

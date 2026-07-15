@@ -2,7 +2,6 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../data';
 import { OpportunityHub } from '../components/OpportunityHub';
-import { AIInput } from '../components/AIInput';
 
 // Adaptateurs des écrans pas encore refondus (lots 2 à 5).
 // Ils traduisent l'ancien contrat setActiveTab vers les routes,
@@ -47,21 +46,6 @@ export const LegacyOpportunities: React.FC = () => {
         spaces={data.spaces}
         selectedSpaceId={data.selectedSpaceId}
         user={data.user}
-      />
-    </Scroll>
-  );
-};
-
-export const LegacyCapture: React.FC = () => {
-  const { data } = useLegacyProps();
-  return (
-    <Scroll>
-      <AIInput
-        contacts={data.contacts}
-        onRefreshData={data.refresh}
-        user={data.user}
-        selectedSpaceId={data.selectedSpaceId}
-        spaces={data.spaces}
       />
     </Scroll>
   );

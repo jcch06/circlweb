@@ -11,7 +11,8 @@ import { HomePage } from './pages/HomePage';
 import { JournalPage } from './pages/JournalPage';
 import { CirclesPage } from './pages/CirclesPage';
 import { NetworkPage } from './pages/NetworkPage';
-import { LegacyOpportunities, LegacyCapture } from './pages/legacy';
+import { CapturePage } from './pages/CapturePage';
+import { LegacyOpportunities } from './pages/legacy';
 
 function App() {
   const [session, setSession] = useState<any>(null);
@@ -61,7 +62,7 @@ function App() {
               <Route path="/journal" element={<JournalPage />} />
               <Route path="/opportunites" element={<LegacyOpportunities />} />
               <Route path="/cercles" element={<CirclesPage />} />
-              <Route path="/capture" element={<LegacyCapture />} />
+              <Route path="/capture" element={<CapturePage />} />
               <Route path="*" element={<Navigate to="/accueil" replace />} />
             </Route>
           </Routes>

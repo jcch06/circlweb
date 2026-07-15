@@ -6,7 +6,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { useData } from '../data';
 import { useToast } from './Toast';
-import { Avatar, StatusPill, DecisionPair, DiffLine, AICard, ConfirmModal, SectionLabel } from './Bits';
+import { Avatar, StatusPill, DecisionPair, DiffLine, AICard, ConfirmModal, SectionLabel, EditableField } from './Bits';
 import { NoteComposer } from './NoteComposer';
 import { Timeline } from './Timeline';
 import { fullName, lastTouch, relStatus, relativeFR, circleColor } from './format';
@@ -115,6 +115,32 @@ export const ContactDrawer: React.FC<{
     await data.refresh();
   };
 
+  /* Édition en place d'un champ de la fiche. */
+  const saveField = async (field: string, value: string) => {
+    const { error } = await supabase
+      .from('contacts')
+      .update({ [field]: value || null })
+      .eq('id', contactId);
+    if (error) { toast(`Modification impossible : ${error.message}`); return; }
+    await data.refresh();
+  };
+
+  const requestAccess = async () => {
+    const { error } = await supabase.from('contact_access_requests').insert({
+      contact_id: contactId,
+      owner_id: contact.owner_id,
+      requester_id: data.user?.id,
+      space_id: contact.space_id,
+    });
+    if (error) {
+      toast(error.code === '23505'
+        ? 'Vous avez déjà demandé l’accès à ce contact.'
+        : `Demande impossible : ${error.message}`);
+      return;
+    }
+    toast('Demande envoyée au propriétaire du contact.');
+  };
+
   const enrich = async () => {
     setEnriching(true);
     try {
@@ -198,11 +224,21 @@ export const ContactDrawer: React.FC<{
             <Avatar name={name} firstName={contact.first_name} lastName={contact.last_name} photoUrl={contact.photo_url} size={56} locked={locked} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="t-page" style={{ fontSize: 20, lineHeight: '26px' }}>{name}</div>
-              {(contact.job_title || contact.company) && (
-                <div className="t-sec" style={{ color: 'var(--ink-2)', marginTop: 2 }}>
-                  {[contact.job_title, contact.company].filter(Boolean).join(' @ ')}
-                </div>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
+                <EditableField
+                  value={contact.job_title}
+                  placeholder="Ajouter un poste"
+                  disabled={locked}
+                  onSave={(v) => saveField('job_title', v)}
+                />
+                <span className="t-sec" style={{ color: 'var(--faint)' }}>@</span>
+                <EditableField
+                  value={contact.company}
+                  placeholder="Ajouter une entreprise"
+                  disabled={locked}
+                  onSave={(v) => saveField('company', v)}
+                />
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                 <StatusPill
                   status={status}
@@ -225,21 +261,35 @@ export const ContactDrawer: React.FC<{
               <span className="t-sec" style={{ color: 'var(--orange)', flex: 1 }}>
                 Ce contact est verrouillé par son propriétaire : seuls le prénom et le nom sont partagés.
               </span>
+              <button className="btn btn-ghost" style={{ padding: '5px 10px', fontSize: 12.5 }} onClick={requestAccess}>
+                Demander l'accès
+              </button>
             </div>
           ) : (
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {contact.email && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              {contact.email ? (
                 <a className="chip clickable" href={`mailto:${contact.email}`}><Mail size={12} />{contact.email}</a>
+              ) : (
+                <span className="chip" style={{ borderStyle: 'dashed' }}>
+                  <Mail size={12} />
+                  <EditableField value={null} placeholder="email" onSave={(v) => saveField('email', v)} />
+                </span>
               )}
-              {contact.phone && (
+              {contact.phone ? (
                 <a className="chip clickable" href={`tel:${contact.phone}`}><Phone size={12} />{contact.phone}</a>
+              ) : (
+                <span className="chip" style={{ borderStyle: 'dashed' }}>
+                  <Phone size={12} />
+                  <EditableField value={null} placeholder="téléphone" onSave={(v) => saveField('phone', v)} />
+                </span>
               )}
               {contact.linkedin && (
                 <a className="chip clickable" href={contact.linkedin} target="_blank" rel="noreferrer"><Link2 size={12} />LinkedIn</a>
               )}
-              {contact.location && (
-                <span className="chip"><MapPin size={12} />{contact.location}</span>
-              )}
+              <span className="chip" style={contact.location ? undefined : { borderStyle: 'dashed' }}>
+                <MapPin size={12} />
+                <EditableField value={contact.location} placeholder="lieu" onSave={(v) => saveField('location', v)} />
+              </span>
             </div>
           )}
 
@@ -308,16 +358,30 @@ export const ContactDrawer: React.FC<{
                     ))}
                   </div>
                 )}
-                {contact.industry && (
-                  <div className="t-sec" style={{ color: 'var(--ink-2)', display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <Briefcase size={13} color="var(--mut)" /> {contact.industry}
-                    {contact.company_size ? ` · ${contact.company_size}` : ''}
-                  </div>
-                )}
-                {contact.bio && (
-                  <div className="t-sec" style={{ color: 'var(--ink-2)', lineHeight: '21px' }}>{contact.bio}</div>
-                )}
-                {!contact.bio && !contact.industry && tags.length === 0 && (
+                <div className="t-sec" style={{ color: 'var(--ink-2)', display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <Briefcase size={13} color="var(--mut)" />
+                  <EditableField
+                    value={contact.industry}
+                    placeholder="Ajouter un secteur"
+                    disabled={locked}
+                    onSave={(v) => saveField('industry', v)}
+                  />
+                  {contact.company_size ? <span style={{ color: 'var(--mut)' }}>· {contact.company_size}</span> : null}
+                </div>
+
+                <div>
+                  <div className="t-label" style={{ fontSize: 11, marginBottom: 4 }}>Bio</div>
+                  <EditableField
+                    value={contact.bio}
+                    placeholder="Ajouter une bio"
+                    multiline
+                    disabled={locked}
+                    onSave={(v) => saveField('bio', v)}
+                    style={{ display: 'block', width: '100%', lineHeight: '21px' }}
+                  />
+                </div>
+
+                {!contact.bio && !contact.industry && (
                   <div className="t-sec" style={{ color: 'var(--mut)' }}>
                     Fiche peu renseignée.
                     <button className="btn btn-ghost" style={{ marginLeft: 10, padding: '4px 10px' }} onClick={enrich} disabled={enriching}>

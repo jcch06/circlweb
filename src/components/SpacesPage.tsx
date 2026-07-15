@@ -216,7 +216,7 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
         phone: c.phone,
         linkedin: c.linkedin,
         ai_context: c.ai_context,
-        source: 'import'
+        source: 'manual'
       }));
 
       const { error: insertError } = await supabase.from('contacts').insert(insertPayload);

@@ -52,7 +52,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
     <div style={styles.container}>
       <div className="glass-card" style={styles.card}>
         <div style={styles.logoContainer}>
-          <h1 style={styles.logoText}>circl</h1>
+          <h1 style={styles.logoText}>Circl Web</h1>
         </div>
 
         {error && (

@@ -26,7 +26,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <aside className="glass-sidebar" style={styles.sidebar}>
       {/* Title */}
       <div style={styles.header}>
-        <h2 style={styles.logoText}>circl</h2>
+        <h2 style={styles.logoText}>Circl Web</h2>
       </div>
 
       {/* Space Selector */}
@@ -160,9 +160,8 @@ const styles: Record<string, React.CSSProperties> = {
   logoText: {
     fontSize: '1.1rem',
     fontWeight: 700,
-    letterSpacing: '0.05em',
+    letterSpacing: '0.02em',
     color: 'var(--text-primary)',
-    textTransform: 'lowercase' as const,
   },
   section: {
     marginBottom: 20,

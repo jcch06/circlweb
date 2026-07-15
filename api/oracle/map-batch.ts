@@ -145,9 +145,9 @@ Analyse EN PROFONDEUR le lot de contacts fourni ci-dessous et extrais :
 </instructions>
 
 <rules>
-- INTERDICTION FORMELLE de renvoyer un tableau "immediateSynergies" vide si le lot contient au moins 2 contacts. Si aucune synergie évidente n'existe, tu DOIS déduire une opportunité d'échange de compétences plausible même entre profils qui semblent éloignés au premier abord (ex : un besoin abstrait chez A peut être résolu par une compétence indirecte ou un réseau détenu par B). Sois créatif mais réaliste.
-- N'invente jamais d'identité : utilise uniquement les id/noms fournis dans les balises <contact>.
-- Chaque synergie doit avoir une "reason" concrète et actionnable, pas une généralité.
+- RIGUEUR AVANT TOUT : ne propose une synergie QUE si elle s'appuie sur des données réelles du contact (poste, compétences, besoins, notes). Il vaut mieux renvoyer 0 ou 1 synergie SOLIDE qu'un lot de synergies plausibles mais inventées. Un tableau "immediateSynergies" vide est une réponse VALIDE et attendue quand les données ne soutiennent aucune synergie crédible.
+- N'invente JAMAIS un besoin, une compétence, un rôle ou une identité qui ne figure pas explicitement dans les balises <contact>. Si un contact n'a qu'un nom et aucune autre donnée, ne construis AUCUNE synergie autour de lui.
+- Chaque synergie doit citer, dans sa "reason", l'élément concret (compétence, besoin ou note) de CHAQUE contact qui la justifie — pas une généralité.
 - Réponds STRICTEMENT avec un objet JSON valide respectant le format ci-dessous, sans aucun texte, markdown ou commentaire additionnel.
 </rules>
 

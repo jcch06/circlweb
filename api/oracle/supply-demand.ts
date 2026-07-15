@@ -136,6 +136,23 @@ function safeParseJSON(text: string): any {
   }
 }
 
+// Twin of topology.ts's enrichment gate — keep in sync. A contact with only
+// a name gives the matrix nothing real to match on.
+function hasText(v: any): boolean {
+  return typeof v === 'string' && v.trim().length > 0 && v.trim().toLowerCase() !== 'null';
+}
+function hasArray(v: any): boolean {
+  return Array.isArray(v) && v.some((x: any) => x && String(x).trim() && String(x).trim().toLowerCase() !== 'null');
+}
+function isAnalyzableContact(c: any, noteCountById: Map<string, number>): boolean {
+  return hasText(c.job_title)
+    || hasText(c.company)
+    || hasText(c.bio)
+    || hasArray(c.skills)
+    || hasArray(c.inferred_needs)
+    || (noteCountById.get(c.id) || 0) > 0;
+}
+
 async function buildSupplyDemandMatrix(client: Mistral, contacts: any[], notes: any[], userContext: string, lockedContext: string): Promise<SupplyDemandEntry[]> {
   if (!contacts || contacts.length === 0) return [];
 
@@ -165,7 +182,8 @@ ${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${loc
 </instructions>
 
 <rules>
-- INTERDICTION de renvoyer un tableau vide si le catalogue contient au moins un besoin exploitable.
+- RIGUEUR AVANT TOUT : ne crée une ligne QUE si des demanders ET des suppliers réels et nommés existent dans le catalogue. Il vaut mieux 3 lignes solides et vérifiables que 12 lignes spéculatives. Si le catalogue ne contient aucun besoin exploitable, renvoie un tableau vide — c'est une réponse valide et attendue.
+- N'invente JAMAIS un besoin, une compétence ou une mise en relation qui n'est pas ancrée dans les données du contact (skills / needs / notes). Ne déduis pas un besoin du seul poste si aucune donnée ne l'appuie.
 - Utilise UNIQUEMENT les id/noms fournis dans le catalogue pour demanders/suppliers.
 - Limite-toi aux ~12 lignes les plus pertinentes.
 - Réponds STRICTEMENT avec un objet JSON valide, sans markdown ni texte additionnel.
@@ -229,16 +247,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     let contactsQuery = userSupabase.from('contacts').select('*').order('first_name');
     if (spaceId) contactsQuery = contactsQuery.eq('space_id', spaceId);
-    const { data: contacts, error: contactsError } = await contactsQuery;
+    const { data: rawContacts, error: contactsError } = await contactsQuery;
     if (contactsError) { res.status(500).json({ error: contactsError.message }); return; }
-    if (!contacts || contacts.length === 0) {
+    if (!rawContacts || rawContacts.length === 0) {
+      res.status(200).json([]);
+      return;
+    }
+
+    const rawContactIds = rawContacts.map(c => c.id);
+    const { data: notes, error: notesError } = await userSupabase.from('notes').select('*').in('contact_id', rawContactIds);
+    if (notesError) { res.status(500).json({ error: notesError.message }); return; }
+
+    // Enrichment gate — only contacts with a real signal enter the matrix.
+    const noteCountById = new Map<string, number>();
+    (notes || []).forEach((n: any) => noteCountById.set(n.contact_id, (noteCountById.get(n.contact_id) || 0) + 1));
+    const contacts = rawContacts.filter(c => isAnalyzableContact(c, noteCountById));
+    if (contacts.length === 0) {
       res.status(200).json([]);
       return;
     }
 
     const contactIds = contacts.map(c => c.id);
-    const { data: notes, error: notesError } = await userSupabase.from('notes').select('*').in('contact_id', contactIds);
-    if (notesError) { res.status(500).json({ error: notesError.message }); return; }
 
     const { data: visibility, error: visibilityError } = await userSupabase
       .from('contacts_visible')

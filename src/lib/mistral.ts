@@ -950,6 +950,8 @@ export interface MistralPipelineResult {
   timestamp: number;
   /** How much of this run was served from the incremental cache vs freshly computed. */
   cacheStats?: { totalBatches: number; reusedBatches: number };
+  /** How many contacts passed the enrichment gate vs were excluded as too sparse. */
+  dataQuality?: { analyzed: number; excluded: number };
 }
 
 /**
@@ -1104,6 +1106,8 @@ export async function runMistralOracleBatchPipeline(
     batches: { contactIds: string[]; clusterId: string | null; contactIdsHash: string | null; cached: MistralBatchResult | null }[];
     bridgeContacts: BridgeContact[];
     lockedContactNames: string[];
+    analyzedCount?: number;
+    excludedCount?: number;
   }>('/api/oracle/topology', { spaceId });
   onProgress?.(15);
 
@@ -1148,7 +1152,11 @@ export async function runMistralOracleBatchPipeline(
     supplyDemand,
     bridgeContacts: topology.bridgeContacts,
     timestamp: Date.now(),
-    cacheStats: { totalBatches, reusedBatches }
+    cacheStats: { totalBatches, reusedBatches },
+    dataQuality: {
+      analyzed: topology.analyzedCount ?? 0,
+      excluded: topology.excludedCount ?? 0
+    }
   });
 
   onProgress?.(100);

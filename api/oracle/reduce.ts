@@ -161,9 +161,9 @@ ${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${bri
 </instructions>
 
 <rules>
-- INTERDICTION de renvoyer des tableaux vides ("globalThemes", "crossBatchSynergies", "macroNeeds") si les données agrégées contiennent au moins un besoin ou une synergie exploitable. Déduis des connexions même si elles ne sont pas explicites lot par lot.
+- RIGUEUR AVANT TOUT : ne consolide que ce que les données agrégées soutiennent réellement. Il vaut mieux 2 macro-besoins et 1 chaîne de valeur SOLIDES que des listes étoffées de connexions spéculatives. Si les données ne soutiennent pas de synergie transversale crédible, renvoie peu d'éléments (voire des tableaux vides) — c'est une réponse valide.
 - Un "Macro-Besoin" doit regrouper au moins un besoin réel présent dans "mergedFrom", jamais inventé de toutes pièces.
-- Une "valueChain" doit contenir au moins 2 étapes (chain) reliant des contacts réellement mentionnés dans les données agrégées.
+- Une "valueChain" ne doit relier que des contacts RÉELLEMENT nommés dans les données agrégées, chacun avec un rôle concret tiré de ses données. N'ajoute JAMAIS un maillon générique du type "un profil pertinent dans le réseau" ni un rôle vague ("profil technique ou opérationnel", "client potentiel") : si tu n'as pas de rôle précis pour un contact, ne l'inclus pas dans la chaîne.
 - Réponds STRICTEMENT avec un objet JSON valide respectant le format ci-dessous, sans markdown ni texte additionnel.
 </rules>
 

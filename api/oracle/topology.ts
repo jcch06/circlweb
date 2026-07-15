@@ -256,6 +256,28 @@ const MAX_MAP_BATCH = 30;
 // centroid assignment would otherwise drift too far from an optimal split).
 const FULL_RECLUSTER_THRESHOLD = 0.4;
 
+// ── Enrichment gate ─────────────────────────────────────────────────────
+// A contact carrying nothing but a name is pure noise for synergy detection:
+// the model can only hallucinate a role/need/synergy for it (that's the
+// source of "un profil pertinent dans le réseau (ex: …)" and invented value
+// chains). A contact is analyzable only if it exposes at least ONE real
+// signal beyond its name. Same rule lives in supply-demand.ts — keep them in
+// sync (no cross-file import inside api/ on purpose).
+function hasText(v: any): boolean {
+  return typeof v === 'string' && v.trim().length > 0 && v.trim().toLowerCase() !== 'null';
+}
+function hasArray(v: any): boolean {
+  return Array.isArray(v) && v.some((x: any) => x && String(x).trim() && String(x).trim().toLowerCase() !== 'null');
+}
+function isAnalyzableContact(c: any, noteCountById: Map<string, number>): boolean {
+  return hasText(c.job_title)
+    || hasText(c.company)
+    || hasText(c.bio)
+    || hasArray(c.skills)
+    || hasArray(c.inferred_needs)
+    || (noteCountById.get(c.id) || 0) > 0;
+}
+
 function chunkNaive(contactIds: string[], size: number = 25): TopologyBatch[] {
   const batches: TopologyBatch[] = [];
   for (let i = 0; i < contactIds.length; i += size) {
@@ -298,7 +320,12 @@ async function computeEmbeddings(client: Mistral, contacts: any[], notes: any[])
     const batch = contacts.slice(i, i + BATCH_SIZE);
     const inputs = batch.map(c => {
       const contactNotes = notes.filter((n: any) => n.contact_id === c.id).map((n: any) => n.content).join(' ');
-      return `Profil: ${c.first_name}, Role: ${c.job_title}, Entreprise: ${c.company}. Notes: ${contactNotes}`.substring(0, 8000);
+      const skills = Array.isArray(c.skills) ? c.skills.join(', ') : '';
+      const needs = Array.isArray(c.inferred_needs) ? c.inferred_needs.join(', ') : '';
+      // Skills & needs carry the complementarity signal (who needs what / who
+      // offers what) — omitting them made clustering group on job title alone,
+      // scattering genuinely complementary contacts into separate batches.
+      return `Profil: ${c.first_name} ${c.last_name || ''}, Role: ${c.job_title}, Entreprise: ${c.company}. Compétences: ${skills}. Besoins: ${needs}. Notes: ${contactNotes}`.substring(0, 8000);
     });
     try {
       const embedResponse = await client.embeddings.create({ model: 'mistral-embed', inputs });
@@ -340,13 +367,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       global: { headers: { Authorization: `Bearer ${auth.token}` } }
     });
 
-    let contactsQuery = userSupabase.from('contacts').select('id, first_name, last_name, job_title, company, skills, inferred_needs, space_id').order('first_name');
+    let contactsQuery = userSupabase.from('contacts').select('id, first_name, last_name, job_title, company, bio, skills, inferred_needs, space_id').order('first_name');
     if (spaceId) contactsQuery = contactsQuery.eq('space_id', spaceId);
-    const { data: contacts, error: contactsError } = await contactsQuery;
+    const { data: rawContacts, error: contactsError } = await contactsQuery;
     if (contactsError) { res.status(500).json({ error: contactsError.message }); return; }
 
-    if (!contacts || contacts.length === 0) {
-      res.status(200).json({ batches: [], bridgeContacts: [], lockedContactNames: [] });
+    if (!rawContacts || rawContacts.length === 0) {
+      res.status(200).json({ batches: [], bridgeContacts: [], lockedContactNames: [], analyzedCount: 0, excludedCount: 0 });
+      return;
+    }
+
+    // Apply the enrichment gate before anything else — notes are fetched up
+    // front (they're one of the signals that make a contact analyzable) and
+    // reused for hashing/embedding below.
+    const rawContactIds = rawContacts.map(c => c.id);
+    const { data: allNotes } = await userSupabase.from('notes').select('*').in('contact_id', rawContactIds);
+    const noteCountById = new Map<string, number>();
+    (allNotes || []).forEach((n: any) => noteCountById.set(n.contact_id, (noteCountById.get(n.contact_id) || 0) + 1));
+
+    const contacts = rawContacts.filter(c => isAnalyzableContact(c, noteCountById));
+    const excludedCount = rawContacts.length - contacts.length;
+
+    if (contacts.length === 0) {
+      res.status(200).json({ batches: [], bridgeContacts: [], lockedContactNames: [], analyzedCount: 0, excludedCount });
       return;
     }
 
@@ -373,12 +416,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     if (contacts.length < 6) {
-      res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames });
+      res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames, analyzedCount: contacts.length, excludedCount });
       return;
     }
 
-    const { data: notes } = await userSupabase.from('notes').select('*').in('contact_id', contactIds);
-    const notesList = notes || [];
+    const notesList = allNotes || [];
 
     const hashByContactId = new Map<string, string>();
     contacts.forEach(c => hashByContactId.set(c.id, contactContentHash(c, notesList)));
@@ -413,7 +455,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         freshEmbeddings = await computeEmbeddings(client, needsEmbedding, notesList);
       } catch (err) {
         console.error('topology: embedding failure, falling back to naive batching.', err);
-        res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames });
+        res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames, analyzedCount: contacts.length, excludedCount });
         return;
       }
     }
@@ -440,7 +482,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     freshEmbeddings.forEach(e => embeddingByContactId.set(e.contactId, e.vector));
 
     if (embeddingByContactId.size < 6) {
-      res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames });
+      res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames, analyzedCount: contacts.length, excludedCount });
       return;
     }
 
@@ -620,7 +662,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return { contactIds: group, clusterId, contactIdsHash, cached };
     });
 
-    res.status(200).json({ batches, bridgeContacts, lockedContactNames });
+    res.status(200).json({ batches, bridgeContacts, lockedContactNames, analyzedCount: contacts.length, excludedCount });
   } catch (err: any) {
     console.error('Oracle topology failure:', err);
     res.status(500).json({ error: err.message || 'Oracle topology failed' });

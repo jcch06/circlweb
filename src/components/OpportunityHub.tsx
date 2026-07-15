@@ -339,6 +339,20 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
 
+                    {v3Result.dataQuality && v3Result.dataQuality.excluded > 0 && (
+                      <div style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 10,
+                        padding: '12px 20px', borderRadius: 8,
+                        background: 'rgba(27, 23, 37, 0.03)', border: '1px solid var(--border)'
+                      }}>
+                        <Lock size={15} style={{ marginTop: 2, flexShrink: 0, color: 'var(--text-muted)' }} />
+                        <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                          Analyse concentrée sur <b style={{ color: 'var(--text-primary)' }}>{v3Result.dataQuality.analyzed} contact(s) suffisamment renseignés</b>.
+                          {' '}{v3Result.dataQuality.excluded} contact(s) ont été écartés faute d'informations exploitables (nom seul, sans poste, entreprise, compétences ni notes) — enrichissez-les pour les inclure dans une prochaine analyse.
+                        </span>
+                      </div>
+                    )}
+
                     {viewingArchiveId && (
                       <div style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,

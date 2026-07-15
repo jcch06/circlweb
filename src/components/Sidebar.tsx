@@ -37,16 +37,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div style={styles.spaceList}>
           <button
             onClick={() => setSelectedSpaceId(null)}
-            className="nav-item-hover"
+            className={selectedSpaceId === null ? undefined : 'nav-item-hover'}
             style={{
               ...styles.spaceItem,
               ...(selectedSpaceId === null ? styles.spaceItemActive : {}),
             }}
           >
-            <span style={{ 
-              ...styles.spaceName, 
+            <span style={{
+              ...styles.spaceName,
               fontWeight: selectedSpaceId === null ? 600 : 400,
-              color: selectedSpaceId === null ? '#fff' : '#888'
+              color: selectedSpaceId === null ? '#ffffff' : 'var(--text-secondary)'
             }}>
               Tous les contacts
             </span>
@@ -58,16 +58,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 key={space.id}
                 onClick={() => setSelectedSpaceId(space.id)}
-                className="nav-item-hover"
+                className={isActive ? undefined : 'nav-item-hover'}
                 style={{
                   ...styles.spaceItem,
                   ...(isActive ? styles.spaceItemActive : {}),
                 }}
               >
-                <span style={{ 
+                <span style={{
                   ...styles.spaceName,
                   fontWeight: isActive ? 600 : 400,
-                  color: isActive ? '#fff' : '#888'
+                  color: isActive ? '#ffffff' : 'var(--text-secondary)'
                 }}>
                   {space.name}
                 </span>
@@ -92,7 +92,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             key={item.key}
             onClick={() => setActiveTab(item.key)}
-            className="nav-item-hover"
+            className={activeTab === item.key ? undefined : 'nav-item-hover'}
             style={{
               ...styles.navItem,
               ...(activeTab === item.key ? styles.navItemActive : {}),
@@ -116,7 +116,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             key={item.key}
             onClick={() => setActiveTab(item.key)}
-            className="nav-item-hover"
+            className={activeTab === item.key ? undefined : 'nav-item-hover'}
             style={{
               ...styles.navItem,
               ...(activeTab === item.key ? styles.navItemActive : {}),
@@ -151,8 +151,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     padding: '20px 12px',
     flexShrink: 0,
-    borderRight: '1px solid #2a2a2a',
-    background: '#0e0e0e',
+    borderRight: '1px solid var(--border)',
   },
   header: {
     marginBottom: 28,
@@ -162,7 +161,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '1.1rem',
     fontWeight: 700,
     letterSpacing: '0.05em',
-    color: '#ffffff',
+    color: 'var(--text-primary)',
     textTransform: 'lowercase' as const,
   },
   section: {
@@ -175,7 +174,7 @@ const styles: Record<string, React.CSSProperties> = {
   sectionTitle: {
     fontSize: '0.65rem',
     fontWeight: 600,
-    color: '#555',
+    color: 'var(--text-muted)',
     textTransform: 'uppercase' as const,
     letterSpacing: '0.1em',
   },
@@ -198,7 +197,7 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'background-color 0.15s ease',
   },
   spaceItemActive: {
-    background: 'rgba(255, 255, 255, 0.08)',
+    background: 'var(--accent)',
   },
   spaceName: {
     fontSize: '0.82rem',
@@ -220,7 +219,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'none',
     border: 'none',
     borderRadius: 6,
-    color: '#888',
+    color: 'var(--text-secondary)',
     fontSize: '0.82rem',
     fontWeight: 400,
     cursor: 'pointer',
@@ -228,8 +227,8 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'background-color 0.15s ease, color 0.15s ease',
   },
   navItemActive: {
-    background: 'rgba(255, 255, 255, 0.08)',
-    color: '#fff',
+    background: 'var(--accent)',
+    color: '#ffffff',
     fontWeight: 600,
   },
   footer: {
@@ -237,7 +236,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: 12,
-    borderTop: '1px solid #2a2a2a',
+    borderTop: '1px solid var(--border)',
     marginTop: 'auto',
   },
   userInfo: {
@@ -249,7 +248,7 @@ const styles: Record<string, React.CSSProperties> = {
   userName: {
     fontSize: '0.78rem',
     fontWeight: 500,
-    color: '#888',
+    color: 'var(--text-secondary)',
     whiteSpace: 'nowrap',
     textOverflow: 'ellipsis',
     overflow: 'hidden',
@@ -257,7 +256,7 @@ const styles: Record<string, React.CSSProperties> = {
   logoutBtn: {
     background: 'none',
     border: 'none',
-    color: '#555',
+    color: 'var(--text-muted)',
     cursor: 'pointer',
     padding: 6,
     borderRadius: 4,

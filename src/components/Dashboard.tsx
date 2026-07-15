@@ -213,17 +213,17 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '2rem',
     fontWeight: 700,
     marginBottom: 4,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   subtitle: {
     fontSize: '0.9rem',
-    color: '#888',
+    color: 'var(--text-secondary)',
   },
   errorBox: {
-    border: '1px solid #555',
+    border: '1px solid var(--border-active)',
     borderRadius: 8,
     padding: '10px 16px',
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   metricsGrid: {
     display: 'grid',
@@ -249,14 +249,14 @@ const styles: Record<string, React.CSSProperties> = {
   metricTitle: {
     fontSize: '0.75rem',
     fontWeight: 600,
-    color: '#888',
+    color: 'var(--text-secondary)',
     textTransform: 'uppercase',
     letterSpacing: '0.03em',
   },
   metricValue: {
     fontSize: '2rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
     lineHeight: 1,
     fontFamily: 'var(--font-mono)',
   },
@@ -281,7 +281,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   cardDesc: {
     fontSize: '0.9rem',
-    color: '#888',
+    color: 'var(--text-secondary)',
     lineHeight: 1.5,
   },
   actions: {
@@ -315,7 +315,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   emptyNotes: {
     padding: 20,
-    color: '#888',
+    color: 'var(--text-secondary)',
     fontSize: '0.85rem',
     textAlign: 'center',
   },
@@ -335,15 +335,15 @@ const styles: Record<string, React.CSSProperties> = {
   noteContact: {
     fontSize: '0.85rem',
     fontWeight: 600,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   noteDate: {
     fontSize: '0.75rem',
-    color: '#666',
+    color: 'var(--text-muted)',
   },
   noteContent: {
     fontSize: '0.85rem',
-    color: '#aaa',
+    color: 'var(--text-secondary)',
     lineHeight: 1.4,
   },
 };

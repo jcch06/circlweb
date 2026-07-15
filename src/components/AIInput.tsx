@@ -414,7 +414,7 @@ Si aucun contact n'est présent, retourne {"contacts": []}. Réponds uniquement 
             
             {Object.keys(results.updates).length > 0 && (
               <div style={styles.resultBlock}>
-                <span style={{ ...styles.resultBlockTitle, color: '#fff' }}>Changements appliqués au contact :</span>
+                <span style={{ ...styles.resultBlockTitle, color: 'var(--text-primary)' }}>Changements appliqués au contact :</span>
                 <div style={styles.updatesList}>
                   {Object.entries(results.updates).map(([key, val]) => (
                     <div key={key} style={styles.updateItem}>
@@ -456,7 +456,7 @@ Si aucun contact n'est présent, retourne {"contacts": []}. Réponds uniquement 
                   <div key={idx} style={styles.extractedCard}>
                     <div style={styles.extractedCardHeader}>
                       
-                      <span style={{ fontWeight: 700, color: '#fff' }}>{c.first_name} {c.last_name}</span>
+                      <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{c.first_name} {c.last_name}</span>
                     </div>
                     <div style={styles.extractedDetails}>
                       {c.company && (
@@ -514,7 +514,7 @@ const styles: Record<string, React.CSSProperties> = {
   title: {
     fontSize: '2.25rem',
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--text-primary)',
     marginBottom: 6,
   },
   subtitle: {
@@ -542,8 +542,8 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'var(--transition-smooth)',
   },
   tabBtnActive: {
-    background: 'rgba(255, 255, 255, 0.05)',
-    color: '#fff',
+    background: 'rgba(27, 23, 37, 0.05)',
+    color: 'var(--text-primary)',
   },
   card: {
     padding: 30,
@@ -568,20 +568,20 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: '0.05em',
   },
   select: {
-    background: 'rgba(0,0,0,0.2)',
+    background: 'var(--bg-input)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: '12px 16px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     fontSize: '0.95rem',
     outline: 'none',
   },
   textarea: {
-    background: 'rgba(0,0,0,0.2)',
+    background: 'var(--bg-input)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: 16,
-    color: '#fff',
+    color: 'var(--text-primary)',
     fontSize: '0.95rem',
     outline: 'none',
     resize: 'vertical',
@@ -598,7 +598,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 10,
     borderBottom: '1px solid var(--border-glow)',
     paddingBottom: 12,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   resultDetails: {
     display: 'flex',
@@ -621,7 +621,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '0.9rem',
     color: 'var(--text-secondary)',
     lineHeight: 1.5,
-    background: 'rgba(0,0,0,0.1)',
+    background: 'var(--bg-input)',
     padding: 12,
     borderRadius: 8,
   },
@@ -629,7 +629,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     gap: 6,
-    background: 'rgba(255,255,255,0.03)',
+    background: 'rgba(27, 23, 37, 0.03)',
     border: '1px solid var(--border)',
     padding: 12,
     borderRadius: 8,
@@ -645,7 +645,7 @@ const styles: Record<string, React.CSSProperties> = {
     textTransform: 'capitalize',
   },
   updateVal: {
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   tagsRow: {
     display: 'flex',
@@ -653,9 +653,9 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
   },
   tagBadge: {
-    background: 'rgba(255,255,255,0.06)',
+    background: 'rgba(27, 23, 37, 0.06)',
     border: '1px solid var(--border)',
-    color: '#fff',
+    color: 'var(--text-primary)',
     padding: '4px 10px',
     borderRadius: 99,
     fontSize: '0.75rem',
@@ -667,7 +667,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 16,
   },
   extractedCard: {
-    background: 'rgba(255, 255, 255, 0.01)',
+    background: 'rgba(27, 23, 37, 0.01)',
     border: '1px solid var(--border-glow)',
     borderRadius: 10,
     padding: 16,

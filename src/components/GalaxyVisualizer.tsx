@@ -10,9 +10,9 @@ import type { ContactSynergy, BridgeContact } from '../lib/mistral';
 import { requestContactAccess, listMyPendingRequests } from '../lib/contactAccess';
 
 
-// Monochrome, brightness-ranked palette used to distinguish spaces/circles
-// in a merged galaxy view — no hue, only luminance steps.
-const SPACE_COLORS = ['#ffffff', '#c7c7c7', '#9a9a9a', '#767676', '#565656', '#3d3d3d'];
+// Aurora accent palette used to distinguish spaces/circles in a merged
+// galaxy view — tuned for contrast on the light "Aurora" background.
+const SPACE_COLORS = ['#4F8EF7', '#7c5ce0', '#e0577e', '#1fa96b', '#c9822a', '#e0842e'];
 
 interface GalaxyVisualizerProps {
   contacts: any[];
@@ -337,6 +337,23 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
     }
   }, [activeContacts]);
 
+  // Explicit "who-knows-who" edges created from note mentions. Best-effort:
+  // the contact_links table may not exist in every environment yet, so a
+  // failed fetch just means no mention edges are drawn (never breaks the graph).
+  const [contactLinks, setContactLinks] = useState<any[]>([]);
+  useEffect(() => {
+    supabase.from('contact_links')
+      .select('from_contact_id, to_contact_id')
+      .then(({ data, error }) => {
+        if (error) {
+          console.warn('contact_links indisponible (table absente ?)', error.message);
+          setContactLinks([]);
+          return;
+        }
+        setContactLinks(data || []);
+      });
+  }, [selectedSpaceId]);
+
   // Construct Graph Data (Nodes & Links)
   const graphData = useMemo(() => {
     const nodes = activeContacts.map(c => {
@@ -395,8 +412,16 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
       }
     }
 
+    // Explicit mention links (from notes) — the strongest, most meaningful edges.
+    const nodeIds = new Set(nodes.map(n => n.id));
+    contactLinks.forEach((l: any) => {
+      if (nodeIds.has(l.from_contact_id) && nodeIds.has(l.to_contact_id)) {
+        links.push({ source: l.from_contact_id, target: l.to_contact_id, type: 'mention', val: 4 });
+      }
+    });
+
     return { nodes, links };
-  }, [activeContacts, spaces, contactTags, selectedSpaceId, bridgeContactMap]);
+  }, [activeContacts, spaces, contactTags, selectedSpaceId, bridgeContactMap, contactLinks]);
 
   // Fetch full details for the selected contact drawer (including notes and tags)
   const contactDetails = useMemo(() => {
@@ -622,7 +647,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
                   onClick={() => handleSelectContact(c)}
                   style={{
                     ...styles.searchItem,
-                    background: isSelected ? 'rgba(255,255,255,0.08)' : 'none',
+                    background: isSelected ? 'rgba(27, 23, 37, 0.08)' : 'none',
                     borderColor: isSelected ? 'var(--border-hover)' : 'transparent',
                   }}
                   className="search-item-hover"
@@ -655,10 +680,11 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
             graphData={graphData}
             width={dimensions.width}
             height={dimensions.height}
-            backgroundColor="#0a0a0a"
+            backgroundColor="#faf9fc"
             linkColor={(link: any) =>
-              link.type === 'company' ? 'rgba(255, 255, 255, 0.35)' :
-              link.type === 'tag' ? 'rgba(255, 255, 255, 0.18)' : 'rgba(255, 255, 255, 0.08)'
+              link.type === 'mention' ? 'rgba(124, 92, 224, 0.6)' :
+              link.type === 'company' ? 'rgba(79, 142, 247, 0.35)' :
+              link.type === 'tag' ? 'rgba(159, 97, 232, 0.3)' : 'rgba(120, 120, 140, 0.15)'
             }
             linkWidth={(link: any) => link.val || 1}
             onNodeClick={(node) => setSelectedNode(node)}
@@ -695,7 +721,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
               if (node.isBridge) {
                 const ringSize = size + 3 + node.centralityScore * 3;
                 ctx.save();
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+                ctx.strokeStyle = 'rgba(27, 23, 37, 0.55)';
                 ctx.lineWidth = 1.5 / globalScale;
                 ctx.beginPath();
                 ctx.arc(node.x, node.y, ringSize, 0, 2 * Math.PI, false);
@@ -704,7 +730,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
               }
 
               // 1. Draw solid circle star (extremely fast)
-              ctx.fillStyle = node.color || '#ffffff';
+              ctx.fillStyle = node.color || '#7c5ce0';
               ctx.beginPath();
               ctx.arc(node.x, node.y, size, 0, 2 * Math.PI, false);
               ctx.fill();
@@ -717,7 +743,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
               ctx.font = `${fontSize}px Inter, sans-serif`;
               ctx.textAlign = 'center';
               ctx.textBaseline = 'top';
-              ctx.fillStyle = node.isBridge ? '#ffffff' : 'rgba(255, 255, 255, 0.85)';
+              ctx.fillStyle = node.isBridge ? '#16151a' : 'rgba(27, 23, 37, 0.75)';
               // Use scale-dependent offset to keep the text always exactly 6px below the star on screen
               ctx.fillText(label, node.x, node.y + size + 6 / globalScale);
             }}
@@ -740,7 +766,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
               <div style={{
                 display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center', textAlign: 'center',
                 padding: '16px 20px', marginBottom: 16, borderRadius: 10,
-                background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-hover)'
+                background: 'rgba(27, 23, 37, 0.04)', border: '1px solid var(--border-hover)'
               }}>
                 <Lock size={20} color="var(--text-primary)" />
                 <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>
@@ -773,7 +799,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
                 <div style={{
                   display: 'inline-flex', alignItems: 'center', gap: 6,
                   padding: '3px 10px', borderRadius: 99, marginTop: 4,
-                  background: 'rgba(255,255,255,0.08)', border: '1px solid var(--border-hover)',
+                  background: 'rgba(27, 23, 37, 0.08)', border: '1px solid var(--border-hover)',
                   color: 'var(--text-primary)', fontSize: '0.75rem', fontWeight: 600
                 }}>
                   <Star size={11} fill="currentColor" /> Connecteur clé du réseau
@@ -880,7 +906,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
                   {spaces.map(s => {
                     const isChecked = selectedSpaces.includes(s.id);
                     return (
-                      <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.8rem', color: '#fff', cursor: 'pointer' }}>
+                      <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.8rem', color: 'var(--text-primary)', cursor: 'pointer' }}>
                         <input 
                           type="checkbox" 
                           checked={isChecked}
@@ -1082,7 +1108,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
                         {syn.recommendedIntroPath && (
                           <div style={styles.synergyIntroBox}>
                             <span style={styles.synergyBoxTitle}>Introduction :</span>
-                            <p style={{ ...styles.synergyBoxText, color: '#fff' }}>{syn.recommendedIntroPath}</p>
+                            <p style={{ ...styles.synergyBoxText, color: 'var(--text-primary)' }}>{syn.recommendedIntroPath}</p>
                           </div>
                         )}
                       </div>
@@ -1213,7 +1239,7 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'absolute',
     right: 0,
     top: 0,
-    boxShadow: '-8px 0 32px rgba(0,0,0,0.4)',
+    boxShadow: '-8px 0 32px rgba(27, 23, 37, 0.14)',
     borderLeft: '1px solid var(--border-glow)',
     borderRight: 'none',
     zIndex: 20,
@@ -1262,7 +1288,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 80,
     height: 80,
     borderRadius: '50%',
-    background: 'rgba(255, 255, 255, 0.04)',
+    background: 'rgba(27, 23, 37, 0.04)',
     border: '2px solid var(--border-hover)',
     display: 'flex',
     justifyContent: 'center',
@@ -1271,7 +1297,7 @@ const styles: Record<string, React.CSSProperties> = {
   profileName: {
     fontSize: '1.5rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   profileRole: {
     display: 'flex',
@@ -1321,7 +1347,7 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.6,
   },
   aiContextBlock: {
-    background: 'rgba(255, 255, 255, 0.03)',
+    background: 'rgba(27, 23, 37, 0.03)',
     border: '1px solid var(--border)',
     borderRadius: 10,
     padding: 16,
@@ -1335,7 +1361,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 6,
     fontSize: '0.8rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   aiContextText: {
     fontSize: '0.825rem',
@@ -1360,7 +1386,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'inline-flex',
     alignItems: 'center',
     fontSize: '0.85rem',
-    color: '#fff',
+    color: 'var(--text-primary)',
     textDecoration: 'none',
     fontWeight: 500,
   },
@@ -1383,11 +1409,11 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.4,
   },
   textarea: {
-    background: 'rgba(0, 0, 0, 0.2)',
+    background: 'var(--bg-input)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: 10,
-    color: '#fff',
+    color: 'var(--text-primary)',
     fontSize: '0.85rem',
     outline: 'none',
     resize: 'none',
@@ -1408,8 +1434,8 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 10,
   },
   noteCard: {
-    background: 'rgba(255, 255, 255, 0.02)',
-    border: '1px solid rgba(255, 255, 255, 0.04)',
+    background: 'rgba(27, 23, 37, 0.02)',
+    border: '1px solid rgba(27, 23, 37, 0.04)',
     borderRadius: 8,
     padding: 12,
     display: 'flex',
@@ -1442,8 +1468,8 @@ const styles: Record<string, React.CSSProperties> = {
   connectionCard: {
     display: 'flex',
     alignItems: 'center',
-    background: 'rgba(255, 255, 255, 0.02)',
-    border: '1px solid rgba(255, 255, 255, 0.04)',
+    background: 'rgba(27, 23, 37, 0.02)',
+    border: '1px solid rgba(27, 23, 37, 0.04)',
     borderRadius: 8,
     padding: '10px 12px',
     cursor: 'pointer',
@@ -1453,7 +1479,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 28,
     height: 28,
     borderRadius: '50%',
-    background: 'rgba(255, 255, 255, 0.04)',
+    background: 'rgba(27, 23, 37, 0.04)',
     border: '1.5px solid var(--neon-purple)',
     display: 'flex',
     justifyContent: 'center',
@@ -1470,7 +1496,7 @@ const styles: Record<string, React.CSSProperties> = {
   connectionName: {
     fontSize: '0.8rem',
     fontWeight: 600,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   connectionReason: {
     fontSize: '0.7rem',
@@ -1486,7 +1512,7 @@ const styles: Record<string, React.CSSProperties> = {
   synergyNotice: {
     display: 'flex',
     alignItems: 'center',
-    background: 'rgba(255, 255, 255, 0.01)',
+    background: 'rgba(27, 23, 37, 0.01)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: 10,
@@ -1503,7 +1529,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 12,
   },
   synergySubCard: {
-    background: 'rgba(255, 255, 255, 0.02)',
+    background: 'rgba(27, 23, 37, 0.02)',
     border: '1px solid var(--border)',
     borderRadius: 10,
     padding: 14,
@@ -1519,7 +1545,7 @@ const styles: Record<string, React.CSSProperties> = {
   synergyCardTitle: {
     fontSize: '0.85rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   synergyDesc: {
     fontSize: '0.75rem',
@@ -1529,7 +1555,7 @@ const styles: Record<string, React.CSSProperties> = {
   synergyParty: {
     display: 'flex',
     flexDirection: 'column',
-    background: 'rgba(0, 0, 0, 0.2)',
+    background: 'var(--bg-input)',
     border: '1px solid var(--border-glow)',
     padding: 10,
     borderRadius: 8,
@@ -1539,13 +1565,13 @@ const styles: Record<string, React.CSSProperties> = {
   partyLabelSmall: {
     fontSize: '0.6rem',
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--text-primary)',
     letterSpacing: '0.05em',
   },
   partyNameSmall: {
     fontSize: '0.8rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   partyMetaSmall: {
     fontSize: '0.7rem',
@@ -1555,13 +1581,13 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
   },
   synergyReasonBox: {
-    background: 'rgba(255, 255, 255, 0.02)',
+    background: 'rgba(27, 23, 37, 0.02)',
     padding: 10,
     borderRadius: 6,
     borderLeft: '2.5px solid var(--neon-purple)',
   },
   synergyIntroBox: {
-    background: 'rgba(255, 255, 255, 0.03)',
+    background: 'rgba(27, 23, 37, 0.03)',
     padding: 10,
     borderRadius: 6,
     borderLeft: '2.5px solid var(--border-hover)',
@@ -1581,21 +1607,21 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.35,
   },
   selectSmall: {
-    background: 'rgba(0,0,0,0.3)',
+    background: 'var(--bg-input)',
     border: '1px solid var(--border-glow)',
     borderRadius: 6,
     padding: '6px 10px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontSize: '0.8rem',
     width: '100%',
   },
   inputSmall: {
-    background: 'rgba(0,0,0,0.3)',
+    background: 'var(--bg-input)',
     border: '1px solid var(--border-glow)',
     borderRadius: 6,
     padding: '6px 10px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontSize: '0.8rem',
     width: '100%',
@@ -1611,7 +1637,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 16,
     zIndex: 10,
     gap: 12,
-    boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+    boxShadow: '0 8px 32px rgba(27, 23, 37, 0.12)',
     border: '1px solid var(--border-glow)',
   },
   searchHeader: {
@@ -1622,16 +1648,16 @@ const styles: Record<string, React.CSSProperties> = {
   searchTitle: {
     fontSize: '0.8rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
   },
   searchInput: {
-    background: 'rgba(0, 0, 0, 0.3)',
+    background: 'var(--bg-input)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: '8px 12px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     fontSize: '0.85rem',
     outline: 'none',
   },
@@ -1657,7 +1683,7 @@ const styles: Record<string, React.CSSProperties> = {
   itemName: {
     fontSize: '0.8rem',
     fontWeight: 600,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   itemCompany: {
     fontSize: '0.7rem',

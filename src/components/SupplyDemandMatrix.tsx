@@ -53,7 +53,7 @@ function sortEntries(entries: SupplyDemandEntry[]): SupplyDemandEntry[] {
 function gapBorderLeft(level: string): string {
   switch (level) {
     case 'opportunity':
-      return '3px solid #fff';
+      return '3px solid var(--accent)';
     case 'partial':
       return '3px solid var(--border-hover)';
     case 'covered':
@@ -76,9 +76,9 @@ function gapBadgeStyle(level: string): React.CSSProperties {
 
   switch (level) {
     case 'opportunity':
-      return { ...base, background: '#fff', color: '#000' };
+      return { ...base, background: 'var(--accent)', color: '#ffffff' };
     case 'partial':
-      return { ...base, background: 'rgba(255,255,255,0.12)', color: 'var(--text-primary)', border: '1px solid var(--border-hover)' };
+      return { ...base, background: 'rgba(27, 23, 37, 0.08)', color: 'var(--text-primary)', border: '1px solid var(--border-hover)' };
     case 'covered':
     default:
       return { ...base, background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)' };
@@ -143,8 +143,8 @@ export const SupplyDemandMatrix: React.FC<SupplyDemandMatrixProps> = ({
     fontSize: 12,
     marginRight: 4,
     marginBottom: 3,
-    background: highlighted ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)',
-    color: highlighted ? '#fff' : 'var(--text-secondary)',
+    background: highlighted ? 'rgba(27, 23, 37, 0.08)' : 'rgba(27, 23, 37, 0.04)',
+    color: highlighted ? 'var(--text-primary)' : 'var(--text-secondary)',
     border: highlighted ? '1px solid var(--border-hover)' : '1px solid var(--border)',
     transition: 'all 0.15s ease',
   });
@@ -185,7 +185,7 @@ export const SupplyDemandMatrix: React.FC<SupplyDemandMatrixProps> = ({
             color: 'var(--text-secondary)',
           }}
         >
-          Offre & demande du réseau pour <strong style={{ color: '#fff' }}>{userName}</strong>
+          Offre & demande du réseau pour <strong style={{ color: 'var(--text-primary)' }}>{userName}</strong>
         </div>
       )}
 
@@ -203,7 +203,7 @@ export const SupplyDemandMatrix: React.FC<SupplyDemandMatrixProps> = ({
             const isHovered = hoveredRow === idx;
 
             const rowStyle: React.CSSProperties = {
-              background: isHovered ? 'rgba(255,255,255,0.03)' : 'transparent',
+              background: isHovered ? 'rgba(27, 23, 37, 0.03)' : 'transparent',
               borderLeft: gapBorderLeft(entry.gapLevel),
               cursor: 'default',
             };
@@ -220,7 +220,7 @@ export const SupplyDemandMatrix: React.FC<SupplyDemandMatrixProps> = ({
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     {entry.need}
                     {entry.opportunityForUser && (
-                      <Star size={13} fill="#fff" color="#fff" aria-label="Opportunité pour vous" />
+                      <Star size={13} fill="var(--accent)" color="var(--accent)" aria-label="Opportunité pour vous" />
                     )}
                   </span>
                 </td>

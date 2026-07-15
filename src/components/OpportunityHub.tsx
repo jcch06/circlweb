@@ -332,7 +332,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
               <div style={styles.tabContent}>
                 {!v3Result ? (
                   <div style={styles.emptyState}>
-                    <Workflow size={48} color="rgba(255,255,255,0.1)" />
+                    <Workflow size={48} color="rgba(27, 23, 37, 0.1)" />
                     <h3>Aucune analyse Mistral V4</h3>
                     <p>Cliquez sur "Lancer l'Analyse Globale" pour démarrer.</p>
                   </div>
@@ -343,7 +343,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                       <div style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
                         padding: '12px 20px', borderRadius: 8,
-                        background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-hover)'
+                        background: 'rgba(27, 23, 37, 0.04)', border: '1px solid var(--border-hover)'
                       }}>
                         <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>
                           <History size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
@@ -360,7 +360,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                     )}
 
                     {/* Synthèse */}
-                    <div className="glass-card" style={{ padding: 32, background: 'linear-gradient(145deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)', border: '1px solid var(--border)' }}>
+                    <div className="glass-card" style={{ padding: 32, background: 'linear-gradient(145deg, rgba(27, 23, 37, 0.04) 0%, rgba(27, 23, 37, 0.01) 100%)', border: '1px solid var(--border)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
                         <Brain size={24} color="var(--text-primary)" />
                         <h3 style={{ margin: 0, fontSize: '1.25rem' }}>Force du Réseau</h3>
@@ -384,12 +384,12 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                             const isLocked = b.role === 'Verrouillé';
                             return (
                             <div key={i} className="glass-card" style={{ padding: 16 }}>
-                              <div style={{ fontWeight: 600, color: '#fff', marginBottom: 4 }}>{b.name}</div>
+                              <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>{b.name}</div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', color: isLocked ? 'var(--text-secondary)' : 'var(--text-secondary)', marginBottom: 10 }}>
                                 {isLocked ? (<><Lock size={12} /> Accès non accordé — consultez ce contact pour le demander</>) : `${b.role} · ${b.company}`}
                               </div>
-                              <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${Math.round(b.centralityScore * 100)}%`, background: '#fff', borderRadius: 99 }} />
+                              <div style={{ height: 4, background: 'rgba(27, 23, 37, 0.08)', borderRadius: 99, overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${Math.round(b.centralityScore * 100)}%`, background: 'var(--accent)', borderRadius: 99 }} />
                               </div>
                               <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4, textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: 'var(--font-mono)' }}>
                                 Score de connexion : {Math.round(b.centralityScore * 100)}%
@@ -425,11 +425,11 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                           {v3Result.synthesis.macroNeeds.map((mn, i) => (
                             <div key={i} className="glass-card" style={{ padding: 20 }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, gap: 8 }}>
-                                <h4 style={{ color: '#fff', margin: 0, fontSize: '1rem' }}>{mn.label}</h4>
+                                <h4 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '1rem' }}>{mn.label}</h4>
                                 <span style={{
                                   fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', padding: '3px 8px', borderRadius: 5, flexShrink: 0,
-                                  color: mn.priority === 'high' ? '#000' : mn.priority === 'medium' ? 'var(--text-primary)' : 'var(--text-muted)',
-                                  background: mn.priority === 'high' ? '#fff' : mn.priority === 'medium' ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.04)',
+                                  color: mn.priority === 'high' ? '#ffffff' : mn.priority === 'medium' ? 'var(--text-primary)' : 'var(--text-muted)',
+                                  background: mn.priority === 'high' ? 'var(--accent)' : mn.priority === 'medium' ? 'rgba(27, 23, 37, 0.1)' : 'rgba(27, 23, 37, 0.04)',
                                   border: mn.priority === 'low' ? '1px solid var(--border)' : 'none'
                                 }}>{mn.priority}</span>
                               </div>
@@ -451,13 +451,13 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                           {v3Result.synthesis.valueChains.map((vc, i) => (
                             <div key={i} className="glass-card" style={{ padding: 20 }}>
-                              <h4 style={{ color: '#fff', marginBottom: 4, fontSize: '1.05rem' }}>{vc.title}</h4>
+                              <h4 style={{ color: 'var(--text-primary)', marginBottom: 4, fontSize: '1.05rem' }}>{vc.title}</h4>
                               <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 12 }}>{vc.description}</p>
                               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                                 {vc.chain.map((link, j) => (
                                   <React.Fragment key={j}>
-                                    <div style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', borderRadius: 7, fontSize: '0.8rem' }}>
-                                      <b style={{ color: '#fff' }}>{link.contactName}</b>
+                                    <div style={{ padding: '6px 12px', background: 'rgba(27, 23, 37, 0.04)', border: '1px solid var(--border)', borderRadius: 7, fontSize: '0.8rem' }}>
+                                      <b style={{ color: 'var(--text-primary)' }}>{link.contactName}</b>
                                       <span style={{ color: 'var(--text-muted)' }}> ({link.role})</span>
                                       <div style={{ color: 'var(--text-secondary)' }}>{link.contribution}</div>
                                     </div>
@@ -482,7 +482,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
                         {v3Result.synthesis.crossBatchSynergies.map((syn, i) => (
                           <div key={i} className="glass-card" style={{ padding: 20 }}>
-                            <h4 style={{ color: '#fff', marginBottom: 8, fontSize: '1.05rem' }}>{syn.theme}</h4>
+                            <h4 style={{ color: 'var(--text-primary)', marginBottom: 8, fontSize: '1.05rem' }}>{syn.theme}</h4>
                             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 12 }}>{syn.description}</p>
                             <div style={styles.impactBadge}>
                               Impact : {syn.potentialImpact}
@@ -514,7 +514,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
               <div style={styles.tabContent}>
                 {!v3Result ? (
                   <div style={styles.emptyState}>
-                    <Scale size={48} color="rgba(255,255,255,0.1)" />
+                    <Scale size={48} color="rgba(27, 23, 37, 0.1)" />
                     <h3>Aucune matrice Offre / Demande</h3>
                     <p>Lancez l'analyse pour cartographier qui demande quoi et qui peut le fournir dans votre réseau.</p>
                   </div>
@@ -530,7 +530,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                   </div>
                 ) : (
                   <div style={styles.emptyState}>
-                    <Scale size={48} color="rgba(255,255,255,0.1)" />
+                    <Scale size={48} color="rgba(27, 23, 37, 0.1)" />
                     <h3>Aucune correspondance offre / demande détectée</h3>
                     <p>Enrichissez vos contacts (compétences & besoins) pour alimenter cette matrice, puis relancez l'analyse.</p>
                   </div>
@@ -543,7 +543,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
               <div style={styles.tabContent}>
                 {!v3Result ? (
                   <div style={styles.emptyState}>
-                    <Workflow size={48} color="rgba(255,255,255,0.1)" />
+                    <Workflow size={48} color="rgba(27, 23, 37, 0.1)" />
                     <h3>Aucune analyse Mistral V4</h3>
                   </div>
                 ) : (
@@ -554,13 +554,13 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
 
                     {v3Result.batches.map((batch, i) => (
                       <div key={i} className="glass-card" style={{ padding: 24, borderLeft: '3px solid var(--border-hover)' }}>
-                        <h3 style={{ margin: '0 0 16px 0', color: '#fff', fontFamily: 'var(--font-mono)', fontSize: '1rem' }}>Lot d'Analyse #{i + 1}</h3>
+                        <h3 style={{ margin: '0 0 16px 0', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '1rem' }}>Lot d'Analyse #{i + 1}</h3>
 
                         <div style={{ marginBottom: 16 }}>
                           <span style={styles.eyebrow}>Besoins Récurrents</span>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
                             {batch.recurrentNeeds.map((need, j) => (
-                              <span key={j} style={{ padding: '4px 10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 6, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{need}</span>
+                              <span key={j} style={{ padding: '4px 10px', background: 'rgba(27, 23, 37, 0.05)', border: '1px solid var(--border)', borderRadius: 6, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{need}</span>
                             ))}
                           </div>
                         </div>
@@ -570,8 +570,8 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                             <span style={styles.eyebrow}>Synergies Immédiates</span>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
                               {batch.immediateSynergies.map((syn, j) => (
-                                <div key={j} style={{ padding: 12, background: 'rgba(255,255,255,0.03)', borderRadius: 8, border: '1px solid var(--border)' }}>
-                                  <div style={{ fontWeight: 600, color: '#fff', marginBottom: 4 }}>
+                                <div key={j} style={{ padding: 12, background: 'rgba(27, 23, 37, 0.03)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                                  <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
                                     {syn.contactName1} <span style={{ color: 'var(--text-muted)' }}>&</span> {syn.contactName2}
                                   </div>
                                   <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{syn.reason}</div>
@@ -787,7 +787,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                       <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Chargement...</p>
                     ) : history.length === 0 ? (
                       <div style={styles.emptyState}>
-                        <History size={48} color="rgba(255,255,255,0.1)" />
+                        <History size={48} color="rgba(27, 23, 37, 0.1)" />
                         <h3>Aucune analyse archivée</h3>
                         <p>Chaque analyse complète que vous lancez est automatiquement sauvegardée ici.</p>
                       </div>
@@ -803,7 +803,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                             }}
                           >
                             <div>
-                              <div style={{ fontWeight: 600, color: '#fff', fontSize: '0.9rem' }}>
+                              <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>
                                 {h.label || new Date(h.createdAt).toLocaleString('fr-FR')}
                               </div>
                               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>
@@ -836,7 +836,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
 
       {/* API Cost Tracker */}
       {v3Result && v3Result.synthesis && v3Result.synthesis.tokenUsage && (
-        <div style={{ marginTop: 32, padding: 12, borderRadius: 8, background: 'rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, border: '1px solid var(--border)', fontFamily: 'var(--font-mono)' }}>
+        <div style={{ marginTop: 32, padding: 12, borderRadius: 8, background: 'rgba(27, 23, 37, 0.03)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, border: '1px solid var(--border)', fontFamily: 'var(--font-mono)' }}>
           <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
             <b style={{ color: 'var(--text-secondary)' }}>Consommation API (Mistral Large) :</b> {v3Result.synthesis.tokenUsage.totalTokens.toLocaleString()} jetons
           </div>
@@ -873,7 +873,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 24,
-    background: 'rgba(255,255,255,0.02)',
+    background: 'rgba(27, 23, 37, 0.02)',
     padding: '20px 24px',
     borderRadius: 12,
     border: '1px solid var(--border)',
@@ -896,7 +896,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   pill: {
     padding: '8px 16px',
-    background: 'rgba(255,255,255,0.05)',
+    background: 'rgba(27, 23, 37, 0.05)',
     border: '1px solid var(--border)',
     borderRadius: 24,
     color: 'var(--text-primary)',
@@ -904,7 +904,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   impactBadge: {
     display: 'inline-block',
-    background: 'rgba(255,255,255,0.08)',
+    background: 'rgba(27, 23, 37, 0.08)',
     color: 'var(--text-primary)',
     padding: '4px 10px',
     borderRadius: 6,
@@ -930,7 +930,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin: 0,
     fontSize: '1.5rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   subtitle: {
     margin: '4px 0 0 0',
@@ -942,7 +942,7 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     maxWidth: 600,
     margin: '40px auto',
-    background: 'linear-gradient(145deg, rgba(30,30,30,0.8), rgba(20,20,20,0.8))',
+    background: 'var(--bg-card)',
   },
   setupDesc: {
     color: 'var(--text-secondary)',
@@ -951,7 +951,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   setupInstructions: {
     textAlign: 'left',
-    background: 'rgba(0,0,0,0.3)',
+    background: 'var(--bg-input)',
     padding: 24,
     borderRadius: 8,
     color: 'var(--text-secondary)',
@@ -961,7 +961,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     gap: 12,
     marginBottom: 24,
-    borderBottom: '1px solid rgba(255,255,255,0.1)',
+    borderBottom: '1px solid rgba(27, 23, 37, 0.1)',
     paddingBottom: 16,
   },
   tabBtn: {
@@ -979,8 +979,8 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'all 0.2s ease',
   },
   tabBtnActive: {
-    background: 'rgba(255,255,255,0.08)',
-    color: '#fff',
+    background: 'rgba(27, 23, 37, 0.08)',
+    color: 'var(--text-primary)',
   },
   tabContentContainer: {
     position: 'relative',
@@ -989,8 +989,7 @@ const styles: Record<string, React.CSSProperties> = {
   progressOverlay: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
-    background: 'rgba(10, 10, 15, 0.8)',
-    backdropFilter: 'blur(10px)',
+    background: 'rgba(250, 249, 251, 0.85)',
     zIndex: 10,
     display: 'flex',
     alignItems: 'center',
@@ -998,13 +997,13 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 16,
   },
   progressModal: {
-    background: 'var(--bg-secondary)',
+    background: 'var(--bg-card)',
     border: '1px solid var(--border-glow)',
     padding: 32,
     borderRadius: 16,
     width: 400,
     textAlign: 'center',
-    boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+    boxShadow: '0 20px 40px rgba(27, 23, 37, 0.14)',
   },
   spinnerWrapper: {
     position: 'relative',
@@ -1024,7 +1023,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   progressBarBg: {
     height: 6,
-    background: 'rgba(255,255,255,0.1)',
+    background: 'rgba(27, 23, 37, 0.1)',
     borderRadius: 3,
     overflow: 'hidden',
   },
@@ -1040,9 +1039,9 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 80,
     textAlign: 'center',
     color: 'var(--text-muted)',
-    background: 'rgba(255,255,255,0.01)',
+    background: 'rgba(27, 23, 37, 0.01)',
     borderRadius: 16,
-    border: '1px dashed rgba(255,255,255,0.1)',
+    border: '1px dashed rgba(27, 23, 37, 0.1)',
   },
   searchCard: {
     padding: 24,
@@ -1054,19 +1053,19 @@ const styles: Record<string, React.CSSProperties> = {
   },
   searchInput: {
     flex: 1,
-    background: 'rgba(0,0,0,0.3)',
-    border: '1px solid rgba(255,255,255,0.1)',
+    background: 'var(--bg-input)',
+    border: '1px solid rgba(27, 23, 37, 0.1)',
     padding: '12px 16px',
     borderRadius: 8,
-    color: '#fff',
+    color: 'var(--text-primary)',
     fontSize: '0.95rem',
   },
   historySelect: {
-    background: 'rgba(0,0,0,0.3)',
-    border: '1px solid rgba(255,255,255,0.1)',
+    background: 'var(--bg-input)',
+    border: '1px solid rgba(27, 23, 37, 0.1)',
     padding: '10px 14px',
     borderRadius: 8,
-    color: '#fff',
+    color: 'var(--text-primary)',
     fontSize: '0.85rem',
     minWidth: 220,
   },
@@ -1091,7 +1090,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: 48,
     borderRadius: '50%',
     background: 'var(--neon-purple)',
-    color: '#fff',
+    color: 'var(--text-primary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1099,7 +1098,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
   },
   connectorName: {
-    color: '#fff',
+    color: 'var(--text-primary)',
     fontWeight: 600,
     fontSize: '1.1rem',
   },
@@ -1110,7 +1109,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   closenessBadge: {
     marginLeft: 'auto',
-    background: 'rgba(255,255,255,0.08)',
+    background: 'rgba(27, 23, 37, 0.08)',
     border: '1px solid var(--border)',
     color: 'var(--text-primary)',
     padding: '4px 12px',
@@ -1125,7 +1124,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '0.95rem',
   },
   emailContainer: {
-    background: 'rgba(0,0,0,0.3)',
+    background: 'var(--bg-input)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     display: 'flex',

@@ -241,7 +241,7 @@ const styles: Record<string, React.CSSProperties> = {
   title: {
     fontSize: '2.25rem',
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--text-primary)',
     marginBottom: 6,
   },
   subtitle: {
@@ -263,7 +263,7 @@ const styles: Record<string, React.CSSProperties> = {
   formTitle: {
     fontSize: '1.25rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   formGrid: {
     display: 'grid',
@@ -282,20 +282,20 @@ const styles: Record<string, React.CSSProperties> = {
     textTransform: 'uppercase',
   },
   input: {
-    background: 'rgba(0,0,0,0.2)',
+    background: 'var(--bg-input)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: '10px 14px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontSize: '0.9rem',
   },
   select: {
-    background: 'rgba(0,0,0,0.2)',
+    background: 'var(--bg-input)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: '10px 14px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontSize: '0.9rem',
   },
@@ -323,7 +323,7 @@ const styles: Record<string, React.CSSProperties> = {
   panelTitle: {
     fontSize: '0.95rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   tagsContainer: {
     display: 'flex',
@@ -341,7 +341,7 @@ const styles: Record<string, React.CSSProperties> = {
   tagName: {
     fontSize: '0.825rem',
     fontWeight: 600,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   tagSpace: {
     fontSize: '0.7rem',

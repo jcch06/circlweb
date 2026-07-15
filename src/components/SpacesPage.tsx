@@ -339,7 +339,7 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
                   <div style={styles.cardHeader}>
                     <div style={{
                       ...styles.iconWrapper,
-                      background: 'rgba(255,255,255,0.05)',
+                      background: 'rgba(27, 23, 37, 0.05)',
                       border: '1.5px solid var(--border-hover)'
                     }}>
                       {isPersonal ? <User size={18} color="var(--text-secondary)" /> : <Users size={18} color="var(--text-secondary)" />}
@@ -350,7 +350,7 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
                         <span style={{
                           ...styles.typeBadge,
                           color: 'var(--text-primary)',
-                          backgroundColor: 'rgba(255,255,255,0.06)'
+                          backgroundColor: 'rgba(27, 23, 37, 0.06)'
                         }}>
                           {isPersonal ? 'Personnel' : 'Collaboratif'}
                         </span>
@@ -367,7 +367,7 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
                   {!isPersonal && isOwner && (
                     <div style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-                      padding: '8px 0', borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 8
+                      padding: '8px 0', borderTop: '1px solid rgba(27, 23, 37, 0.06)', marginTop: 8
                     }}>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }} title="Contrôle ce que les autres membres voient par défaut sur les contacts que vous n'avez pas ajoutés vous-même.">
                         {s.contact_sharing_mode === 'request_only' ? 'Accès sur demande' : 'Partage intégral'}
@@ -464,7 +464,7 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
                       </div>
                       <div style={styles.statusBlock}>
                         {isAccepted ? (
-                          <span style={{ color: '#fff', display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 600 }}>
+                          <span style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 600 }}>
                             
                             Fusionnée
                           </span>
@@ -550,7 +550,7 @@ const styles: Record<string, React.CSSProperties> = {
   title: {
     fontSize: '2.25rem',
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--text-primary)',
     marginBottom: 6,
   },
   subtitle: {
@@ -572,7 +572,7 @@ const styles: Record<string, React.CSSProperties> = {
   formTitle: {
     fontSize: '1.25rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   formGrid: {
     display: 'grid',
@@ -591,20 +591,20 @@ const styles: Record<string, React.CSSProperties> = {
     textTransform: 'uppercase',
   },
   input: {
-    background: 'rgba(0,0,0,0.2)',
+    background: 'var(--bg-input)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: '10px 14px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontSize: '0.9rem',
   },
   select: {
-    background: 'rgba(0,0,0,0.2)',
+    background: 'var(--bg-input)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: '10px 14px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontSize: '0.9rem',
   },
@@ -656,7 +656,7 @@ const styles: Record<string, React.CSSProperties> = {
   spaceName: {
     fontSize: '1.1rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
     marginBottom: 6,
   },
   typeBadgeRow: {
@@ -675,15 +675,15 @@ const styles: Record<string, React.CSSProperties> = {
   ownerBadge: {
     fontSize: '0.65rem',
     fontWeight: 700,
-    color: '#fff',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    color: 'var(--text-primary)',
+    backgroundColor: 'rgba(27, 23, 37, 0.08)',
     padding: '3px 8px',
     borderRadius: 4,
     display: 'inline-flex',
     alignItems: 'center',
   },
   cardFooter: {
-    borderTop: '1px solid rgba(255,255,255,0.03)',
+    borderTop: '1px solid rgba(27, 23, 37, 0.03)',
     paddingTop: 10,
     display: 'flex',
     justifyContent: 'space-between',
@@ -694,9 +694,9 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--text-muted)',
   },
   syncBtn: {
-    background: 'rgba(255,255,255,0.06)',
+    background: 'rgba(27, 23, 37, 0.06)',
     border: '1px solid var(--border-hover)',
-    color: '#fff',
+    color: 'var(--text-primary)',
     fontSize: '0.7rem',
     fontWeight: 600,
     padding: '4px 10px',
@@ -731,7 +731,7 @@ const styles: Record<string, React.CSSProperties> = {
   sectionTitleInvite: {
     fontSize: '1.05rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
     display: 'flex',
     alignItems: 'center',
     gap: 8,
@@ -751,7 +751,7 @@ const styles: Record<string, React.CSSProperties> = {
   inviteSpaceName: {
     fontSize: '0.9rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
     marginBottom: 4,
   },
   inviteMeta: {

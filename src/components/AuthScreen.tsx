@@ -155,7 +155,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   errorText: {
     fontSize: '0.85rem',
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   form: {
     display: 'flex',
@@ -170,7 +170,7 @@ const styles: Record<string, React.CSSProperties> = {
   label: {
     fontSize: '0.75rem',
     fontWeight: 500,
-    color: '#888',
+    color: 'var(--text-secondary)',
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
   },
@@ -178,7 +178,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'var(--bg-input)',
     border: '1px solid var(--border)',
     padding: '10px 12px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     fontSize: '0.9rem',
     outline: 'none',
   },
@@ -195,7 +195,7 @@ const styles: Record<string, React.CSSProperties> = {
   switchBtn: {
     background: 'none',
     border: 'none',
-    color: '#888',
+    color: 'var(--text-secondary)',
     fontSize: '0.8rem',
     cursor: 'pointer',
     textDecoration: 'none',

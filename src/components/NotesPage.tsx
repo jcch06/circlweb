@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Calendar } from 'lucide-react';
+import { Calendar, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 
@@ -172,7 +172,7 @@ export const NotesPage: React.FC<NotesPageProps> = ({
                 <div style={styles.noteHeader}>
                   <div style={styles.contactDetails}>
                     <div style={styles.avatar}>
-                      
+                      <User size={14} color="var(--text-secondary)" />
                     </div>
                     <div>
                       <span style={styles.contactName}>
@@ -188,7 +188,7 @@ export const NotesPage: React.FC<NotesPageProps> = ({
                     <span style={{
                       ...styles.contextBadge,
                       color: 'var(--text-primary)',
-                      backgroundColor: 'rgba(255,255,255,0.06)'
+                      backgroundColor: 'rgba(27, 23, 37, 0.06)'
                     }}>
                       {isProfessional ? 'Pro' : 'Perso'}
                     </span>
@@ -233,7 +233,7 @@ const styles: Record<string, React.CSSProperties> = {
   title: {
     fontSize: '2.25rem',
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--text-primary)',
     marginBottom: 6,
   },
   subtitle: {
@@ -255,7 +255,7 @@ const styles: Record<string, React.CSSProperties> = {
   formTitle: {
     fontSize: '1.25rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   formGrid: {
     display: 'grid',
@@ -274,29 +274,29 @@ const styles: Record<string, React.CSSProperties> = {
     textTransform: 'uppercase',
   },
   input: {
-    background: 'rgba(0,0,0,0.2)',
+    background: 'var(--bg-input)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: '10px 14px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontSize: '0.9rem',
   },
   select: {
-    background: 'rgba(0,0,0,0.2)',
+    background: 'var(--bg-input)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: '10px 14px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontSize: '0.9rem',
   },
   textarea: {
-    background: 'rgba(0,0,0,0.2)',
+    background: 'var(--bg-input)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: '10px 14px',
-    color: '#fff',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontSize: '0.9rem',
     minHeight: '100px',
@@ -314,7 +314,7 @@ const styles: Record<string, React.CSSProperties> = {
   searchInput: {
     background: 'none',
     border: 'none',
-    color: '#fff',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontSize: '0.95rem',
     width: '100%',
@@ -334,7 +334,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderBottom: '1px solid rgba(255,255,255,0.03)',
+    borderBottom: '1px solid rgba(27, 23, 37, 0.03)',
     paddingBottom: 10,
     flexWrap: 'wrap',
     gap: 10,
@@ -348,7 +348,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 28,
     height: 28,
     borderRadius: '50%',
-    background: 'rgba(255, 255, 255, 0.05)',
+    background: 'rgba(27, 23, 37, 0.05)',
     border: '1px solid var(--border-glow)',
     display: 'flex',
     justifyContent: 'center',
@@ -357,7 +357,7 @@ const styles: Record<string, React.CSSProperties> = {
   contactName: {
     fontSize: '0.9rem',
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--text-primary)',
   },
   contactCompany: {
     fontSize: '0.8rem',

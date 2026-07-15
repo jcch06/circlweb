@@ -31,13 +31,13 @@ select
   case when public.can_view_contact_full(c.id) then c.skills else '{}'::text[] end as skills,
   case when public.can_view_contact_full(c.id) then c.inferred_needs else '{}'::text[] end as inferred_needs,
   case when public.can_view_contact_full(c.id) then c.company_size else null end as company_size,
-  case when public.can_view_contact_full(c.id) then c.enrichment_sources else '[]'::jsonb end as enrichment_sources,
   c.source,
   c.created_at,
   c.enriched_at,
   c.shared_contact_id,
   public.can_view_contact_full(c.id) as is_unlocked,
-  public.get_user_display_name(c.owner_id) as owner_display_name
+  public.get_user_display_name(c.owner_id) as owner_display_name,
+  case when public.can_view_contact_full(c.id) then c.enrichment_sources else '[]'::jsonb end as enrichment_sources
 from public.contacts c;
 
 grant select on public.contacts_visible to authenticated;

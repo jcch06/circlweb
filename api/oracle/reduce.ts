@@ -92,10 +92,17 @@ function buildUserContext(userProfile: any): string {
     needs ? `Besoins / objectifs déclarés : ${needs}` : ''
   ].filter(Boolean);
 
+  // Prefer the leviers Mistral derived from THIS user's profile (client-side,
+  // see deriveAnalysisAngles) over the static generic list — the latter is
+  // only a fallback when no profile-specific angles were produced.
+  const angles: string[] = Array.isArray(userProfile?.analysisAngles) && userProfile.analysisAngles.length > 0
+    ? userProfile.analysisAngles
+    : genericAngles;
+
   return `${lines.join('\n')}
 
-L'utilisateur veut MONÉTISER et VALORISER son réseau. Angles de valeur à explorer en priorité :
-${genericAngles.map((a, i) => `${i + 1}. ${a}`).join('\n')}
+L'utilisateur veut MONÉTISER et VALORISER son réseau. Leviers de valeur prioritaires, dérivés de SON profil :
+${angles.map((a: string, i: number) => `${i + 1}. ${a}`).join('\n')}
 
 ADAPTE ton analyse au profil ci-dessus. Si le poste/les compétences pointent vers un domaine précis (ex : "architecte" → immobilier/urbanisme, "développeur" → consulting tech, "avocat" → conseil juridique, "élu/politique" → influence & coalitions, "dirigeant associatif" → mécénat & partenariats), PRIORISE les opportunités ALIGNÉES avec son expertise et ses objectifs déclarés.`;
 }

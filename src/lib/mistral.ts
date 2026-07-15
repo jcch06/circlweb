@@ -1076,6 +1076,79 @@ async function postOracleStep<T>(path: string, body: any): Promise<T> {
   return response.json();
 }
 
+/** Tiny stable string hash (djb2) for cache keys — not cryptographic. */
+function djb2(str: string): string {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+/**
+ * Derive 4–6 value-creation "leviers d'analyse" tailored to the user's own
+ * profile, instead of injecting the same 15 static monetization angles into
+ * every network (which pushed a deeptech founder's analysis toward "cercles
+ * premium / masterclasses / courtage immobilier"). Mistral reads the profile
+ * and synthesizes the angles that actually fit the person's trade. Cached in
+ * localStorage keyed by the profile's content so it costs one small call the
+ * first time and nothing on repeat runs. Returns [] on empty profile or
+ * failure — callers fall back to the generic angles server-side.
+ */
+export async function deriveAnalysisAngles(userProfile: any): Promise<string[]> {
+  if (!userProfile) return [];
+
+  const role = userProfile?.role || userProfile?.title || userProfile?.job_title || '';
+  const company = userProfile?.company || '';
+  const skills: string[] = Array.isArray(userProfile?.skills) ? userProfile.skills : [];
+  const projects = userProfile?.currentProjects || userProfile?.bio || userProfile?.description || '';
+  const needs = userProfile?.needs || '';
+
+  // Nothing to reason about — let the generic fallback apply, skip the call.
+  if (!role && !company && skills.length === 0 && !projects && !needs) return [];
+
+  const cacheKey = `circl_analysis_angles_${djb2(JSON.stringify({ role, company, skills, projects, needs }))}`;
+  try {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch { /* ignore */ }
+
+  const prompt = `<role>
+Tu es un stratège en développement business. Tu analyses le profil d'un professionnel pour déterminer par quels leviers CONCRETS et RÉALISTES il peut valoriser et monétiser son réseau.
+</role>
+<profil>
+Poste : ${role || 'non renseigné'}
+Entreprise : ${company || 'non renseignée'}
+Compétences : ${skills.join(', ') || 'non renseignées'}
+Projets en cours : ${projects || 'non renseignés'}
+Besoins / objectifs : ${needs || 'non renseignés'}
+</profil>
+<instructions>
+Identifie les 4 à 6 leviers de valeur les plus pertinents pour CE profil précis. Reste strictement ancré sur son métier et ses objectifs réels : n'inclus JAMAIS un levier hors-sujet (ex : ne propose pas "courtage immobilier" ou "gestion de patrimoine" à un fondateur deeptech). Chaque levier est une formule courte et actionnable.
+</instructions>
+<rules>
+- Entre 4 et 6 leviers, jamais plus.
+- Spécifiques à ce profil, jamais des généralités passe-partout.
+- Réponds STRICTEMENT en JSON valide : { "angles": ["levier 1", "levier 2", "levier 3", "levier 4"] }
+</rules>`;
+
+  try {
+    const text = await callMistral(prompt, true, 'mistral-small-latest');
+    const parsed = safeParseJSON(text);
+    const angles: string[] = Array.isArray(parsed?.angles)
+      ? parsed.angles.filter((a: any) => typeof a === 'string' && a.trim()).slice(0, 6)
+      : [];
+    if (angles.length > 0) {
+      try { localStorage.setItem(cacheKey, JSON.stringify(angles)); } catch { /* ignore */ }
+    }
+    return angles;
+  } catch (err) {
+    console.warn('deriveAnalysisAngles: dérivation échouée, fallback sur angles génériques.', err);
+    return [];
+  }
+}
+
 /**
  * Runs the full Map-Reduce Oracle pipeline server-side, as 4 short calls
  * orchestrated from here instead of one monolithic function — a single
@@ -1102,6 +1175,18 @@ export async function runMistralOracleBatchPipeline(
   const spaceId = historyMeta?.spaceId ?? null;
   onProgress?.(5);
 
+  // Derive analysis angles tailored to the user's profile once, then attach
+  // them to the profile sent to every LLM step (MAP/REDUCE/SUPPLY). The
+  // server prompts prefer these over their static generic-angle fallback.
+  let profileForPipeline = userProfile;
+  if (userProfile) {
+    try {
+      const analysisAngles = await deriveAnalysisAngles(userProfile);
+      if (analysisAngles.length > 0) profileForPipeline = { ...userProfile, analysisAngles };
+    } catch { /* keep the raw profile — server falls back to generic angles */ }
+  }
+  onProgress?.(10);
+
   const topology = await postOracleStep<{
     batches: { contactIds: string[]; clusterId: string | null; contactIdsHash: string | null; cached: MistralBatchResult | null }[];
     bridgeContacts: BridgeContact[];
@@ -1126,7 +1211,7 @@ export async function runMistralOracleBatchPipeline(
       contactIdsHash: batch.contactIdsHash,
       spaceId,
       lockedContactNames: topology.lockedContactNames,
-      userProfile
+      userProfile: profileForPipeline
     });
     batchResults.push(batchResult);
     onProgress?.(15 + Math.round(((i + 1) / Math.max(totalBatches, 1)) * 55));
@@ -1136,13 +1221,13 @@ export async function runMistralOracleBatchPipeline(
     batchResults,
     bridgeContacts: topology.bridgeContacts,
     lockedContactNames: topology.lockedContactNames,
-    userProfile
+    userProfile: profileForPipeline
   });
   onProgress?.(85);
 
   const supplyDemand = await postOracleStep<SupplyDemandEntry[]>('/api/oracle/supply-demand', {
     spaceId,
-    userProfile
+    userProfile: profileForPipeline
   });
   onProgress?.(95);
 

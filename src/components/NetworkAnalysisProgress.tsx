@@ -96,7 +96,7 @@ export const NetworkAnalysisProgress: React.FC<NetworkAnalysisProgressProps> = (
     width: '100%',
     padding: '28px 12px 12px',
     background:
-      'linear-gradient(135deg, rgba(15,15,25,0.85) 0%, rgba(25,20,45,0.75) 100%)',
+      '#ffffff',
     borderRadius: 16,
     border: '1px solid rgba(168,85,247,0.15)',
     backdropFilter: 'blur(12px)',
@@ -146,7 +146,7 @@ export const NetworkAnalysisProgress: React.FC<NetworkAnalysisProgressProps> = (
     // pending
     return {
       ...base,
-      background: 'rgba(40,40,60,0.6)',
+      background: 'var(--grey-soft)',
       border: '2px solid var(--text-muted, #555)',
     };
   }

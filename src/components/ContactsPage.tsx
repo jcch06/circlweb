@@ -35,6 +35,9 @@ interface ContactsPageProps {
   user: any;
   selectedSpaceId: string | null;
   onRefreshData: () => Promise<void>;
+  /* Pilotage depuis la coquille : recherche de la sidebar, bouton "Nouveau contact" du tableau de bord */
+  initialSearch?: string;
+  addNonce?: number;
 }
 
 export const ContactsPage: React.FC<ContactsPageProps> = ({
@@ -45,12 +48,24 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
   contactTags,
   user,
   selectedSpaceId,
-  onRefreshData
+  onRefreshData,
+  initialSearch,
+  addNonce
 }) => {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(initialSearch ?? '');
   const [filterType, setFilterType] = useState<'all' | 'enriched' | 'not_enriched' | 'invalid'>('all');
   const [showAddForm, setShowAddForm] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // La recherche de la sidebar pilote le filtre de cette page
+  useEffect(() => {
+    if (initialSearch !== undefined) setSearchTerm(initialSearch);
+  }, [initialSearch]);
+
+  // "Nouveau contact" depuis le tableau de bord ouvre le formulaire ici
+  useEffect(() => {
+    if (addNonce) setShowAddForm(true);
+  }, [addNonce]);
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
 
   // Reset edit modes when contact changes
@@ -801,7 +816,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                   className="btn-secondary"
                   style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
                 >
-                  <Sparkles size={15} color="var(--neon-purple)" />
+                  <Sparkles size={15} color="var(--teal)" />
                   Enrichir via IA
                 </button>
               </div>
@@ -824,7 +839,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
         {bulkEnriching && (
           <div className="glass-card glow-active" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 20, height: 20, flexShrink: 0, border: '2px solid var(--neon-purple)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+              <div style={{ width: 20, height: 20, flexShrink: 0, border: '2px solid var(--teal)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
               <div style={{ flexGrow: 1 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                   <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -834,17 +849,17 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                     {bulkProgress.errors > 0 && (
                       <span style={{ fontSize: '0.75rem', color: '#E03E3E' }}>⚠️ {bulkProgress.errors} erreur(s)</span>
                     )}
-                    <span style={{ fontSize: '0.8rem', color: 'var(--neon-purple)', fontWeight: 700 }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--teal)', fontWeight: 700 }}>
                       {bulkProgress.done} / {bulkProgress.total}
                     </span>
                   </div>
                 </div>
                 {/* Progress bar */}
-                <div style={{ height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden' }}>
+                <div style={{ height: 6, background: 'var(--grey-soft)', borderRadius: 99, overflow: 'hidden' }}>
                   <div style={{
                     height: '100%',
                     width: `${bulkProgress.total > 0 ? (bulkProgress.done / bulkProgress.total) * 100 : 0}%`,
-                    background: 'linear-gradient(90deg, var(--neon-purple), var(--neon-blue))',
+                    background: 'linear-gradient(90deg, var(--teal), #3aa088)',
                     borderRadius: 99,
                     transition: 'width 0.5s ease',
                   }} />
@@ -999,7 +1014,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
           <select 
             value={filterType} 
             onChange={(e) => setFilterType(e.target.value as any)}
-            style={{ ...styles.input, width: 'auto', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glow)', minWidth: 220 }}
+            style={{ ...styles.input, width: 'auto', background: 'var(--wash)', border: '1px solid var(--border-glow)', minWidth: 220 }}
           >
             <option value="all" style={{ background: 'var(--bg-space)' }}>Tous les contacts</option>
             <option value="enriched" style={{ background: 'var(--bg-space)' }}>✨ Déjà enrichis</option>
@@ -1025,7 +1040,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                 }
               }}
               className="btn-primary"
-              style={{ fontSize: '0.7rem', padding: '4px 10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glow)', color: 'var(--text-primary)' }}
+              style={{ fontSize: '0.7rem', padding: '4px 10px', background: 'var(--grey-soft)', border: '1px solid var(--border-glow)', color: 'var(--text-primary)' }}
             >
               {filteredContacts.map(c => c.id).every(id => bulkSelectedIds.includes(id)) ? 'Tout désélectionner' : 'Tout sélectionner'}
             </button>
@@ -1068,7 +1083,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
               <button 
                 onClick={() => setBulkSelectedIds([])} 
                 className="btn-primary" 
-                style={{ fontSize: '0.75rem', padding: '6px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glow)' }}
+                style={{ fontSize: '0.75rem', padding: '6px 12px', background: 'var(--grey-soft)', border: '1px solid var(--border-glow)' }}
               >
                 Annuler
               </button>
@@ -1101,7 +1116,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                     ...styles.contactCard, 
                     position: 'relative',
                     cursor: 'pointer',
-                    borderColor: isSelected ? 'var(--neon-purple)' : 'rgba(255,255,255,0.06)'
+                    borderColor: isSelected ? 'var(--teal)' : 'var(--grey-soft)'
                   }}
                   onClick={() => setSelectedContactId(isSelected ? null : c.id)}
                 >
@@ -1140,7 +1155,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                   <div style={styles.detailsList}>
                     {c.company && (
                       <div style={styles.detailItem}>
-                        <Briefcase size={14} color="var(--neon-purple)" />
+                        <Briefcase size={14} color="var(--teal)" />
                         <span style={styles.detailText}>{c.job_title || 'Poste inconnu'} @ <b>{c.company}</b></span>
                       </div>
                     )}
@@ -1178,7 +1193,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                     setFullEditData({ ...contactDetails });
                     setIsEditingContact(true);
                   }} 
-                  style={{ ...styles.closeBtn, color: 'var(--neon-purple)' }}
+                  style={{ ...styles.closeBtn, color: 'var(--teal)' }}
                   title="Modifier les infos principales"
                 >
                   <Edit2 size={16} />
@@ -1279,7 +1294,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                       style={{ 
                         ...styles.tagBadge, 
                         borderColor: 'var(--border-glow)', 
-                        background: 'rgba(255,255,255,0.03)'
+                        background: 'var(--wash)'
                       }}
                     >
                       {t.name}
@@ -1343,13 +1358,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
               <div className="glow-active" style={styles.aiContextBlock}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={styles.aiContextTitle}>
-                    <Sparkles size={14} color="var(--neon-purple)" />
+                    <Sparkles size={14} color="var(--teal)" />
                     <span>Synthèse IA</span>
                   </div>
                   {editingField !== 'ai_context' ? (
                     <button 
                       onClick={() => { setEditingField('ai_context'); setEditValue(contactDetails.ai_context || ''); }}
-                      style={{ background: 'none', border: 'none', color: 'var(--neon-purple)', cursor: 'pointer', padding: 4, opacity: 0.8 }}
+                      style={{ background: 'none', border: 'none', color: 'var(--teal)', cursor: 'pointer', padding: 4, opacity: 0.8 }}
                       title="Modifier la synthèse"
                     >
                       <Edit2 size={14} />
@@ -1410,7 +1425,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
             {/* Appartenance aux Galaxies (Multi-liaison) */}
             <div style={styles.infoBlock}>
               <div style={styles.blockTitleHeader}>
-                <Layers size={14} color="var(--neon-purple)" />
+                <Layers size={14} color="var(--teal)" />
                 <h4 style={styles.blockTitle}>Appartenance aux Galaxies</h4>
               </div>
               <div className="glass-card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1540,7 +1555,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
             {/* Synergy Connections (IA) */}
             <div style={styles.infoBlock}>
               <div style={styles.blockTitleHeader}>
-                <Sparkles size={14} color="var(--neon-purple)" />
+                <Sparkles size={14} color="var(--teal)" />
                 <h4 style={styles.blockTitle}>Synergies IA</h4>
               </div>
               
@@ -1853,7 +1868,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 44,
     height: 44,
     borderRadius: '12px',
-    background: 'linear-gradient(135deg, var(--neon-purple), var(--neon-blue))',
+    background: 'linear-gradient(135deg, var(--teal), #3aa088)',
     border: 'none',
     display: 'flex',
     justifyContent: 'center',
@@ -1880,8 +1895,8 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: 10,
     padding: '10px 0',
-    borderTop: '1px solid rgba(255,255,255,0.03)',
-    borderBottom: '1px solid rgba(255,255,255,0.03)',
+    borderTop: '1px solid var(--line)',
+    borderBottom: '1px solid var(--line)',
   },
   detailItem: {
     display: 'flex',
@@ -1921,8 +1936,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     borderLeft: '1px solid var(--border-glow)',
-    background: 'rgba(10, 10, 18, 0.95)',
-    boxShadow: '-10px 0 30px rgba(0, 0, 0, 0.5)',
+    background: '#ffffff',
+    boxShadow: '-10px 0 30px rgba(20, 30, 30, 0.12)',
     backdropFilter: 'blur(12px)',
   },
   drawerHeader: {
@@ -1972,7 +1987,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'center',
     textAlign: 'center',
-    borderBottom: '1px solid rgba(255,255,255,0.03)',
+    borderBottom: '1px solid var(--line)',
     paddingBottom: 20,
   },
   avatarBig: {
@@ -1980,7 +1995,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: 68,
     borderRadius: '20px',
     background: 'rgba(159, 97, 232, 0.1)',
-    border: '2px solid var(--neon-purple)',
+    border: '2px solid var(--teal)',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
@@ -2061,7 +2076,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
     fontSize: '0.8rem',
     fontWeight: 700,
-    color: 'var(--neon-purple)',
+    color: 'var(--teal)',
   },
   aiContextText: {
     fontSize: '0.775rem',
@@ -2099,8 +2114,8 @@ const styles: Record<string, React.CSSProperties> = {
   connectionCard: {
     display: 'flex',
     alignItems: 'center',
-    background: 'rgba(255, 255, 255, 0.02)',
-    border: '1px solid rgba(255, 255, 255, 0.04)',
+    background: 'var(--wash)',
+    border: '1px solid var(--line)',
     borderRadius: 8,
     padding: '10px 12px',
     cursor: 'pointer',
@@ -2110,8 +2125,8 @@ const styles: Record<string, React.CSSProperties> = {
     width: 28,
     height: 28,
     borderRadius: '50%',
-    background: 'rgba(255, 255, 255, 0.04)',
-    border: '1.5px solid var(--neon-purple)',
+    background: 'var(--grey-soft)',
+    border: '1.5px solid var(--teal)',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
@@ -2142,7 +2157,7 @@ const styles: Record<string, React.CSSProperties> = {
   synergyNotice: {
     display: 'flex',
     alignItems: 'center',
-    background: 'rgba(255, 255, 255, 0.01)',
+    background: 'var(--wash)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: 10,
@@ -2206,10 +2221,10 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
   },
   synergyReasonBox: {
-    background: 'rgba(255, 255, 255, 0.02)',
+    background: 'var(--wash)',
     padding: 10,
     borderRadius: 6,
-    borderLeft: '2.5px solid var(--neon-purple)',
+    borderLeft: '2.5px solid var(--teal)',
   },
   synergyIntroBox: {
     background: 'rgba(79, 142, 247, 0.04)',
@@ -2258,8 +2273,8 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 12,
   },
   drawerNoteItem: {
-    background: 'rgba(255, 255, 255, 0.02)',
-    border: '1px solid rgba(255, 255, 255, 0.04)',
+    background: 'var(--wash)',
+    border: '1px solid var(--line)',
     borderRadius: 8,
     padding: 12,
     display: 'flex',
@@ -2286,7 +2301,7 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.4,
   },
   selectSmall: {
-    background: 'rgba(0,0,0,0.3)',
+    background: 'var(--wash)',
     border: '1px solid var(--border-glow)',
     borderRadius: 6,
     padding: '6px 10px',
@@ -2295,7 +2310,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '0.8rem',
   },
   inputSmall: {
-    background: 'rgba(0,0,0,0.3)',
+    background: 'var(--wash)',
     border: '1px solid var(--border-glow)',
     borderRadius: 6,
     padding: '6px 10px',
@@ -2308,16 +2323,16 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '12px 18px',
-    background: 'rgba(159, 97, 232, 0.08)',
-    border: '1px solid rgba(159, 97, 232, 0.3)',
+    background: 'var(--teal-soft)',
+    border: '1px solid var(--teal-soft-2)',
     borderRadius: 12,
     marginBottom: 16,
     flexWrap: 'wrap',
     gap: 12,
-    boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+    boxShadow: '0 4px 20px rgba(20, 30, 30, 0.10)',
   },
   selectSmallBulk: {
-    background: 'rgba(0,0,0,0.3)',
+    background: 'var(--wash)',
     border: '1px solid var(--border-glow)',
     borderRadius: 6,
     padding: '6px 10px',
@@ -2333,7 +2348,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 16,
     height: 16,
     cursor: 'pointer',
-    accentColor: 'var(--neon-purple)',
+    accentColor: 'var(--teal)',
     zIndex: 10,
   }
 };

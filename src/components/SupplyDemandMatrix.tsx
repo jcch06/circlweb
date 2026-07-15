@@ -155,7 +155,7 @@ export const SupplyDemandMatrix: React.FC<SupplyDemandMatrixProps> = ({
     borderRadius: 14,
     border: '1px solid rgba(168,85,247,0.12)',
     background:
-      'linear-gradient(135deg, rgba(15,15,25,0.85) 0%, rgba(25,20,45,0.75) 100%)',
+      '#ffffff',
     backdropFilter: 'blur(12px)',
     WebkitBackdropFilter: 'blur(12px)',
   };

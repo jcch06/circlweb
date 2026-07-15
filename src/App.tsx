@@ -19,6 +19,8 @@ function App() {
   const [dataLoading, setDataLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [addNonce, setAddNonce] = useState(0);
 
   // Core Data States
   const [spaces, setSpaces] = useState<any[]>([]);
@@ -48,57 +50,39 @@ function App() {
     if (!session?.user) return;
     setDataLoading(true);
 
+    // Supabase plafonne chaque requête à 1000 lignes : on pagine systématiquement.
+    // La RLS scope déjà chaque table à ce que l'utilisateur peut voir.
+    const fetchAll = async (table: string, orderBy: string, ascending = true) => {
+      const PAGE = 1000;
+      const rows: any[] = [];
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+          .from(table)
+          .select('*')
+          .order(orderBy, { ascending })
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        rows.push(...(data || []));
+        if (!data || data.length < PAGE) break;
+      }
+      return rows;
+    };
+
     try {
-      // 1. Fetch Spaces
-      const { data: spacesData, error: spacesError } = await supabase
-        .from('spaces')
-        .select('*')
-        .order('name');
-      
-      if (spacesError) throw spacesError;
-      setSpaces(spacesData || []);
+      const spacesData = await fetchAll('spaces', 'name');
+      setSpaces(spacesData);
 
-      if (spacesData && spacesData.length > 0) {
-        // 2. Fetch Contacts in user's spaces
-        const { data: contactsData, error: contactsError } = await supabase
-          .from('contacts')
-          .select('*')
-          .order('first_name');
-        
-        if (contactsError) throw contactsError;
-        setContacts(contactsData || []);
-
-        if (contactsData && contactsData.length > 0) {
-          // 3. Fetch Notes associated with loaded contacts
-          const contactIds = contactsData.map(c => c.id);
-          const { data: notesData, error: notesError } = await supabase
-            .from('notes')
-            .select('*')
-            .in('contact_id', contactIds)
-            .order('created_at', { ascending: false });
-          
-          if (notesError) throw notesError;
-          setNotes(notesData || []);
-        } else {
-          setNotes([]);
-        }
-
-        // 4. Fetch Tags in user's spaces
-        const { data: tagsData, error: tagsError } = await supabase
-          .from('tags')
-          .select('*')
-          .order('name');
-        
-        if (tagsError) throw tagsError;
-        setTags(tagsData || []);
-
-        // 5. Fetch junction mapping
-        const { data: contactTagsData, error: contactTagsError } = await supabase
-          .from('contact_tags')
-          .select('*');
-        
-        if (contactTagsError) throw contactTagsError;
-        setContactTags(contactTagsData || []);
+      if (spacesData.length > 0) {
+        const [contactsData, notesData, tagsData, contactTagsData] = await Promise.all([
+          fetchAll('contacts', 'first_name'),
+          fetchAll('notes', 'created_at', false),
+          fetchAll('tags', 'name'),
+          fetchAll('contact_tags', 'contact_id'),
+        ]);
+        setContacts(contactsData);
+        setNotes(notesData);
+        setTags(tagsData);
+        setContactTags(contactTagsData);
       }
     } catch (err) {
       console.error('Erreur lors du chargement des données réseau:', err);
@@ -143,10 +127,6 @@ function App() {
 
   return (
     <div style={styles.appContainer}>
-      {/* Background space grids */}
-      <div className="bg-grid"></div>
-      <div className="bg-stars"></div>
-
       {/* Main Layout wrapper */}
       <div style={styles.layout}>
         <Sidebar
@@ -157,6 +137,7 @@ function App() {
           setSelectedSpaceId={setSelectedSpaceId}
           user={session.user}
           onLogout={handleLogout}
+          onSearch={setSearchQuery}
         />
 
         <main style={styles.mainContent}>
@@ -177,6 +158,8 @@ function App() {
               user={session.user}
               onRefreshData={fetchNetworkData}
               setActiveTab={setActiveTab}
+              setSelectedSpaceId={setSelectedSpaceId}
+              onNewContact={() => { setActiveTab('contacts'); setAddNonce((n) => n + 1); }}
             />
           )}
 
@@ -224,6 +207,8 @@ function App() {
               user={session.user}
               selectedSpaceId={selectedSpaceId}
               onRefreshData={fetchNetworkData}
+              initialSearch={searchQuery}
+              addNonce={addNonce}
             />
           )}
 

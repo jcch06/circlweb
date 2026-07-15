@@ -21,8 +21,8 @@ const styles = {
   overlay: {
     position: 'fixed' as const,
     top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    backdropFilter: 'blur(5px)',
+    backgroundColor: 'rgba(20, 30, 30, 0.4)',
+    backdropFilter: 'blur(3px)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -30,8 +30,8 @@ const styles = {
     padding: 20,
   },
   modal: {
-    background: 'var(--card-bg)',
-    border: '1px solid var(--border-glow)',
+    background: '#ffffff',
+    border: '1px solid var(--line)',
     borderRadius: 16,
     width: '100%',
     maxWidth: 600,
@@ -39,14 +39,14 @@ const styles = {
     overflowY: 'auto' as const,
     padding: 24,
     position: 'relative' as const,
-    boxShadow: '0 0 40px rgba(138, 43, 226, 0.15)',
+    boxShadow: '0 30px 70px -30px rgba(20, 30, 30, 0.4)',
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 20,
-    borderBottom: '1px solid rgba(255,255,255,0.05)',
+    borderBottom: '1px solid var(--line)',
     paddingBottom: 16,
   },
   title: {
@@ -84,21 +84,21 @@ const styles = {
   },
   input: {
     width: '100%',
-    background: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    background: 'var(--wash)',
+    border: '1px solid var(--line-2)',
     borderRadius: 8,
     padding: '10px 12px',
-    color: 'var(--text-primary)',
+    color: 'var(--ink)',
     fontSize: '0.9rem',
     outline: 'none',
   },
   textarea: {
     width: '100%',
-    background: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    background: 'var(--wash)',
+    border: '1px solid var(--line-2)',
     borderRadius: 8,
     padding: '10px 12px',
-    color: 'var(--text-primary)',
+    color: 'var(--ink)',
     fontSize: '0.9rem',
     outline: 'none',
     minHeight: 80,
@@ -111,9 +111,9 @@ const styles = {
     marginTop: 8,
   },
   tag: {
-    background: 'rgba(138, 43, 226, 0.15)',
-    border: '1px solid rgba(138, 43, 226, 0.3)',
-    color: 'var(--neon-purple)',
+    background: 'var(--teal-soft)',
+    border: '1px solid var(--teal-soft-2)',
+    color: 'var(--teal)',
     padding: '2px 8px',
     borderRadius: 99,
     fontSize: '0.75rem',
@@ -127,28 +127,28 @@ const styles = {
   },
   autoBtn: {
     width: '100%',
-    background: 'linear-gradient(90deg, rgba(79, 142, 247, 0.1), rgba(138, 43, 226, 0.1))',
-    border: '1px solid rgba(138, 43, 226, 0.3)',
-    color: 'var(--text-primary)',
+    background: 'var(--teal-soft)',
+    border: '1px solid var(--teal-soft-2)',
+    color: 'var(--teal)',
     padding: '12px',
-    borderRadius: 8,
+    borderRadius: 11,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
     cursor: 'pointer',
     fontSize: '0.9rem',
-    fontWeight: 500,
+    fontWeight: 600,
     marginBottom: 20,
     transition: 'all 0.2s ease',
   },
   saveBtn: {
     width: '100%',
-    background: 'var(--neon-purple)',
+    background: 'var(--teal)',
     border: 'none',
-    color: 'var(--text-primary)',
+    color: '#fff',
     padding: '12px',
-    borderRadius: 8,
+    borderRadius: 11,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -236,10 +236,10 @@ export const UserProfilePopup: React.FC<UserProfilePopupProps> = ({ userId, onCl
 
   return (
     <div style={styles.overlay}>
-      <div style={styles.modal} className="glow-active">
+      <div style={styles.modal}>
         <div style={styles.header}>
           <div>
-            <h2 style={styles.title}><User size={20} color="var(--neon-purple)" /> Mon Profil Oracle</h2>
+            <h2 style={styles.title}><User size={20} color="var(--teal)" /> Mon Profil Oracle</h2>
             <p style={styles.subtitle}>Enrichissez votre profil pour que l'IA trouve des opportunités sur-mesure pour VOUS.</p>
           </div>
           <button onClick={onClose} style={styles.closeBtn}>

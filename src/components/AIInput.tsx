@@ -452,7 +452,7 @@ Si aucun contact n'est présent, retourne {"contacts": []}. Réponds uniquement 
       {results && results.type === 'extract' && (
         <div className="glass-card glow-active" style={styles.resultsCard}>
           <div style={styles.resultsHeader}>
-            <Sparkles size={18} color="var(--neon-purple)" />
+            <Sparkles size={18} color="var(--teal)" />
             <h3 style={{ fontSize: '1.1rem' }}>Contacts identifiés par Gemini ({results.contacts.length})</h3>
           </div>
 
@@ -631,7 +631,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '0.9rem',
     color: 'var(--text-secondary)',
     lineHeight: 1.5,
-    background: 'rgba(0,0,0,0.1)',
+    background: 'var(--wash)',
     padding: 12,
     borderRadius: 8,
   },
@@ -665,7 +665,7 @@ const styles: Record<string, React.CSSProperties> = {
   tagBadge: {
     background: 'rgba(159, 97, 232, 0.1)',
     border: '1px solid rgba(159, 97, 232, 0.2)',
-    color: 'var(--neon-purple)',
+    color: 'var(--teal)',
     padding: '4px 10px',
     borderRadius: 99,
     fontSize: '0.75rem',

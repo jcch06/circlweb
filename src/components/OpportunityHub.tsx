@@ -45,7 +45,7 @@ interface OpportunityHubProps {
 type Mode = 'network' | 'opportunities' | 'intros';
 
 const CATEGORY_CONFIG: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
-  service: { icon: <Briefcase size={16} />, color: 'var(--neon-purple)', label: 'Service' },
+  service: { icon: <Briefcase size={16} />, color: 'var(--teal)', label: 'Service' },
   product: { icon: <Target size={16} />, color: 'var(--neon-blue)', label: 'Produit' },
   connection: { icon: <Link2 size={16} />, color: 'var(--neon-green)', label: 'Connexion' },
   event: { icon: <Calendar size={16} />, color: 'var(--neon-yellow)', label: 'Événement' },
@@ -173,8 +173,8 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
             onClick={() => setShowProfilePopup(true)}
             className="hover-glow"
             style={{ 
-              background: 'rgba(138, 43, 226, 0.15)', 
-              border: '1px solid var(--neon-purple)', 
+              background: 'var(--teal-soft)', 
+              border: '1px solid var(--teal-soft-2)', 
               color: 'var(--text-primary)', 
               padding: '6px 12px', 
               borderRadius: 99, 
@@ -188,7 +188,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
             <User size={14} /> Mon Profil Oracle
           </button>
           <div style={styles.apiBadge}>
-            <Sparkles size={14} color="var(--neon-purple)" />
+            <Sparkles size={14} color="var(--teal)" />
             <span style={styles.apiBadgeText}>Oracle V3 Actif</span>
           </div>
         </div>
@@ -197,7 +197,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
       {/* API Key Missing State */}
       {!hasApiKey && (
         <div className="glass-card" style={styles.setupCard}>
-          <Key size={36} color="var(--neon-purple)" style={{ marginBottom: 12 }} />
+          <Key size={36} color="var(--teal)" style={{ marginBottom: 12 }} />
           <h3>Clé API Gemini Pro Requise</h3>
           <p style={styles.setupDesc}>
             Pour activer le cerveau IA de l'application, vous devez fournir votre clé Google AI Studio. 
@@ -296,7 +296,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
 
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                                   {cluster.members.map(m => (
-                                    <span key={m.id} style={{ background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: 6, fontSize: '0.78rem', color: 'var(--text-primary)' }}>
+                                    <span key={m.id} style={{ background: 'var(--grey-soft)', padding: '4px 10px', borderRadius: 6, fontSize: '0.78rem', color: 'var(--text-primary)' }}>
                                       {m.name}
                                     </span>
                                   ))}
@@ -327,7 +327,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                         {/* Bridge Contacts */}
                         {v3Result.bridgeContacts.length > 0 && (
                           <div>
-                            <h3 style={{ color: 'var(--neon-purple)', marginBottom: 16, borderBottom: '1px solid rgba(138, 43, 226, 0.3)', paddingBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <h3 style={{ color: 'var(--teal)', marginBottom: 16, borderBottom: '1px solid rgba(138, 43, 226, 0.3)', paddingBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                               <Zap size={20} /> Super-Connecteurs ({v3Result.bridgeContacts.length})
                             </h3>
                             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 12 }}>
@@ -336,7 +336,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                               {v3Result.bridgeContacts.map((bc, idx) => (
                                 <div key={idx} className="glass-card" style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 10, borderColor: 'rgba(138, 43, 226, 0.3)' }}>
-                                  <div style={{ background: 'linear-gradient(135deg, var(--neon-purple), var(--neon-blue))', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-primary)' }}>
+                                  <div style={{ background: 'linear-gradient(135deg, var(--teal), var(--neon-blue))', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-primary)' }}>
                                     {idx + 1}
                                   </div>
                                   <div>
@@ -541,7 +541,7 @@ const OpportunityCard: React.FC<{ opportunity: DeepOpportunity }> = ({ opportuni
             </span>
             {opp.urgency && (
               <span style={{ 
-                background: opp.urgency === 'immediate' ? 'rgba(255, 59, 48, 0.15)' : opp.urgency === 'short-term' ? 'rgba(255, 159, 10, 0.15)' : 'rgba(255,255,255,0.05)',
+                background: opp.urgency === 'immediate' ? 'rgba(255, 59, 48, 0.15)' : opp.urgency === 'short-term' ? 'rgba(255, 159, 10, 0.15)' : 'var(--grey-soft)',
                 color: opp.urgency === 'immediate' ? '#ff3b30' : opp.urgency === 'short-term' ? '#ff9f0a' : 'var(--text-muted)',
                 padding: '3px 10px', borderRadius: 99, fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase'
               }}>
@@ -607,7 +607,7 @@ const OpportunityCard: React.FC<{ opportunity: DeepOpportunity }> = ({ opportuni
           <span style={cardStyles.sectionTitle}>Contacts pertinents :</span>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
             {opp.relevantContacts.map((c, i) => (
-              <div key={i} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-glow)', borderRadius: 6, padding: '6px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div key={i} style={{ background: 'var(--wash)', border: '1px solid var(--border-glow)', borderRadius: 6, padding: '6px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '0.82rem' }}>{c.name}</span>
                   <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginLeft: 8 }}>{c.role} @ {c.company}</span>
@@ -690,7 +690,7 @@ const styles: Record<string, React.CSSProperties> = {
   apiBadgeText: {
     fontSize: '0.8rem',
     fontWeight: 600,
-    color: 'var(--neon-purple)',
+    color: 'var(--teal)',
   },
   setupCard: {
     padding: 40,
@@ -741,9 +741,8 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'var(--transition-smooth)',
   },
   tabBtnActive: {
-    background: 'rgba(255, 255, 255, 0.05)',
-    color: 'var(--text-primary)',
-    boxShadow: '0 0 10px rgba(255,255,255,0.02)',
+    background: 'var(--teal-soft)',
+    color: 'var(--teal)',
   },
   contentArea: {
     flexGrow: 1,
@@ -759,7 +758,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    background: 'rgba(255,255,255,0.01)',
+    background: 'var(--wash)',
     border: '1px solid var(--border-glow)',
     padding: 20,
     borderRadius: 12,
@@ -792,7 +791,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 4,
   },
   introForm: {
-    background: 'rgba(255,255,255,0.01)',
+    background: 'var(--wash)',
     border: '1px solid var(--border-glow)',
     padding: 20,
     borderRadius: 12,
@@ -868,8 +867,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
   },
   emailContainer: {
-    background: 'rgba(0,0,0,0.3)',
-    border: '1px solid var(--border-glow)',
+    background: 'var(--wash)',
+    border: '1px solid var(--line)',
     borderRadius: 8,
     display: 'flex',
     flexDirection: 'column',

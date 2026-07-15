@@ -248,8 +248,8 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
           onClick={() => setActiveSubTab('invitations')}
           style={{
             ...styles.tabBtn,
-            color: activeSubTab === 'invitations' ? 'var(--neon-purple)' : 'var(--text-secondary)',
-            borderBottom: activeSubTab === 'invitations' ? '2px solid var(--neon-purple)' : 'none'
+            color: activeSubTab === 'invitations' ? 'var(--teal)' : 'var(--text-secondary)',
+            borderBottom: activeSubTab === 'invitations' ? '2px solid var(--teal)' : 'none'
           }}
         >
           <Send size={14} style={{ marginRight: 6 }} />
@@ -541,7 +541,7 @@ const styles: Record<string, React.CSSProperties> = {
   ownerBadge: {
     fontSize: '0.65rem',
     fontWeight: 700,
-    color: 'var(--neon-purple)',
+    color: 'var(--teal)',
     backgroundColor: 'rgba(159, 97, 232, 0.08)',
     padding: '3px 8px',
     borderRadius: 4,

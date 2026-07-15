@@ -572,7 +572,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
       {/* Floating Search & Selection Panel */}
       <div className="glass-panel" style={styles.searchPanel}>
         <div style={styles.searchHeader}>
-          <Search size={14} color="var(--neon-purple)" />
+          <Search size={14} color="var(--teal)" />
           <span style={styles.searchTitle}>Recherche d'Étoiles</span>
         </div>
         <input
@@ -617,7 +617,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
       >
         {graphData.nodes.length === 0 ? (
           <div style={styles.emptyState}>
-            <Sparkles size={40} color="var(--neon-purple)" style={{ marginBottom: 12 }} />
+            <Sparkles size={40} color="var(--teal)" style={{ marginBottom: 12 }} />
             <h3>Galaxie Vide</h3>
             <p>Générez des données démo ou ajoutez des contacts pour voir votre univers s'allumer.</p>
           </div>
@@ -756,7 +756,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
             {contactDetails.ai_context && (
               <div className="glow-active" style={styles.aiContextBlock}>
                 <div style={styles.aiContextTitle}>
-                  <Sparkles size={14} color="var(--neon-purple)" />
+                  <Sparkles size={14} color="var(--teal)" />
                   <span>Synthèse IA (Gemini)</span>
                 </div>
                 <p style={styles.aiContextText}>{contactDetails.ai_context}</p>
@@ -791,7 +791,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
             {/* Appartenance aux Galaxies (Multi-liaison) */}
             <div style={styles.infoBlock}>
               <div style={styles.blockTitleHeader}>
-                <Layers size={14} color="var(--neon-purple)" />
+                <Layers size={14} color="var(--teal)" />
                 <h4 style={styles.blockTitle}>Appartenance aux Galaxies</h4>
               </div>
               <div className="glass-card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -932,7 +932,7 @@ export const GalaxyVisualizer: React.FC<GalaxyVisualizerProps> = ({
             {/* Synergy Connections (IA) */}
             <div style={styles.infoBlock}>
               <div style={styles.blockTitleHeader}>
-                <Sparkles size={14} color="var(--neon-purple)" />
+                <Sparkles size={14} color="var(--teal)" />
                 <h4 style={styles.blockTitle}>Synergies IA (Gemini)</h4>
               </div>
               
@@ -1134,7 +1134,7 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'absolute',
     right: 0,
     top: 0,
-    boxShadow: '-8px 0 32px rgba(0,0,0,0.4)',
+    boxShadow: '-8px 0 32px rgba(20, 30, 30, 0.14)',
     borderLeft: '1px solid var(--border-glow)',
     borderRight: 'none',
     zIndex: 20,
@@ -1184,7 +1184,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: 80,
     borderRadius: '50%',
     background: 'rgba(255, 255, 255, 0.04)',
-    border: '2px solid var(--neon-purple)',
+    border: '2px solid var(--teal)',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1257,7 +1257,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 6,
     fontSize: '0.8rem',
     fontWeight: 700,
-    color: 'var(--neon-purple)',
+    color: 'var(--teal)',
   },
   aiContextText: {
     fontSize: '0.825rem',
@@ -1376,7 +1376,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: 28,
     borderRadius: '50%',
     background: 'rgba(255, 255, 255, 0.04)',
-    border: '1.5px solid var(--neon-purple)',
+    border: '1.5px solid var(--teal)',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1480,7 +1480,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'rgba(255, 255, 255, 0.02)',
     padding: 10,
     borderRadius: 6,
-    borderLeft: '2.5px solid var(--neon-purple)',
+    borderLeft: '2.5px solid var(--teal)',
   },
   synergyIntroBox: {
     background: 'rgba(79, 142, 247, 0.04)',
@@ -1503,7 +1503,7 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.35,
   },
   selectSmall: {
-    background: 'rgba(0,0,0,0.3)',
+    background: 'var(--wash)',
     border: '1px solid var(--border-glow)',
     borderRadius: 6,
     padding: '6px 10px',
@@ -1513,7 +1513,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
   },
   inputSmall: {
-    background: 'rgba(0,0,0,0.3)',
+    background: 'var(--wash)',
     border: '1px solid var(--border-glow)',
     borderRadius: 6,
     padding: '6px 10px',
@@ -1533,7 +1533,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 16,
     zIndex: 10,
     gap: 12,
-    boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+    boxShadow: '0 8px 32px rgba(20, 30, 30, 0.14)',
     border: '1px solid var(--border-glow)',
   },
   searchHeader: {
@@ -1544,12 +1544,12 @@ const styles: Record<string, React.CSSProperties> = {
   searchTitle: {
     fontSize: '0.8rem',
     fontWeight: 700,
-    color: 'var(--neon-purple)',
+    color: 'var(--teal)',
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
   },
   searchInput: {
-    background: 'rgba(0, 0, 0, 0.3)',
+    background: 'var(--wash)',
     border: '1px solid var(--border-glow)',
     borderRadius: 8,
     padding: '8px 12px',

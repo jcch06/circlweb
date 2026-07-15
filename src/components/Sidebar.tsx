@@ -1,15 +1,5 @@
-import React from 'react';
-import {
-  LayoutDashboard,
-  Orbit, 
-  Brain, 
-  PlusCircle, 
-  LogOut, 
-  Layers,
-  Users,
-  Tag,
-  FileText
-} from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { LogOut } from 'lucide-react';
 
 export type TabType = 'dashboard' | 'galaxy' | 'oracle' | 'ingestion' | 'contacts' | 'spaces' | 'tags' | 'notes';
 
@@ -17,11 +7,67 @@ interface SidebarProps {
   activeTab: TabType;
   setActiveTab: (tab: TabType) => void;
   spaces: any[];
-  selectedSpaceId: string | null; // null = Merged Galaxies
+  selectedSpaceId: string | null; // null = galaxies fusionnées
   setSelectedSpaceId: (id: string | null) => void;
   user: any;
   onLogout: () => void;
+  onSearch: (query: string) => void;
 }
+
+/* Icônes reprises telles quelles de la maquette (circl-app.html) */
+const IconDashboard = () => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+    <rect x="3" y="3" width="7" height="7" rx="1.6" /><rect x="14" y="3" width="7" height="7" rx="1.6" />
+    <rect x="3" y="14" width="7" height="7" rx="1.6" /><rect x="14" y="14" width="7" height="7" rx="1.6" />
+  </svg>
+);
+const IconContacts = () => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+    <circle cx="12" cy="8" r="3.2" /><path d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" />
+  </svg>
+);
+const IconGalaxy = () => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+    <circle cx="12" cy="12" r="3" /><circle cx="5" cy="6" r="1.6" /><circle cx="19" cy="7" r="1.6" />
+    <circle cx="18" cy="18" r="1.6" /><path d="M12 12 5 6M12 12l7-5M12 12l6 6" />
+  </svg>
+);
+const IconOracle = () => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+    <circle cx="12" cy="12" r="5" /><path d="M12 3v2M12 19v2M3 12h2M19 12h2" />
+    <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+  </svg>
+);
+const IconIngestion = () => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+    <path d="M12 5v10M8 11l4 4 4-4" /><path d="M5 19h14" />
+  </svg>
+);
+const IconTags = () => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+    <path d="M4 7h16M4 12h16M4 17h10" />
+  </svg>
+);
+const IconNotes = () => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+    <path d="M6 3h9l4 4v14H6z" /><path d="M9 12h7M9 16h5" />
+  </svg>
+);
+const IconSpaces = () => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+    <path d="M12 3l9 5-9 5-9-5z" /><path d="M3 13l9 5 9-5" />
+  </svg>
+);
+
+const NAV: { tab: TabType; label: string; icon: () => React.JSX.Element }[] = [
+  { tab: 'contacts', label: 'Contacts', icon: IconContacts },
+  { tab: 'galaxy', label: 'Galaxie', icon: IconGalaxy },
+  { tab: 'oracle', label: 'Oracle', icon: IconOracle },
+  { tab: 'ingestion', label: 'Ingestion', icon: IconIngestion },
+  { tab: 'tags', label: 'Tags', icon: IconTags },
+  { tab: 'notes', label: 'Notes', icon: IconNotes },
+  { tab: 'spaces', label: 'Espaces', icon: IconSpaces },
+];
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
@@ -30,374 +76,166 @@ export const Sidebar: React.FC<SidebarProps> = ({
   selectedSpaceId,
   setSelectedSpaceId,
   user,
-  onLogout
+  onLogout,
+  onSearch,
 }) => {
-  return (
-    <aside className="glass-sidebar" style={styles.sidebar}>
-      {/* Galaxy Space Selector (Core concept: Fusion) */}
-      <div style={styles.section}>
-        <div style={styles.sectionHeader}>
-          <Layers size={14} color="var(--text-secondary)" />
-          <span style={styles.sectionTitle}>Nébuleuse Active</span>
-        </div>
-        <div style={styles.spaceList}>
-          {/* Merger Option */}
-          <button
-            onClick={() => setSelectedSpaceId(null)}
-            style={{
-              ...styles.spaceItem,
-              ...(selectedSpaceId === null ? styles.spaceItemActiveMerger : {}),
-            }}
-          >
-            <Orbit size={16} color={selectedSpaceId === null ? 'var(--neon-pink)' : 'var(--neon-purple)'} />
-            <div style={styles.spaceDetails}>
-              <span style={{ 
-                ...styles.spaceName, 
-                fontWeight: selectedSpaceId === null ? 700 : 500,
-                color: selectedSpaceId === null ? 'var(--text-primary)' : 'var(--text-secondary)'
-              }}>
-                🌌 Fusionner les Galaxies
-              </span>
-              <span style={styles.spaceMeta}>Tout le réseau connecté</span>
-            </div>
-          </button>
+  const [query, setQuery] = useState('');
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const footRef = useRef<HTMLDivElement>(null);
 
-          {/* Individual Spaces */}
-          {spaces.map((space) => {
-            const isActive = selectedSpaceId === space.id;
-            return (
-              <button
-                key={space.id}
-                onClick={() => setSelectedSpaceId(space.id)}
-                style={{
-                  ...styles.spaceItem,
-                  ...(isActive ? styles.spaceItemActive : {}),
-                }}
-              >
-                <div style={{
-                  ...styles.dot,
-                  backgroundColor: space.type === 'personal' ? 'var(--neon-blue)' : 'var(--neon-green)'
-                }}></div>
-                <div style={styles.spaceDetails}>
-                  <span style={{ 
-                    ...styles.spaceName,
-                    fontWeight: isActive ? 700 : 500,
-                    color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)'
-                  }}>
-                    {space.name}
-                  </span>
-                  <span style={styles.spaceMeta}>
-                    {space.type === 'personal' ? 'Espace perso' : 'Espace collaboratif'}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
+  // Ferme le sélecteur d'espace au clic extérieur
+  useEffect(() => {
+    if (!switcherOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (footRef.current && !footRef.current.contains(e.target as Node)) setSwitcherOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [switcherOpen]);
+
+  const activeSpace = spaces.find((s) => s.id === selectedSpaceId);
+  const spaceLabel = activeSpace ? activeSpace.name : 'Toutes les galaxies';
+  const initials = (user?.user_metadata?.full_name || user?.email || 'U')
+    .split(/[\s@.]+/)
+    .slice(0, 2)
+    .map((p: string) => p.charAt(0).toUpperCase())
+    .join('');
+
+  const submitSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!query.trim()) return;
+    onSearch(query.trim());
+    setActiveTab('contacts');
+  };
+
+  return (
+    <aside className="side">
+      <div className="brandrow">
+        <div className="brand">
+          <span className="mk">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2l2.2 5.8L20 9l-5 3.7L16.5 19 12 15.6 7.5 19 9 12.7 4 9l5.8-1.2z" />
+            </svg>
+          </span>
+          <span className="nm">Circl</span>
         </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <nav style={styles.nav}>
-        <div style={styles.sectionHeader}>
-          <span style={styles.sectionTitle}>Outils & IA</span>
-        </div>
+      <form className="search" onSubmit={submitSearch}>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" />
+        </svg>
+        <input
+          placeholder="Rechercher un contact..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        {query ? (
+          <span className="kbd" style={{ cursor: 'pointer' }} onClick={() => { setQuery(''); onSearch(''); }}>
+            ✕
+          </span>
+        ) : (
+          <span className="kbd">⏎</span>
+        )}
+      </form>
 
+      <nav className="nav">
         <button
+          className={`nav-i${activeTab === 'dashboard' ? ' on' : ''}`}
           onClick={() => setActiveTab('dashboard')}
-          style={{
-            ...styles.navItem,
-            ...(activeTab === 'dashboard' ? styles.navItemActive : {}),
-          }}
         >
-          <LayoutDashboard size={18} />
-          <span>Tableau de Bord</span>
+          <IconDashboard />
+          <span className="t">Tableau de bord</span>
         </button>
 
-        <button
-          onClick={() => setActiveTab('galaxy')}
-          style={{
-            ...styles.navItem,
-            ...(activeTab === 'galaxy' ? styles.navItemActive : {}),
-          }}
-        >
-          <Orbit size={18} />
-          <span>La Galaxie Graphe</span>
-        </button>
+        <div className="sec">Mon réseau</div>
 
-        <button
-          onClick={() => setActiveTab('oracle')}
-          style={{
-            ...styles.navItem,
-            ...(activeTab === 'oracle' ? styles.navItemActive : {}),
-          }}
-        >
-          <Brain size={18} />
-          <span>L'Oracle IA (Synergies)</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('ingestion')}
-          style={{
-            ...styles.navItem,
-            ...(activeTab === 'ingestion' ? styles.navItemActive : {}),
-          }}
-        >
-          <PlusCircle size={18} />
-          <span>Ingestion Rapide</span>
-        </button>
-
-        <div style={{ ...styles.sectionHeader, marginTop: 16 }}>
-          <span style={styles.sectionTitle}>Données</span>
-        </div>
-
-        <button
-          onClick={() => setActiveTab('contacts')}
-          style={{
-            ...styles.navItem,
-            ...(activeTab === 'contacts' ? styles.navItemActive : {}),
-          }}
-        >
-          <Users size={18} />
-          <span>Contacts</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('spaces')}
-          style={{
-            ...styles.navItem,
-            ...(activeTab === 'spaces' ? styles.navItemActive : {}),
-          }}
-        >
-          <Layers size={18} />
-          <span>Galaxies / Cercles</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('tags')}
-          style={{
-            ...styles.navItem,
-            ...(activeTab === 'tags' ? styles.navItemActive : {}),
-          }}
-        >
-          <Tag size={18} />
-          <span>Tags & Catégories</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('notes')}
-          style={{
-            ...styles.navItem,
-            ...(activeTab === 'notes' ? styles.navItemActive : {}),
-          }}
-        >
-          <FileText size={18} />
-          <span>Notes d'Échanges</span>
-        </button>
+        {NAV.map(({ tab, label, icon: Icon }) => (
+          <button
+            key={tab}
+            className={`nav-i${activeTab === tab ? ' on' : ''}`}
+            onClick={() => setActiveTab(tab)}
+          >
+            <Icon />
+            <span className="t">{label}</span>
+          </button>
+        ))}
       </nav>
 
-      {/* User Session Info Footer */}
-      <div style={styles.footer}>
-        <div style={styles.userInfo}>
-          <div style={styles.avatar}>
-            {user?.email?.charAt(0).toUpperCase() || 'U'}
+      <div className="foot" ref={footRef} style={{ position: 'relative' }}>
+        {switcherOpen && (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 'calc(100% + 10px)',
+              left: 0,
+              right: 0,
+              background: '#fff',
+              border: '1px solid var(--line)',
+              borderRadius: 12,
+              padding: 6,
+              boxShadow: '0 12px 30px -14px rgba(20,30,30,.3)',
+              zIndex: 20,
+              maxHeight: 280,
+              overflowY: 'auto',
+            }}
+          >
+            <div className="sec" style={{ padding: '8px 10px 6px' }}>Galaxie active</div>
+            <button
+              className={`nav-i${selectedSpaceId === null ? ' on' : ''}`}
+              onClick={() => { setSelectedSpaceId(null); setSwitcherOpen(false); }}
+            >
+              <IconGalaxy />
+              <span className="t">Toutes les galaxies</span>
+            </button>
+            {spaces.map((space) => (
+              <button
+                key={space.id}
+                className={`nav-i${selectedSpaceId === space.id ? ' on' : ''}`}
+                onClick={() => { setSelectedSpaceId(space.id); setSwitcherOpen(false); }}
+              >
+                <span
+                  style={{
+                    width: 8, height: 8, borderRadius: 9999, flex: 'none',
+                    background: space.type === 'personal' ? 'var(--teal)' : 'var(--blue)',
+                  }}
+                />
+                <span className="t">{space.name}</span>
+              </button>
+            ))}
           </div>
-          <div style={styles.userDetails}>
-            <span style={styles.userName}>
+        )}
+
+        <button
+          onClick={() => setSwitcherOpen((o) => !o)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0,
+            background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
+          }}
+          title="Changer de galaxie"
+        >
+          <span className="av">{initials}</span>
+          <span style={{ minWidth: 0 }}>
+            <span className="nm" style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {user?.user_metadata?.full_name || user?.email?.split('@')[0]}
             </span>
-            <span style={styles.userPlan}>Compte Pro Gemini</span>
-          </div>
-        </div>
-        <button onClick={onLogout} style={styles.logoutBtn} title="Se déconnecter">
+            <span className="pl" style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {spaceLabel}
+            </span>
+          </span>
+        </button>
+
+        <button
+          onClick={onLogout}
+          title="Se déconnecter"
+          style={{
+            background: 'none', border: 'none', color: 'var(--mut)', cursor: 'pointer',
+            padding: 8, borderRadius: 8, display: 'grid', placeItems: 'center', flex: 'none',
+          }}
+        >
           <LogOut size={16} />
         </button>
       </div>
     </aside>
   );
-};
-
-const styles: Record<string, React.CSSProperties> = {
-  sidebar: {
-    width: 280,
-    height: '100vh',
-    display: 'flex',
-    flexDirection: 'column',
-    padding: '24px 16px',
-    flexShrink: 0,
-    zIndex: 10,
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 32,
-    paddingLeft: 8,
-  },
-  logoIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: '8px',
-    background: 'rgba(159, 97, 232, 0.1)',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    border: '1px solid rgba(159, 97, 232, 0.2)',
-  },
-  logoText: {
-    fontSize: '1.25rem',
-    fontWeight: 800,
-    letterSpacing: '-0.02em',
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    paddingLeft: 8,
-    marginBottom: 10,
-  },
-  sectionTitle: {
-    fontSize: '0.7rem',
-    fontWeight: 700,
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.1em',
-  },
-  spaceList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 6,
-    maxHeight: '220px',
-    overflowY: 'auto',
-    paddingRight: 4,
-  },
-  spaceItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    padding: '10px 12px',
-    background: 'rgba(27, 23, 37, 0.02)',
-    border: '1px solid var(--border-glow)',
-    borderRadius: '10px',
-    cursor: 'pointer',
-    textAlign: 'left',
-    transition: 'var(--transition-smooth)',
-  },
-  spaceItemActive: {
-    background: 'rgba(79, 142, 247, 0.1)',
-    borderColor: 'rgba(79, 142, 247, 0.3)',
-  },
-  spaceItemActiveMerger: {
-    background: 'rgba(159, 97, 232, 0.08)',
-    border: '1px dashed rgba(236, 111, 139, 0.5)',
-    boxShadow: '0 0 15px rgba(236, 111, 139, 0.1)',
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: '50%',
-    flexShrink: 0,
-  },
-  spaceDetails: {
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  spaceName: {
-    fontSize: '0.85rem',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    maxWidth: '180px',
-  },
-  spaceMeta: {
-    fontSize: '0.7rem',
-    color: 'var(--text-muted)',
-  },
-  nav: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 6,
-    flexGrow: 1,
-  },
-  navItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    padding: '12px 14px',
-    background: 'none',
-    border: 'none',
-    borderRadius: '10px',
-    color: 'var(--text-secondary)',
-    fontSize: '0.9rem',
-    fontWeight: 500,
-    cursor: 'pointer',
-    textAlign: 'left',
-    transition: 'var(--transition-smooth)',
-  },
-  navItemActive: {
-    background: '#16151a',
-    color: '#fff',
-    fontWeight: 600,
-    borderRadius: 12,
-    boxShadow: '0 8px 20px -10px rgba(22, 21, 26, 0.5)',
-  },
-  footer: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 16,
-    borderTop: '1px solid var(--border-glow)',
-    marginTop: 'auto',
-  },
-  userInfo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    maxWidth: '180px',
-  },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: '50%',
-    background: 'linear-gradient(135deg, var(--neon-purple), var(--neon-blue))',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    color: '#fff',
-    fontSize: '0.95rem',
-    fontWeight: 700,
-    flexShrink: 0,
-  },
-  userDetails: {
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-  },
-  userName: {
-    fontSize: '0.85rem',
-    fontWeight: 600,
-    color: 'var(--text-primary)',
-    whiteSpace: 'nowrap',
-    textOverflow: 'ellipsis',
-    overflow: 'hidden',
-  },
-  userPlan: {
-    fontSize: '0.7rem',
-    color: 'var(--neon-purple)',
-    fontWeight: 500,
-  },
-  logoutBtn: {
-    background: 'none',
-    border: 'none',
-    color: 'var(--text-muted)',
-    cursor: 'pointer',
-    padding: 8,
-    borderRadius: '6px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'var(--transition-smooth)',
-  },
 };

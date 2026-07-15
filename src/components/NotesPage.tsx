@@ -347,7 +347,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 28,
     height: 28,
     borderRadius: '50%',
-    background: 'linear-gradient(135deg, var(--neon-purple), var(--neon-blue))',
+    background: 'linear-gradient(135deg, var(--teal), var(--neon-blue))',
     border: 'none',
     color: '#fff',
     display: 'flex',

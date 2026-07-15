@@ -1815,8 +1815,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   header: {
     display: 'flex',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
     marginBottom: 24,
   },
   title: {

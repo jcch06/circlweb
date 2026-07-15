@@ -206,8 +206,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   titleBlock: {
     display: 'flex',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
   },
   title: {
     fontSize: '2rem',

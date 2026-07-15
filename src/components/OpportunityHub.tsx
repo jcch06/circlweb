@@ -879,7 +879,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: '100%',
     width: '100%',
     overflowY: 'auto',
-    padding: '24px 0',
+    padding: '30px',
   },
   header: {
     display: 'flex',

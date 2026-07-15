@@ -53,6 +53,9 @@ interface ContactsPageProps {
   user: any;
   selectedSpaceId: string | null;
   onRefreshData: () => Promise<void>;
+  /* Pilotage depuis la coquille : recherche de la sidebar, bouton "Nouveau contact" du tableau de bord */
+  initialSearch?: string;
+  addNonce?: number;
 }
 
 export const ContactsPage: React.FC<ContactsPageProps> = ({
@@ -63,12 +66,24 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
   contactTags,
   user,
   selectedSpaceId,
-  onRefreshData
+  onRefreshData,
+  initialSearch,
+  addNonce
 }) => {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(initialSearch ?? '');
   const [filterType, setFilterType] = useState<'all' | 'enriched' | 'not_enriched' | 'invalid'>('all');
   const [showAddForm, setShowAddForm] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // La recherche de la sidebar pilote le filtre de cette page
+  useEffect(() => {
+    if (initialSearch !== undefined) setSearchTerm(initialSearch);
+  }, [initialSearch]);
+
+  // "Nouveau contact" depuis le tableau de bord ouvre le formulaire ici
+  useEffect(() => {
+    if (addNonce) setShowAddForm(true);
+  }, [addNonce]);
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
 
   // Reset edit modes when contact changes
@@ -878,7 +893,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
         {bulkEnriching && (
           <div className="glass-card" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 20, height: 20, flexShrink: 0, border: '2px solid var(--neon-purple)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+              <div style={{ width: 20, height: 20, flexShrink: 0, border: '2px solid var(--teal)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
               <div style={{ flexGrow: 1 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                   <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -898,7 +913,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                   <div style={{
                     height: '100%',
                     width: `${bulkProgress.total > 0 ? (bulkProgress.done / bulkProgress.total) * 100 : 0}%`,
-                    background: 'linear-gradient(90deg, var(--neon-purple), var(--neon-blue))',
+                    background: 'linear-gradient(90deg, var(--teal), var(--neon-blue))',
                     borderRadius: 99,
                     transition: 'width 0.5s ease',
                   }} />
@@ -1155,7 +1170,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({
                     ...styles.contactCard, 
                     position: 'relative',
                     cursor: 'pointer',
-                    borderColor: isSelected ? 'var(--neon-purple)' : 'rgba(27, 23, 37, 0.06)'
+                    borderColor: isSelected ? 'var(--teal)' : 'rgba(27, 23, 37, 0.06)'
                   }}
                   onClick={() => setSelectedContactId(isSelected ? null : c.id)}
                 >
@@ -1960,7 +1975,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: 44,
     borderRadius: '12px',
     background: 'rgba(27, 23, 37, 0.04)',
-    border: '1.5px solid var(--neon-purple)',
+    border: '1.5px solid var(--teal)',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
@@ -2250,7 +2265,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: 28,
     borderRadius: '50%',
     background: 'rgba(27, 23, 37, 0.04)',
-    border: '1.5px solid var(--neon-purple)',
+    border: '1.5px solid var(--teal)',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
@@ -2348,7 +2363,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'rgba(27, 23, 37, 0.02)',
     padding: 10,
     borderRadius: 6,
-    borderLeft: '2.5px solid var(--neon-purple)',
+    borderLeft: '2.5px solid var(--teal)',
   },
   synergyIntroBox: {
     background: 'rgba(27, 23, 37, 0.03)',
@@ -2471,7 +2486,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 16,
     height: 16,
     cursor: 'pointer',
-    accentColor: 'var(--neon-purple)',
+    accentColor: 'var(--teal)',
     zIndex: 10,
   }
 };

@@ -248,7 +248,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
       {/* API Key Missing State */}
       {!hasApiKey && (
         <div className="glass-card" style={styles.setupCard}>
-          <Key size={36} color="var(--neon-purple)" style={{ marginBottom: 12 }} />
+          <Key size={36} color="var(--teal)" style={{ marginBottom: 12 }} />
           <h3>Clé API Mistral Requise</h3>
           <p style={styles.setupDesc}>
             Pour activer le cerveau IA de l'application, vous devez fournir votre clé Mistral AI.
@@ -1107,7 +1107,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 48,
     height: 48,
     borderRadius: '50%',
-    background: 'var(--neon-purple)',
+    background: 'var(--teal)',
     color: 'var(--text-primary)',
     display: 'flex',
     alignItems: 'center',

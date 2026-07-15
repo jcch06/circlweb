@@ -302,8 +302,8 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
           onClick={() => setActiveSubTab('invitations')}
           style={{
             ...styles.tabBtn,
-            color: activeSubTab === 'invitations' ? 'var(--neon-purple)' : 'var(--text-secondary)',
-            borderBottom: activeSubTab === 'invitations' ? '2px solid var(--neon-purple)' : 'none'
+            color: activeSubTab === 'invitations' ? 'var(--teal)' : 'var(--text-secondary)',
+            borderBottom: activeSubTab === 'invitations' ? '2px solid var(--teal)' : 'none'
           }}
         >
 

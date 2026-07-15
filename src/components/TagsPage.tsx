@@ -99,7 +99,7 @@ export const TagsPage: React.FC<TagsPageProps> = ({
 
   const getCategoryColor = (cat: string) => {
     switch (cat) {
-      case 'industrie': return 'var(--neon-purple)';
+      case 'industrie': return 'var(--teal)';
       case 'relation': return 'var(--neon-blue)';
       case 'contexte': return 'var(--neon-green)';
       case 'statut': return 'var(--neon-yellow)';

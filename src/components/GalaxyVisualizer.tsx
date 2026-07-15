@@ -1480,7 +1480,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: 28,
     borderRadius: '50%',
     background: 'rgba(27, 23, 37, 0.04)',
-    border: '1.5px solid var(--neon-purple)',
+    border: '1.5px solid var(--teal)',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1584,7 +1584,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'rgba(27, 23, 37, 0.02)',
     padding: 10,
     borderRadius: 6,
-    borderLeft: '2.5px solid var(--neon-purple)',
+    borderLeft: '2.5px solid var(--teal)',
   },
   synergyIntroBox: {
     background: 'rgba(27, 23, 37, 0.03)',

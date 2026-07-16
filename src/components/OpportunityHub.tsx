@@ -20,6 +20,8 @@ interface OpportunityHubProps {
   tags: any[];
   spaces?: any[];
   selectedSpaceId?: string | null;
+  /** Global galaxy selector — reused here so the analysis scope is both visible AND changeable from this page (single source of truth with the sidebar). */
+  setSelectedSpaceId?: (id: string | null) => void;
   user: any;
   /** Jump to the Contacts page filtered on a given contact's name — used to send the user straight to a contact excluded from the analysis so they can enrich it. */
   onViewContact?: (name: string) => void;
@@ -38,7 +40,7 @@ function loadUserProfile(user: any): any | null {
   }
 }
 
-export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes, user, selectedSpaceId, onViewContact }) => {
+export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes, user, spaces, selectedSpaceId, setSelectedSpaceId, onViewContact }) => {
   const [activeMode, setActiveMode] = useState<'network' | 'opportunities' | 'market' | 'intros' | 'radar' | 'history'>('network');
 
   const [loading, setLoading] = useState(false);
@@ -49,7 +51,11 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
   const [viewingArchiveId, setViewingArchiveId] = useState<string | null>(null);
   const [showProfilePopup, setShowProfilePopup] = useState(false);
   const [showExcludedList, setShowExcludedList] = useState(false);
-  const [hideWeakSynergies, setHideWeakSynergies] = useState(true);
+  // Off by default: on an enriched network, "faible confiance" synergies are
+  // often the valuable cross-sector, non-obvious ones — hiding them by default
+  // made the analysis feel far emptier than it is. The user can still hide
+  // them via the checkbox; the confidence badge already flags their strength.
+  const [hideWeakSynergies, setHideWeakSynergies] = useState(false);
 
   // Analysis history & delta comparison
   const [history, setHistory] = useState<AnalysisHistoryEntry[]>([]);
@@ -281,16 +287,34 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
           <p style={styles.subtitle}>Mistral Large - Map/Reduce</p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          <button 
-            className="glass-button" 
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {setSelectedSpaceId && (
+            <select
+              value={selectedSpaceId ?? ''}
+              onChange={(e) => setSelectedSpaceId(e.target.value || null)}
+              disabled={loading}
+              title="Périmètre de l'analyse"
+              style={{
+                fontSize: '0.8rem', padding: '7px 12px', borderRadius: 8,
+                background: 'var(--bg-elevated, rgba(27,23,37,0.04))', color: 'var(--text-primary)',
+                border: '1px solid var(--border)', cursor: loading ? 'default' : 'pointer', maxWidth: 220
+              }}
+            >
+              <option value="">🌌 Toutes les galaxies</option>
+              {(spaces || []).map((s: any) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          )}
+          <button
+            className="glass-button"
             onClick={() => setShowProfilePopup(true)}
             style={{ fontSize: '0.8rem', padding: '6px 14px', whiteSpace: 'nowrap' }}
           >
             Profil
           </button>
-          <button 
-            className="glow-button primary" 
+          <button
+            className="glow-button primary"
             onClick={() => triggerV3Pipeline(true)}
             disabled={loading || contacts.length === 0}
             style={{ whiteSpace: 'nowrap' }}
@@ -299,6 +323,15 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
           </button>
         </div>
       </div>
+
+      {/* Périmètre courant — visible en clair sous le header */}
+      {hasApiKey && (
+        <p style={{ ...styles.subtitle, marginTop: -8, marginBottom: 4 }}>
+          Périmètre : <b style={{ color: 'var(--text-primary)' }}>
+            {selectedSpaceId ? ((spaces || []).find((s: any) => s.id === selectedSpaceId)?.name || 'Espace sélectionné') : 'Toutes les galaxies'}
+          </b> · {contacts.length} contact(s)
+        </p>
+      )}
 
       {/* API Key Missing State */}
       {!hasApiKey && (

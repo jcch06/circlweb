@@ -101,10 +101,18 @@ function buildLockedContext(lockedNames: string[]): string {
 }
 
 async function callMistralServer(client: Mistral, prompt: string, model: string = MAP_REDUCE_MODEL): Promise<string> {
-  let retries = 3;
+  // Kept modest and bounded well under this function's own maxDuration
+  // (60s, see vercel.json) — a 429 here needs the caller to retry the WHOLE
+  // request after a real delay (a fresh invocation gets a fresh budget),
+  // not this function stalling on a backoff long enough to get killed
+  // mid-retry by its own execution timeout. See postOracleStep in
+  // src/lib/mistral.ts for the client-side retry that actually rides out a
+  // sustained per-minute rate limit (observed as low as 4 req/min on some
+  // account tiers).
+  const maxAttempts = 3;
   let lastError: any = null;
 
-  while (retries > 0) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const response = await client.chat.complete({
         model,
@@ -115,8 +123,9 @@ async function callMistralServer(client: Mistral, prompt: string, model: string 
       return typeof choice === 'string' ? choice : (choice ? String(choice) : '{}');
     } catch (err: any) {
       lastError = err;
-      await sleep(err.statusCode === 429 ? 3000 : 1000);
-      retries--;
+      if (attempt === maxAttempts) break;
+      const delay = err.statusCode === 429 ? Math.min(5000 * attempt, 10000) : 1000;
+      await sleep(delay);
     }
   }
   throw lastError || new Error('Mistral API failure');
@@ -208,8 +217,14 @@ ${batchData}
     }
     console.error('Mistral MAP: réponse JSON invalide, fallback appliqué.', text);
     return { ...FALLBACK_BATCH_RESULT };
-  } catch (err) {
+  } catch (err: any) {
     console.error('Mistral MAP batch failure:', err);
+    // A rate-limit exhaustion is not "nothing found" — silently returning the
+    // empty fallback here made a saturated Mistral account look identical to
+    // a network with no synergies, and the client had no way to tell the
+    // difference or retry. Let it propagate so the handler can report it
+    // distinctly (429) instead of masquerading as a real empty result.
+    if (err?.statusCode === 429) throw err;
     return { ...FALLBACK_BATCH_RESULT };
   }
 }
@@ -303,6 +318,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(200).json(redacted);
   } catch (err: any) {
     console.error('Oracle map-batch failure:', err);
-    res.status(500).json({ error: err.message || 'Oracle map-batch failed' });
+    // Surfaced as 429 (not 500) so the client can tell "Mistral's account-wide
+    // rate limit is saturated, retry the whole call after a real delay" apart
+    // from a genuine failure — see postOracleStep in src/lib/mistral.ts.
+    const status = err?.statusCode === 429 ? 429 : 500;
+    res.status(status).json({ error: err.message || 'Oracle map-batch failed', rateLimited: status === 429 });
   }
 }

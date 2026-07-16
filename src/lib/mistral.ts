@@ -1082,18 +1082,35 @@ export interface AnalysisHistoryMeta {
   label?: string;
 }
 
+/**
+ * A 429 here means Mistral's account-wide rate limit (observed as low as
+ * 4 req/minute on some tiers) is saturated — the server-side retry inside
+ * each api/oracle/*.ts call is deliberately short (bounded well under its
+ * own maxDuration, see vercel.json) so it can't itself wait out a per-minute
+ * window without getting killed mid-retry. Only the client can afford a real
+ * wait: each retried call here is a brand-new serverless invocation with its
+ * own fresh execution budget, so retrying the WHOLE request after a genuine
+ * delay is what actually rides out a sustained rate limit.
+ */
 async function postOracleStep<T>(path: string, body: any): Promise<T> {
-  const authHeader = await getAuthHeader();
-  const response = await fetch(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeader },
-    body: JSON.stringify(body)
-  });
-  if (!response.ok) {
+  const maxAttempts = 4;
+  let lastError: any = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const authHeader = await getAuthHeader();
+    const response = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader },
+      body: JSON.stringify(body)
+    });
+    if (response.ok) return response.json();
+
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || `Oracle proxy error ${response.status} (${path})`);
+    lastError = new Error(err.error || `Oracle proxy error ${response.status} (${path})`);
+    if (response.status !== 429 || attempt === maxAttempts) throw lastError;
+    await sleep(20000 * attempt);
   }
-  return response.json();
+  throw lastError;
 }
 
 /** Tiny stable string hash (djb2) for cache keys — not cryptographic. */

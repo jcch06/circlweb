@@ -234,7 +234,14 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
       refreshHistory();
     } catch (err: any) {
       console.error(err);
-      alert(`Erreur lors de l'analyse Mistral AI : ${err?.message || 'erreur inconnue'}.\n\nSi l'analyse a mis longtemps avant d'échouer, il s'agit probablement d'un délai serveur dépassé sur un gros réseau — réessayez, ou réduisez le périmètre analysé (un espace précis plutôt que "Toutes les galaxies").`);
+      const message = err?.message || 'erreur inconnue';
+      const isRateLimit = /429|rate.?limit/i.test(message);
+      alert(
+        `Erreur lors de l'analyse Mistral AI : ${message}.\n\n` +
+        (isRateLimit
+          ? "Le compte Mistral a atteint sa limite de requêtes par minute — ça arrive surtout sur un gros réseau (beaucoup de lots à analyser d'affilée). L'analyse a déjà réessayé plusieurs fois automatiquement avant d'abandonner. Réessayez dans quelques minutes, ou vérifiez le palier de votre clé API Mistral si ça persiste."
+          : "Si l'analyse a mis longtemps avant d'échouer, réessayez, ou réduisez le périmètre analysé (un espace précis plutôt que \"Toutes les galaxies\").")
+      );
     } finally {
       setPipelineRunning(false);
       setLoading(false);

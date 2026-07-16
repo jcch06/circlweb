@@ -114,10 +114,18 @@ function buildLockedContext(lockedNames: string[]): string {
 }
 
 async function callMistralServer(client: Mistral, prompt: string, model: string = MAP_REDUCE_MODEL): Promise<string> {
-  let retries = 3;
+  // Kept modest and bounded well under this function's own maxDuration
+  // (60s, see vercel.json) — a 429 here needs the caller to retry the WHOLE
+  // request after a real delay (a fresh invocation gets a fresh budget),
+  // not this function stalling on a backoff long enough to get killed
+  // mid-retry by its own execution timeout. See postOracleStep in
+  // src/lib/mistral.ts for the client-side retry that actually rides out a
+  // sustained per-minute rate limit (observed as low as 4 req/min on some
+  // account tiers).
+  const maxAttempts = 3;
   let lastError: any = null;
 
-  while (retries > 0) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const response = await client.chat.complete({
         model,
@@ -128,8 +136,9 @@ async function callMistralServer(client: Mistral, prompt: string, model: string 
       return typeof choice === 'string' ? choice : (choice ? String(choice) : '{}');
     } catch (err: any) {
       lastError = err;
-      await sleep(err.statusCode === 429 ? 3000 : 1000);
-      retries--;
+      if (attempt === maxAttempts) break;
+      const delay = err.statusCode === 429 ? Math.min(5000 * attempt, 10000) : 1000;
+      await sleep(delay);
     }
   }
   throw lastError || new Error('Mistral API failure');
@@ -232,8 +241,12 @@ ${JSON.stringify(catalog, null, 2)}
     }
     console.error('Mistral SUPPLY/DEMAND: réponse JSON invalide, fallback vide appliqué.', text);
     return [];
-  } catch (err) {
+  } catch (err: any) {
     console.error('Mistral SUPPLY/DEMAND failure:', err);
+    // See map-batch.ts's identical guard: a rate-limit exhaustion must not
+    // masquerade as a genuine empty matrix — let it propagate so the handler
+    // can report 429 distinctly.
+    if (err?.statusCode === 429) throw err;
     return [];
   }
 }
@@ -341,6 +354,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(200).json(supplyDemand);
   } catch (err: any) {
     console.error('Oracle supply-demand failure:', err);
-    res.status(500).json({ error: err.message || 'Oracle supply-demand failed' });
+    const status = err?.statusCode === 429 ? 429 : 500;
+    res.status(status).json({ error: err.message || 'Oracle supply-demand failed', rateLimited: status === 429 });
   }
 }

@@ -316,11 +316,17 @@ function packClusterIdsIntoGroups(clusterGroups: string[][]): string[][] {
 }
 
 async function computeEmbeddings(client: Mistral, contacts: any[], notes: any[]): Promise<{ contactId: string; vector: number[] }[]> {
-  const results: { contactId: string; vector: number[] }[] = [];
   const BATCH_SIZE = 20;
+  const batches: any[][] = [];
+  for (let i = 0; i < contacts.length; i += BATCH_SIZE) batches.push(contacts.slice(i, i + BATCH_SIZE));
 
-  for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
-    const batch = contacts.slice(i, i + BATCH_SIZE);
+  // Fired concurrently rather than awaited one at a time — on a large/merged
+  // network with many contacts needing a fresh embedding (a new scope starts
+  // with an empty cache), a sequential loop of N Mistral calls could exceed
+  // this function's execution budget on its own, even though each individual
+  // call is fast. Concurrent requests turn N sequential round-trips into one
+  // wall-clock round-trip (bounded by Mistral's own rate limiting, not ours).
+  const batchResults = await Promise.all(batches.map(async (batch) => {
     const inputs = batch.map(c => {
       const contactNotes = notes.filter((n: any) => n.contact_id === c.id).map((n: any) => n.content).join(' ');
       const skills = Array.isArray(c.skills) ? c.skills.join(', ') : '';
@@ -332,15 +338,14 @@ async function computeEmbeddings(client: Mistral, contacts: any[], notes: any[])
     });
     try {
       const embedResponse = await client.embeddings.create({ model: 'mistral-embed', inputs });
-      embedResponse.data.forEach((d, idx) => {
-        results.push({ contactId: batch[idx].id, vector: d.embedding as number[] });
-      });
+      return embedResponse.data.map((d, idx) => ({ contactId: batch[idx].id, vector: d.embedding as number[] }));
     } catch (err) {
       console.error('Mistral embeddings error:', err);
+      return [];
     }
-  }
+  }));
 
-  return results;
+  return batchResults.flat();
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

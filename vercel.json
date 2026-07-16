@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/oracle/*.ts": {
+      "maxDuration": 60
+    }
+  },
   "headers": [
     {
       "source": "/index.html",

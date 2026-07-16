@@ -232,9 +232,9 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
       );
       setV3Result(result);
       refreshHistory();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Erreur lors de l'analyse Mistral AI. Vérifiez votre clé API.");
+      alert(`Erreur lors de l'analyse Mistral AI : ${err?.message || 'erreur inconnue'}.\n\nSi l'analyse a mis longtemps avant d'échouer, il s'agit probablement d'un délai serveur dépassé sur un gros réseau — réessayez, ou réduisez le périmètre analysé (un espace précis plutôt que "Toutes les galaxies").`);
     } finally {
       setPipelineRunning(false);
       setLoading(false);

@@ -244,7 +244,10 @@ function computeBetweennessCentrality(similarityMatrix: number[][], threshold: n
 interface BridgeContact { id: string; name: string; role: string; company: string; centralityScore: number; }
 interface MistralBatchResult {
   recurrentNeeds: string[];
-  immediateSynergies: { contactId1: string; contactName1: string; contactId2: string; contactName2: string; reason: string }[];
+  immediateSynergies: {
+    contactId1: string; contactName1: string; contactId2: string; contactName2: string;
+    reason: string; confidence?: 'high' | 'medium' | 'low'; evidence?: string;
+  }[];
   keyCompetencies: string[];
 }
 interface TopologyBatch { contactIds: string[]; clusterId: string | null; contactIdsHash: string | null; cached: MistralBatchResult | null; }
@@ -416,7 +419,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ...result,
       immediateSynergies: result.immediateSynergies.map(s => {
         if (isLocked(s.contactId1) || isLocked(s.contactId2)) {
-          return { ...s, reason: "Synergie potentielle détectée — demandez l'accès aux contacts concernés pour voir les détails." };
+          // "evidence" quotes a locked contact's note/skill verbatim — must be
+          // masked here too, not just "reason", or the redaction is a leak.
+          return { ...s, reason: "Synergie potentielle détectée — demandez l'accès aux contacts concernés pour voir les détails.", evidence: '' };
         }
         return s;
       })

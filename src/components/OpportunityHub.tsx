@@ -49,6 +49,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
   const [viewingArchiveId, setViewingArchiveId] = useState<string | null>(null);
   const [showProfilePopup, setShowProfilePopup] = useState(false);
   const [showExcludedList, setShowExcludedList] = useState(false);
+  const [hideWeakSynergies, setHideWeakSynergies] = useState(true);
 
   // Analysis history & delta comparison
   const [history, setHistory] = useState<AnalysisHistoryEntry[]>([]);
@@ -725,9 +726,15 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                      L'algorithme a découpé votre réseau en {v3Result.batches.length} lots. Voici les détails extraits pour chaque groupe.
-                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>
+                        L'algorithme a découpé votre réseau en {v3Result.batches.length} lots. Voici les détails extraits pour chaque groupe.
+                      </p>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        <input type="checkbox" checked={hideWeakSynergies} onChange={e => setHideWeakSynergies(e.target.checked)} />
+                        Masquer les synergies à faible confiance
+                      </label>
+                    </div>
 
                     {v3Result.batches.map((batch, i) => (
                       <div key={i} className="glass-card" style={{ padding: 24, borderLeft: '3px solid var(--border-hover)' }}>
@@ -742,21 +749,54 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                           </div>
                         </div>
 
-                        {batch.immediateSynergies && batch.immediateSynergies.length > 0 && (
-                          <div style={{ marginBottom: 16 }}>
-                            <span style={styles.eyebrow}>Synergies Immédiates</span>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-                              {batch.immediateSynergies.map((syn, j) => (
-                                <div key={j} style={{ padding: 12, background: 'rgba(27, 23, 37, 0.03)', borderRadius: 8, border: '1px solid var(--border)' }}>
-                                  <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
-                                    {syn.contactName1} <span style={{ color: 'var(--text-muted)' }}>&</span> {syn.contactName2}
-                                  </div>
-                                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{syn.reason}</div>
+                        {(() => {
+                          const visibleSynergies = hideWeakSynergies
+                            ? batch.immediateSynergies.filter(s => s.confidence !== 'low')
+                            : batch.immediateSynergies;
+                          const hiddenCount = batch.immediateSynergies.length - visibleSynergies.length;
+                          if (batch.immediateSynergies.length === 0) return null;
+                          return (
+                            <div style={{ marginBottom: 16 }}>
+                              <span style={styles.eyebrow}>Synergies Immédiates</span>
+                              {visibleSynergies.length === 0 ? (
+                                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 8 }}>
+                                  {hiddenCount} synergie(s) à faible confiance masquée(s).
+                                </p>
+                              ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                                  {visibleSynergies.map((syn, j) => (
+                                    <div key={j} style={{ padding: 12, background: 'rgba(27, 23, 37, 0.03)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+                                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                                          {syn.contactName1} <span style={{ color: 'var(--text-muted)' }}>&</span> {syn.contactName2}
+                                        </div>
+                                        <span style={{
+                                          fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', padding: '2px 8px', borderRadius: 4, flexShrink: 0,
+                                          color: syn.confidence === 'high' ? '#ffffff' : syn.confidence === 'medium' ? 'var(--text-primary)' : 'var(--text-muted)',
+                                          background: syn.confidence === 'high' ? 'var(--accent)' : syn.confidence === 'medium' ? 'rgba(27, 23, 37, 0.1)' : 'rgba(27, 23, 37, 0.04)',
+                                          border: syn.confidence === 'low' ? '1px solid var(--border)' : 'none'
+                                        }}>
+                                          {syn.confidence === 'high' ? 'Confiance forte' : syn.confidence === 'medium' ? 'Confiance moyenne' : 'Confiance faible'}
+                                        </span>
+                                      </div>
+                                      <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{syn.reason}</div>
+                                      {syn.evidence && (
+                                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 6, fontStyle: 'italic' }}>
+                                          « {syn.evidence} »
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                  {hiddenCount > 0 && (
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
+                                      + {hiddenCount} synergie(s) à faible confiance masquée(s).
+                                    </p>
+                                  )}
                                 </div>
-                              ))}
+                              )}
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
 
                         <div>
                           <span style={styles.eyebrow}>Mots-Clés</span>

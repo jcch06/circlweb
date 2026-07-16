@@ -29,7 +29,10 @@ async function authenticateRequest(req: VercelRequest): Promise<{ userId: string
 
 interface MistralBatchResult {
   recurrentNeeds: string[];
-  immediateSynergies: { contactId1: string; contactName1: string; contactId2: string; contactName2: string; reason: string }[];
+  immediateSynergies: {
+    contactId1: string; contactName1: string; contactId2: string; contactName2: string;
+    reason: string; confidence?: 'high' | 'medium' | 'low'; evidence?: string;
+  }[];
   keyCompetencies: string[];
 }
 

@@ -895,15 +895,19 @@ ADAPTE ton analyse au profil ci-dessus. Si le poste/les compétences pointent ve
 // ============================================================================
 // MAP: Process a single batch
 // ============================================================================
+export interface ImmediateSynergy {
+  contactId1: string;
+  contactName1: string;
+  contactId2: string;
+  contactName2: string;
+  reason: string;
+  confidence: 'high' | 'medium' | 'low';
+  evidence: string;
+}
+
 export interface MistralBatchResult {
   recurrentNeeds: string[];
-  immediateSynergies: {
-    contactId1: string;
-    contactName1: string;
-    contactId2: string;
-    contactName2: string;
-    reason: string;
-  }[];
+  immediateSynergies: ImmediateSynergy[];
   keyCompetencies: string[];
 }
 
@@ -1015,10 +1019,24 @@ function normalizeSynthesis(synthesis: MistralGlobalSynthesis): MistralGlobalSyn
   };
 }
 
+function normalizeSynergy(s: any): ImmediateSynergy {
+  return {
+    contactId1: typeof s?.contactId1 === 'string' ? s.contactId1 : '',
+    contactName1: typeof s?.contactName1 === 'string' ? s.contactName1 : '',
+    contactId2: typeof s?.contactId2 === 'string' ? s.contactId2 : '',
+    contactName2: typeof s?.contactName2 === 'string' ? s.contactName2 : '',
+    reason: typeof s?.reason === 'string' ? s.reason : '',
+    // Older cached/archived synergies predate this field entirely — treat as
+    // "medium" (neither hidden by a "low" filter nor falsely flagged "high").
+    confidence: s?.confidence === 'high' || s?.confidence === 'low' ? s.confidence : 'medium',
+    evidence: typeof s?.evidence === 'string' ? s.evidence : ''
+  };
+}
+
 function normalizeBatchResult(batch: any): MistralBatchResult {
   return {
     recurrentNeeds: normalizeStringArray(batch?.recurrentNeeds),
-    immediateSynergies: Array.isArray(batch?.immediateSynergies) ? batch.immediateSynergies : [],
+    immediateSynergies: Array.isArray(batch?.immediateSynergies) ? batch.immediateSynergies.map(normalizeSynergy) : [],
     keyCompetencies: normalizeStringArray(batch?.keyCompetencies)
   };
 }

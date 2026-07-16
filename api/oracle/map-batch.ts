@@ -30,7 +30,12 @@ async function authenticateRequest(req: VercelRequest): Promise<{ userId: string
 
 interface MistralBatchResult {
   recurrentNeeds: string[];
-  immediateSynergies: { contactId1: string; contactName1: string; contactId2: string; contactName2: string; reason: string }[];
+  immediateSynergies: {
+    contactId1: string; contactName1: string; contactId2: string; contactName2: string;
+    reason: string;
+    confidence: 'high' | 'medium' | 'low';
+    evidence: string;
+  }[];
   keyCompetencies: string[];
 }
 
@@ -155,6 +160,8 @@ Analyse EN PROFONDEUR le lot de contacts fourni ci-dessous et extrais :
 - RIGUEUR AVANT TOUT : ne propose une synergie QUE si elle s'appuie sur des données réelles du contact (poste, compétences, besoins, notes). Il vaut mieux renvoyer 0 ou 1 synergie SOLIDE qu'un lot de synergies plausibles mais inventées. Un tableau "immediateSynergies" vide est une réponse VALIDE et attendue quand les données ne soutiennent aucune synergie crédible.
 - N'invente JAMAIS un besoin, une compétence, un rôle ou une identité qui ne figure pas explicitement dans les balises <contact>. Si un contact n'a qu'un nom et aucune autre donnée, ne construis AUCUNE synergie autour de lui.
 - Chaque synergie doit citer, dans sa "reason", l'élément concret (compétence, besoin ou note) de CHAQUE contact qui la justifie — pas une généralité.
+- Chaque synergie porte un "confidence" honnête : "high" seulement si le besoin ET la compétence complémentaire sont EXPLICITEMENT écrits dans les données des deux contacts (ex: besoin="Recrutement Tech" chez A, skills contient "Recrutement" chez B). "medium" si le lien est plausible mais repose sur une déduction (ex: poste/secteur suggère la compétence sans qu'elle soit listée). "low" si c'est une hypothèse plus lointaine que tu choisis quand même de proposer. Ne mets jamais "high" par défaut.
+- "evidence" cite le texte EXACT (mot pour mot) tiré de <skills>, <needs> ou <notes> qui fonde la synergie — pas une paraphrase, pas une reformulation.
 - Réponds STRICTEMENT avec un objet JSON valide respectant le format ci-dessous, sans aucun texte, markdown ou commentaire additionnel.
 </rules>
 
@@ -171,7 +178,9 @@ ${batchData}
       "contactName1": "Nom du premier",
       "contactId2": "id exact du deuxieme contact",
       "contactName2": "Nom du deuxieme",
-      "reason": "Explication concrète et actionnable de la synergie, même indirecte"
+      "reason": "Explication concrète et actionnable de la synergie, même indirecte",
+      "confidence": "high | medium | low",
+      "evidence": "Citation exacte de la donnée (skill/need/note) qui justifie la synergie"
     }
   ],
   "keyCompetencies": ["mot cle 1", "mot cle 2"]
@@ -270,7 +279,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ...result,
       immediateSynergies: result.immediateSynergies.map(s => {
         if (isLocked(s.contactId1) || isLocked(s.contactId2)) {
-          return { ...s, reason: "Synergie potentielle détectée — demandez l'accès aux contacts concernés pour voir les détails." };
+          // "evidence" quotes a locked contact's note/skill verbatim — must be
+          // masked here too, not just "reason", or the redaction is a leak.
+          return { ...s, reason: "Synergie potentielle détectée — demandez l'accès aux contacts concernés pour voir les détails.", evidence: '' };
         }
         return s;
       })

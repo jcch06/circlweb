@@ -27,6 +27,57 @@ async function authenticateRequest(req: VercelRequest): Promise<{ userId: string
   }
 }
 
+// Chunked `.in()` — a large id list serialized into one query string can blow
+// the gateway's request-line limit (bare "Bad Request"). Same helper as
+// topology.ts / supply-demand.ts.
+async function selectInChunks<T = any>(
+  build: (chunk: string[]) => PromiseLike<{ data: T[] | null; error: any }>,
+  ids: string[],
+  chunkSize = 150
+): Promise<{ data: T[]; error: any }> {
+  if (ids.length === 0) return { data: [], error: null };
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += chunkSize) chunks.push(ids.slice(i, i + chunkSize));
+  const results = await Promise.all(chunks.map(build));
+  const failed = results.find(r => r.error);
+  if (failed) return { data: [], error: failed.error };
+  return { data: results.flatMap(r => r.data || []), error: null };
+}
+
+// Build a compact, per-batch roster REDUCE can reason on directly: who is
+// actually in each batch (name, role, company, estimated skills/needs). This
+// is the context REDUCE lacked — batchResults only carry aggregated
+// needs/competencies, so it could never cross-match a specific profile in one
+// batch with one in another. Locked contacts keep their name but everything
+// else is redacted (never leak role/company for a contact the user can't see).
+// Notes are deliberately NOT included here (they stay in MAP) — this roster is
+// a structural map of the network, not a place to surface private note text.
+function buildBatchRosters(
+  batches: string[][],
+  contactById: Map<string, any>,
+  lockedNameSet: Set<string>
+): string {
+  const MAX_PER_BATCH = 20; // batches are ~15-30; keeps the prompt bounded.
+  const lines: string[] = [];
+  batches.forEach((ids, i) => {
+    const members = ids
+      .map(id => contactById.get(id))
+      .filter(Boolean)
+      .slice(0, MAX_PER_BATCH)
+      .map(c => {
+        const name = `${c.first_name} ${c.last_name || ''}`.trim();
+        if (lockedNameSet.has(name)) return `  - ${name} (profil verrouillé — détails masqués)`;
+        const skills = Array.isArray(c.skills) ? c.skills.filter((s: any) => s && String(s).trim()).slice(0, 6).join(', ') : '';
+        const needs = Array.isArray(c.inferred_needs) ? c.inferred_needs.filter((n: any) => n && String(n).trim()).slice(0, 6).join(', ') : '';
+        const role = c.job_title || 'Inconnu';
+        const company = c.company || 'Inconnue';
+        return `  - ${name} — ${role} @ ${company}${skills ? ` | compétences estimées : ${skills}` : ''}${needs ? ` | besoins estimés : ${needs}` : ''}`;
+      });
+    if (members.length > 0) lines.push(`Lot ${i + 1} :\n${members.join('\n')}`);
+  });
+  return lines.join('\n\n');
+}
+
 interface MistralBatchResult {
   recurrentNeeds: string[];
   immediateSynergies: {
@@ -231,17 +282,24 @@ async function synthesizeNetwork(
   batchResults: MistralBatchResult[],
   userContext: string,
   bridgeContacts: BridgeContact[],
-  lockedContext: string
+  lockedContext: string,
+  batchRosters: string
 ): Promise<MistralGlobalSynthesis> {
   const aggregatedData = JSON.stringify(batchResults, null, 2);
   const bridgeContext = bridgeContacts.length > 0
     ? `\n<bridge_contacts>\nCes contacts relient structurellement des parties autrement séparées du réseau (calculé par centralité d'intermédiarité). Ce sont les meilleurs candidats pour des introductions stratégiques et des chaînes de valeur inter-groupes :\n${bridgeContacts.map(b => `- ${b.name} (${b.role} chez ${b.company})`).join('\n')}\n</bridge_contacts>\n`
     : '';
+  // Real per-batch roster (name/role/company/estimated skills+needs). Lets
+  // REDUCE ground cross-batch synergies and value chains on actual named
+  // profiles rather than only the compact aggregated needs/competencies.
+  const rosterContext = batchRosters
+    ? `\n<composition_des_lots>\nVoici QUI compose chaque lot (nom, poste, entreprise, compétences/besoins estimés). Sers-t'en pour croiser des profils PRÉCIS d'un lot à l'autre et nommer les bons contacts dans les chaînes de valeur — sans jamais inventer de personne absente de cette liste.\n${batchRosters}\n</composition_des_lots>\n`
+    : '';
 
   const prompt = `<role>
 Tu es "Oracle REDUCE", un super-cerveau stratégique spécialisé dans la consolidation d'analyses de réseaux professionnels. Ta mission est de fusionner des dizaines d'analyses locales (par lots) en une synthèse globale d'une qualité exceptionnelle.
 </role>
-${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${bridgeContext}${lockedContext}
+${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${bridgeContext}${rosterContext}${lockedContext}
 <instructions>
 1. Fusionne les besoins similaires ou redondants détectés dans les différents lots en "Macro-Besoins" consolidés (ne liste pas les doublons séparément).
 2. Construis des chaînes de valeur globales (value chains) qui relient plusieurs contacts de lots DIFFÉRENTS entre eux autour d'un objectif business commun (ex : A a un besoin, B a la compétence, C a le réseau/financement pour industrialiser). Quand c'est pertinent, utilise les <bridge_contacts> comme maillons de connexion entre groupes.
@@ -326,7 +384,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const apiKey = process.env.MISTRAL_API_KEY;
     if (!apiKey) { res.status(500).json({ error: 'Mistral API key is not configured on the server' }); return; }
 
-    const { batchResults, bridgeContacts, lockedContactNames, userProfile } = req.body || {};
+    const { batchResults, batches, bridgeContacts, lockedContactNames, userProfile } = req.body || {};
     if (!Array.isArray(batchResults)) {
       res.status(400).json({ error: 'batchResults must be an array' });
       return;
@@ -338,7 +396,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const lockedContext = buildLockedContext(lockedNames);
     const lockedNameSet = new Set(lockedNames);
 
-    const synthesis = await synthesizeNetwork(client, batchResults, userContext, Array.isArray(bridgeContacts) ? bridgeContacts : [], lockedContext);
+    // Build the real per-batch roster (name/role/company/skills/needs) so
+    // REDUCE can cross-match specific profiles across batches. Best-effort:
+    // any fetch problem just falls back to the summary-only synthesis (empty
+    // roster) rather than failing the whole step.
+    let batchRosters = '';
+    try {
+      const supabaseUrl = process.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+      const batchIdArrays: string[][] = Array.isArray(batches)
+        ? batches.filter((b: any) => Array.isArray(b)).map((b: any[]) => b.map(String))
+        : [];
+      if (supabaseUrl && supabaseAnonKey && batchIdArrays.length > 0) {
+        const allIds = Array.from(new Set(batchIdArrays.flat()));
+        const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+          global: { headers: { Authorization: `Bearer ${auth.token}` } }
+        });
+        const { data: rosterContacts, error: rosterError } = await selectInChunks<any>(
+          chunk => userSupabase.from('contacts').select('id, first_name, last_name, job_title, company, skills, inferred_needs').in('id', chunk),
+          allIds
+        );
+        if (rosterError) {
+          console.error('Oracle reduce: roster contacts fetch failed, continuing summary-only', rosterError);
+        } else {
+          const contactById = new Map<string, any>((rosterContacts || []).map((c: any) => [c.id, c]));
+          batchRosters = buildBatchRosters(batchIdArrays, contactById, lockedNameSet);
+        }
+      }
+    } catch (err) {
+      console.error('Oracle reduce: roster build failed, continuing summary-only', err);
+    }
+
+    const synthesis = await synthesizeNetwork(client, batchResults, userContext, Array.isArray(bridgeContacts) ? bridgeContacts : [], lockedContext, batchRosters);
 
     const redacted: MistralGlobalSynthesis = {
       ...synthesis,

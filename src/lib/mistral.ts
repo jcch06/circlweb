@@ -1286,6 +1286,11 @@ export async function runMistralOracleBatchPipeline(
 
   const synthesis = await postOracleStep<MistralGlobalSynthesis>('/api/oracle/reduce', {
     batchResults,
+    // Per-batch membership so REDUCE can fetch a real roster (name/role/company
+    // per contact, server-side + redacted) and ground cross-batch synergies on
+    // actual profiles instead of only the compact needs/competencies summary.
+    batches: topology.batches.map(b => b.contactIds),
+    spaceId,
     bridgeContacts: topology.bridgeContacts,
     lockedContactNames: topology.lockedContactNames,
     userProfile: profileForPipeline

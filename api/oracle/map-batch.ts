@@ -90,7 +90,9 @@ function buildUserContext(userProfile: any): string {
 L'utilisateur veut MONÉTISER et VALORISER son réseau. Leviers de valeur prioritaires, dérivés de SON profil :
 ${angles.map((a: string, i: number) => `${i + 1}. ${a}`).join('\n')}
 
-ADAPTE ton analyse au profil ci-dessus. Si le poste/les compétences pointent vers un domaine précis (ex : "architecte" → immobilier/urbanisme, "développeur" → consulting tech, "avocat" → conseil juridique, "élu/politique" → influence & coalitions, "dirigeant associatif" → mécénat & partenariats), PRIORISE les opportunités ALIGNÉES avec son expertise et ses objectifs déclarés.`;
+ADAPTE ton analyse au profil ci-dessus. Si le poste/les compétences pointent vers un domaine précis (ex : "architecte" → immobilier/urbanisme, "développeur" → consulting tech, "avocat" → conseil juridique, "élu/politique" → influence & coalitions, "dirigeant associatif" → mécénat & partenariats), PRIORISE les opportunités ALIGNÉES avec son expertise et ses objectifs déclarés.
+
+IMPORTANT : cet alignement sert à PRIORISER, jamais à faire disparaître une observation réelle. "recurrentNeeds" et "keyCompetencies" sont un résumé factuel de ce lot de contacts — ils doivent exister dès que le lot contient des données exploitables, même si rien ne colle au profil de l'utilisateur. Seules "immediateSynergies" (qui exigent une vraie complémentarité entre deux contacts) peuvent légitimement rester vides.`;
 }
 
 function buildLockedContext(lockedNames: string[]): string {

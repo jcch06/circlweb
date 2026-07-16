@@ -103,7 +103,9 @@ function buildUserContext(userProfile: any): string {
 L'utilisateur veut MONÉTISER et VALORISER son réseau. Leviers de valeur prioritaires, dérivés de SON profil :
 ${angles.map((a: string, i: number) => `${i + 1}. ${a}`).join('\n')}
 
-ADAPTE ton analyse au profil ci-dessus. Si le poste/les compétences pointent vers un domaine précis (ex : "architecte" → immobilier/urbanisme, "développeur" → consulting tech, "avocat" → conseil juridique, "élu/politique" → influence & coalitions, "dirigeant associatif" → mécénat & partenariats), PRIORISE les opportunités ALIGNÉES avec son expertise et ses objectifs déclarés.`;
+ADAPTE ton analyse au profil ci-dessus. Si le poste/les compétences pointent vers un domaine précis (ex : "architecte" → immobilier/urbanisme, "développeur" → consulting tech, "avocat" → conseil juridique, "élu/politique" → influence & coalitions, "dirigeant associatif" → mécénat & partenariats), PRIORISE les opportunités ALIGNÉES avec son expertise et ses objectifs déclarés.
+
+IMPORTANT : cet alignement détermine UNIQUEMENT "opportunityForUser" (true/false), jamais l'existence d'une ligne. Une ligne "supplyDemand" doit exister dès qu'un vrai besoin a des demanders ET des suppliers réels dans le catalogue, même si ce besoin ne sert pas directement l'utilisateur — mets simplement "opportunityForUser" à false dans ce cas plutôt que d'omettre la ligne.`;
 }
 
 function buildLockedContext(lockedNames: string[]): string {

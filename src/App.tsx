@@ -203,6 +203,7 @@ function App() {
               spaces={spaces}
               selectedSpaceId={selectedSpaceId}
               user={session.user}
+              onViewContact={(name) => { setSearchQuery(name); setActiveTab('contacts'); }}
             />
           )}
 

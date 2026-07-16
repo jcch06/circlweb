@@ -21,6 +21,8 @@ interface OpportunityHubProps {
   spaces?: any[];
   selectedSpaceId?: string | null;
   user: any;
+  /** Jump to the Contacts page filtered on a given contact's name — used to send the user straight to a contact excluded from the analysis so they can enrich it. */
+  onViewContact?: (name: string) => void;
 }
 
 /** Resolve the user's Oracle profile from auth metadata or localStorage fallback. */
@@ -36,7 +38,7 @@ function loadUserProfile(user: any): any | null {
   }
 }
 
-export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes, user, selectedSpaceId }) => {
+export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes, user, selectedSpaceId, onViewContact }) => {
   const [activeMode, setActiveMode] = useState<'network' | 'opportunities' | 'market' | 'intros' | 'radar' | 'history'>('network');
 
   const [loading, setLoading] = useState(false);
@@ -46,6 +48,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
   const [v3Result, setV3Result] = useState<MistralPipelineResult | null>(null);
   const [viewingArchiveId, setViewingArchiveId] = useState<string | null>(null);
   const [showProfilePopup, setShowProfilePopup] = useState(false);
+  const [showExcludedList, setShowExcludedList] = useState(false);
 
   // Analysis history & delta comparison
   const [history, setHistory] = useState<AnalysisHistoryEntry[]>([]);
@@ -385,15 +388,53 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
 
                     {v3Result.dataQuality && v3Result.dataQuality.excluded > 0 && (
                       <div style={{
-                        display: 'flex', alignItems: 'flex-start', gap: 10,
+                        display: 'flex', flexDirection: 'column', gap: 10,
                         padding: '12px 20px', borderRadius: 8,
                         background: 'rgba(27, 23, 37, 0.03)', border: '1px solid var(--border)'
                       }}>
-                        <Lock size={15} style={{ marginTop: 2, flexShrink: 0, color: 'var(--text-muted)' }} />
-                        <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                          Analyse concentrée sur <b style={{ color: 'var(--text-primary)' }}>{v3Result.dataQuality.analyzed} contact(s) suffisamment renseignés</b>.
-                          {' '}{v3Result.dataQuality.excluded} contact(s) ont été écartés faute d'informations exploitables (nom seul, sans poste, entreprise, compétences ni notes) — enrichissez-les pour les inclure dans une prochaine analyse.
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                          <Lock size={15} style={{ marginTop: 2, flexShrink: 0, color: 'var(--text-muted)' }} />
+                          <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5, flex: 1 }}>
+                            Analyse concentrée sur <b style={{ color: 'var(--text-primary)' }}>{v3Result.dataQuality.analyzed} contact(s) suffisamment renseignés</b>.
+                            {' '}{v3Result.dataQuality.excluded} contact(s) ont été écartés faute d'informations exploitables (nom seul, sans poste, entreprise, compétences ni notes) — enrichissez-les pour les inclure dans une prochaine analyse.
+                          </span>
+                          {v3Result.dataQuality.excludedContacts && v3Result.dataQuality.excludedContacts.length > 0 && (
+                            <button
+                              onClick={() => setShowExcludedList(s => !s)}
+                              className="glass-button"
+                              style={{ fontSize: '0.72rem', padding: '4px 10px', whiteSpace: 'nowrap', flexShrink: 0 }}
+                            >
+                              {showExcludedList ? 'Masquer' : 'Voir qui enrichir'}
+                            </button>
+                          )}
+                        </div>
+                        {showExcludedList && v3Result.dataQuality.excludedContacts && (
+                          <div style={{
+                            display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 180, overflowY: 'auto',
+                            paddingTop: 10, borderTop: '1px solid var(--border)'
+                          }}>
+                            {v3Result.dataQuality.excludedContacts.map(c => (
+                              <button
+                                key={c.id}
+                                onClick={() => onViewContact?.(c.name)}
+                                disabled={!onViewContact}
+                                title={onViewContact ? `Ouvrir la fiche de ${c.name}` : c.name}
+                                style={{
+                                  fontSize: '0.75rem', padding: '3px 10px', borderRadius: 99,
+                                  background: 'rgba(27, 23, 37, 0.05)', border: '1px solid var(--border-hover)',
+                                  color: 'var(--text-primary)', cursor: onViewContact ? 'pointer' : 'default'
+                                }}
+                              >
+                                {c.name}
+                              </button>
+                            ))}
+                            {v3Result.dataQuality.excluded > v3Result.dataQuality.excludedContacts.length && (
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '3px 4px' }}>
+                                + {v3Result.dataQuality.excluded - v3Result.dataQuality.excludedContacts.length} autre(s)
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
 

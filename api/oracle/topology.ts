@@ -373,7 +373,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (contactsError) { res.status(500).json({ error: contactsError.message }); return; }
 
     if (!rawContacts || rawContacts.length === 0) {
-      res.status(200).json({ batches: [], bridgeContacts: [], lockedContactNames: [], analyzedCount: 0, excludedCount: 0 });
+      res.status(200).json({ batches: [], bridgeContacts: [], lockedContactNames: [], analyzedCount: 0, excludedCount: 0, excludedContacts: [] });
       return;
     }
 
@@ -387,9 +387,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const contacts = rawContacts.filter(c => isAnalyzableContact(c, noteCountById));
     const excludedCount = rawContacts.length - contacts.length;
+    // Capped so the response stays light even on a sparsely-enriched
+    // network with hundreds of excluded contacts — the UI only needs
+    // enough of a shortlist to point the user at who to enrich next.
+    const excludedContacts = rawContacts
+      .filter(c => !isAnalyzableContact(c, noteCountById))
+      .slice(0, 300)
+      .map(c => ({ id: c.id, name: `${c.first_name} ${c.last_name || ''}`.trim() }));
 
     if (contacts.length === 0) {
-      res.status(200).json({ batches: [], bridgeContacts: [], lockedContactNames: [], analyzedCount: 0, excludedCount });
+      res.status(200).json({ batches: [], bridgeContacts: [], lockedContactNames: [], analyzedCount: 0, excludedCount, excludedContacts });
       return;
     }
 
@@ -416,7 +423,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     if (contacts.length < 6) {
-      res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames, analyzedCount: contacts.length, excludedCount });
+      res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames, analyzedCount: contacts.length, excludedCount, excludedContacts });
       return;
     }
 
@@ -455,7 +462,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         freshEmbeddings = await computeEmbeddings(client, needsEmbedding, notesList);
       } catch (err) {
         console.error('topology: embedding failure, falling back to naive batching.', err);
-        res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames, analyzedCount: contacts.length, excludedCount });
+        res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames, analyzedCount: contacts.length, excludedCount, excludedContacts });
         return;
       }
     }
@@ -482,7 +489,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     freshEmbeddings.forEach(e => embeddingByContactId.set(e.contactId, e.vector));
 
     if (embeddingByContactId.size < 6) {
-      res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames, analyzedCount: contacts.length, excludedCount });
+      res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames, analyzedCount: contacts.length, excludedCount, excludedContacts });
       return;
     }
 
@@ -662,7 +669,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return { contactIds: group, clusterId, contactIdsHash, cached };
     });
 
-    res.status(200).json({ batches, bridgeContacts, lockedContactNames, analyzedCount: contacts.length, excludedCount });
+    res.status(200).json({ batches, bridgeContacts, lockedContactNames, analyzedCount: contacts.length, excludedCount, excludedContacts });
   } catch (err: any) {
     console.error('Oracle topology failure:', err);
     res.status(500).json({ error: err.message || 'Oracle topology failed' });

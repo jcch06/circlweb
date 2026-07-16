@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Zap, Copy, Check, Target, Key, Brain, Workflow, Award, Scale, Share2, History, GitCompare, Trash2, ArrowRight, Lock } from 'lucide-react';
+import { Zap, Copy, Check, Target, Key, Brain, Workflow, Award, Scale, Share2, History, GitCompare, Trash2, ArrowRight, Lock, Compass } from 'lucide-react';
 import type { MistralPipelineResult, AnalysisHistoryEntry, AnalysisDelta } from '../lib/mistral';
 import {
   suggestWarmIntros,
@@ -671,6 +671,51 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                                 {' '}<b style={{ color: 'var(--text-primary)' }}>{intro.supplier.name}</b>
                                 {intro.supplierRole ? ` (${intro.supplierRole})` : ''} peut y répondre.
                               </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Portes à Explorer — pôles denses mais hors-profil */}
+                    {v3Result.synthesis.emergingOpportunities && v3Result.synthesis.emergingOpportunities.length > 0 && (
+                      <div>
+                        <h3 style={styles.sectionTitle}>
+                          <Compass size={18} /> Portes à Explorer
+                        </h3>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 16 }}>
+                          Des pôles denses dans votre réseau qui ne collent pas à vos leviers actuels — mais qui pourraient vous ouvrir une direction nouvelle. Chacun s'appuie sur plusieurs contacts réels partageant ce thème.
+                        </p>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+                          {v3Result.synthesis.emergingOpportunities.map((op, i) => (
+                            <div key={i} className="glass-card" style={{ padding: 20 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                <h4 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '1.05rem' }}>{op.theme}</h4>
+                                <span style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', padding: '2px 6px', borderRadius: 4, background: 'rgba(27, 23, 37, 0.06)', color: 'var(--text-muted)', border: '1px solid var(--border)', flexShrink: 0 }}>
+                                  Hors-profil
+                                </span>
+                              </div>
+                              {op.description && (
+                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 10 }}>{op.description}</p>
+                              )}
+                              {op.anchorContacts.length > 0 && (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                                  {op.anchorContacts.map((c, j) => (
+                                    <span
+                                      key={j}
+                                      onClick={() => onViewContact?.(c.name)}
+                                      style={{ padding: '3px 9px', background: 'rgba(27, 23, 37, 0.04)', border: '1px solid var(--border)', borderRadius: 6, fontSize: '0.78rem', color: 'var(--text-primary)', cursor: onViewContact ? 'pointer' : 'default' }}
+                                    >
+                                      {c.name}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {op.whyNewDoor && (
+                                <div style={{ ...styles.impactBadge, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                                  <Compass size={13} style={{ flexShrink: 0, marginTop: 2 }} /> {op.whyNewDoor}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>

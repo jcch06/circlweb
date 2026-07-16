@@ -932,6 +932,14 @@ export interface ValueChain {
   estimatedImpact: string;
 }
 
+/** A dense-but-off-profile cluster surfaced as a new direction to explore. */
+export interface EmergingOpportunity {
+  theme: string;
+  description: string;
+  anchorContacts: { name: string }[];
+  whyNewDoor: string;
+}
+
 export interface MistralGlobalSynthesis {
   globalThemes: string[];
   crossBatchSynergies: {
@@ -943,6 +951,7 @@ export interface MistralGlobalSynthesis {
   recommendedActionPlan: string[];
   macroNeeds: MacroNeed[];
   valueChains: ValueChain[];
+  emergingOpportunities: EmergingOpportunity[];
   tokenUsage?: TokenUsage;
 }
 
@@ -989,6 +998,21 @@ function normalizeValueChain(vc: any): ValueChain {
   };
 }
 
+function normalizeEmergingOpportunity(o: any): EmergingOpportunity {
+  const anchors = Array.isArray(o?.anchorContacts)
+    ? o.anchorContacts
+        .map((c: any) => (typeof c === 'string' ? { name: c } : c))
+        .filter((c: any) => c && typeof c.name === 'string' && c.name.trim())
+        .map((c: any) => ({ name: c.name }))
+    : [];
+  return {
+    theme: typeof o?.theme === 'string' ? o.theme : '',
+    description: typeof o?.description === 'string' ? o.description : '',
+    anchorContacts: anchors,
+    whyNewDoor: typeof o?.whyNewDoor === 'string' ? o.whyNewDoor : ''
+  };
+}
+
 /**
  * Several fields (globalThemes, recommendedActionPlan, a batch's
  * recurrentNeeds/keyCompetencies) are rendered as `{entry}` directly — a
@@ -1015,7 +1039,8 @@ function normalizeSynthesis(synthesis: MistralGlobalSynthesis): MistralGlobalSyn
     globalThemes: normalizeStringArray(synthesis?.globalThemes),
     recommendedActionPlan: normalizeStringArray(synthesis?.recommendedActionPlan),
     macroNeeds: Array.isArray(synthesis?.macroNeeds) ? synthesis.macroNeeds.map(normalizeMacroNeed) : [],
-    valueChains: Array.isArray(synthesis?.valueChains) ? synthesis.valueChains.map(normalizeValueChain) : []
+    valueChains: Array.isArray(synthesis?.valueChains) ? synthesis.valueChains.map(normalizeValueChain) : [],
+    emergingOpportunities: Array.isArray(synthesis?.emergingOpportunities) ? synthesis.emergingOpportunities.map(normalizeEmergingOpportunity) : []
   };
 }
 

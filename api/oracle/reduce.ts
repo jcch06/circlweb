@@ -39,6 +39,16 @@ interface MistralBatchResult {
 interface MacroNeed { label: string; mergedFrom: string[]; affectedContactsCount: number; priority: 'high' | 'medium' | 'low'; }
 interface ValueChainLink { step: number; contactName: string; role: string; contribution: string; }
 interface ValueChain { title: string; description: string; chain: ValueChainLink[]; estimatedImpact: string; }
+// Un pôle DENSE mais HORS-PROFIL : un thème/besoin réellement partagé par
+// plusieurs contacts qui ne colle à aucun levier de l'utilisateur, présenté
+// comme une direction nouvelle qu'il pourrait explorer (pas comme une
+// faiblesse). Ancré sur des contacts réels — jamais une tendance inventée.
+interface EmergingOpportunity {
+  theme: string;
+  description: string;
+  anchorContacts: { name: string }[];
+  whyNewDoor: string;
+}
 
 interface MistralGlobalSynthesis {
   globalThemes: string[];
@@ -47,6 +57,7 @@ interface MistralGlobalSynthesis {
   recommendedActionPlan: string[];
   macroNeeds: MacroNeed[];
   valueChains: ValueChain[];
+  emergingOpportunities: EmergingOpportunity[];
 }
 
 interface BridgeContact { id: string; name: string; role: string; company: string; centralityScore: number; }
@@ -54,7 +65,7 @@ interface BridgeContact { id: string; name: string; role: string; company: strin
 const FALLBACK_SYNTHESIS: MistralGlobalSynthesis = {
   globalThemes: [], crossBatchSynergies: [],
   networkStrength: "L'analyse globale a échoué (erreur API ou rate-limiting). Veuillez réessayer.",
-  recommendedActionPlan: [], macroNeeds: [], valueChains: []
+  recommendedActionPlan: [], macroNeeds: [], valueChains: [], emergingOpportunities: []
 };
 
 const MAP_REDUCE_MODEL = 'mistral-large-latest';
@@ -109,7 +120,9 @@ ${angles.map((a: string, i: number) => `${i + 1}. ${a}`).join('\n')}
 
 ADAPTE ton analyse au profil ci-dessus. Si le poste/les compétences pointent vers un domaine précis (ex : "architecte" → immobilier/urbanisme, "développeur" → consulting tech, "avocat" → conseil juridique, "élu/politique" → influence & coalitions, "dirigeant associatif" → mécénat & partenariats), PRIORISE les opportunités ALIGNÉES avec son expertise et ses objectifs déclarés.
 
-IMPORTANT : cet alignement sert à PRIORISER et à construire le plan d'action, jamais à faire disparaître une observation réelle. Si le réseau analysé ne colle à aucun des leviers ci-dessus, dis-le explicitement dans "networkStrength" — mais continue de rapporter les thèmes, besoins et compétences RÉELLEMENT présents dans les données, même hors sujet par rapport au profil de l'utilisateur. Un réseau sans lien avec son activité reste un réseau réel avec de vrais thèmes ; ne le réduis jamais à des tableaux vides sous prétexte qu'il ne sert pas directement l'utilisateur.`;
+IMPORTANT : cet alignement sert à PRIORISER et à construire le plan d'action, jamais à faire disparaître une observation réelle. Si le réseau analysé ne colle à aucun des leviers ci-dessus, dis-le explicitement dans "networkStrength" — mais continue de rapporter les thèmes, besoins et compétences RÉELLEMENT présents dans les données, même hors sujet par rapport au profil de l'utilisateur. Un réseau sans lien avec son activité reste un réseau réel avec de vrais thèmes ; ne le réduis jamais à des tableaux vides sous prétexte qu'il ne sert pas directement l'utilisateur.
+
+OUVERTURE (essentiel) : un pôle DENSE mais HORS-PROFIL n'est PAS une faiblesse — c'est une porte que l'utilisateur pourrait ouvrir. Quand plusieurs contacts (≥2) convergent réellement sur un thème ou un besoin commun qui ne colle à aucun de ses leviers, remonte-le dans "emergingOpportunities" comme une DIRECTION NOUVELLE à explorer (ex : "ton réseau a un pôle événementiel/luxe inattendu — voilà la porte que ça t'ouvre"), pas comme du bruit à ignorer. Formule "networkStrength" dans cet esprit : si le réseau est dense sur des thèmes hors-profil, présente cette densité comme une opportunité latente d'ouverture, jamais comme un échec d'alignement. Et dans "recommendedActionPlan", inclus au moins une action qui invite à explorer ces portes quand elles existent — pas seulement à prospecter en externe.`;
 }
 
 function buildLockedContext(lockedNames: string[]): string {
@@ -178,6 +191,41 @@ function filterMacroNeeds(raw: any): MacroNeed[] {
   });
 }
 
+// Garde-fou "Portes à Explorer" : une opportunité émergente n'est crédible
+// que si elle est ANCRÉE sur au moins 2 contacts réels et nommés qui
+// partagent vraiment le thème — même rigueur que les macro-besoins, pour que
+// ces pistes hors-profil restent des observations réelles et jamais une
+// tendance extrapolée à partir d'une seule personne.
+function filterEmergingOpportunities(raw: any): EmergingOpportunity[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((o: any) => {
+      if (!o || typeof o.theme !== 'string' || !o.theme.trim()) return null;
+      const anchors = Array.isArray(o.anchorContacts)
+        ? o.anchorContacts
+            .map((c: any) => (typeof c === 'string' ? { name: c } : c))
+            .filter((c: any) => c && typeof c.name === 'string' && c.name.trim())
+            .map((c: any) => ({ name: c.name.trim() }))
+        : [];
+      // Contacts distincts uniquement — deux fois le même nom ne fait pas un pôle.
+      const seen = new Set<string>();
+      const distinctAnchors = anchors.filter((c: { name: string }) => {
+        const k = c.name.toLowerCase();
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+      if (distinctAnchors.length < 2) return null;
+      return {
+        theme: o.theme.trim(),
+        description: typeof o.description === 'string' ? o.description : '',
+        anchorContacts: distinctAnchors,
+        whyNewDoor: typeof o.whyNewDoor === 'string' ? o.whyNewDoor : ''
+      } as EmergingOpportunity;
+    })
+    .filter((o: EmergingOpportunity | null): o is EmergingOpportunity => o !== null);
+}
+
 async function synthesizeNetwork(
   client: Mistral,
   batchResults: MistralBatchResult[],
@@ -198,7 +246,8 @@ ${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${bri
 1. Fusionne les besoins similaires ou redondants détectés dans les différents lots en "Macro-Besoins" consolidés (ne liste pas les doublons séparément).
 2. Construis des chaînes de valeur globales (value chains) qui relient plusieurs contacts de lots DIFFÉRENTS entre eux autour d'un objectif business commun (ex : A a un besoin, B a la compétence, C a le réseau/financement pour industrialiser). Quand c'est pertinent, utilise les <bridge_contacts> comme maillons de connexion entre groupes.
 3. Identifie les thèmes dominants et les synergies transversales (cross-batch).
-4. Propose un plan d'action concret et priorisé.
+4. Repère les "Portes à Explorer" (emergingOpportunities) : les pôles DENSES mais HORS-PROFIL — un thème ou un besoin réellement partagé par au moins DEUX contacts, qui ne colle à aucun levier de l'utilisateur, et qui pourrait lui ouvrir une direction nouvelle. Vois la section OUVERTURE du user_context.
+5. Propose un plan d'action concret et priorisé.
 </instructions>
 
 <rules>
@@ -207,6 +256,7 @@ ${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${bri
 - Une "valueChain" ne doit relier que des contacts RÉELLEMENT nommés dans les données agrégées, chacun avec un rôle concret tiré de ses données. N'ajoute JAMAIS un maillon générique du type "un profil pertinent dans le réseau" ni un rôle vague ("profil technique ou opérationnel", "client potentiel") : si tu n'as pas de rôle précis pour un contact, ne l'inclus pas dans la chaîne.
 - Chaque synergie agrégée porte un "confidence" ("high"/"medium"/"low") hérité du MAP — "high" y signifie qu'une note réelle de l'utilisateur corrobore le lien, "medium"/"low" signifient une pure estimation IA. Privilégie les synergies "high" pour bâtir les "valueChains" et macro-besoins les plus mis en avant ; une chaîne construite uniquement sur des synergies "low" doit rester marginale, pas headline.
 - Le "recommendedActionPlan" ne doit citer que des contacts, entreprises ou organisations RÉELLEMENT présents dans les données agrégées. N'invente JAMAIS un tiers plausible (syndicat professionnel, entreprise cible, segment de marché précis) qui n'apparaît nulle part dans <aggregated_batch_data> — une action peut rester généraliste ("Prendre contact avec X pour explorer Y") plutôt que de nommer une entité non vérifiée.
+- Une "emergingOpportunity" (Porte à Explorer) suit la MÊME RIGUEUR : elle doit s'appuyer sur au moins DEUX contacts réels et nommés (dans "anchorContacts") qui partagent réellement ce thème/besoin dans les données agrégées. N'invente jamais un pôle ou une tendance à partir d'un seul contact ou d'une extrapolation. Ne remonte ici QUE des thèmes hors-profil (ceux qui collent aux leviers de l'utilisateur ont déjà leur place dans macroNeeds/valueChains) ; si tout le réseau est déjà aligné, renvoie un tableau "emergingOpportunities" vide. Le champ "whyNewDoor" explique concrètement quelle direction nouvelle ce pôle pourrait ouvrir à l'utilisateur.
 - Réponds STRICTEMENT avec un objet JSON valide respectant le format ci-dessous, sans markdown ni texte additionnel.
 </rules>
 
@@ -226,6 +276,9 @@ ${aggregatedData}
   "valueChains": [
     { "title": "Nom de la chaîne de valeur", "description": "Comment ces contacts s'enchaînent pour créer de la valeur", "chain": [{ "step": 1, "contactName": "Nom", "role": "Poste", "contribution": "Ce qu'il apporte à la chaîne" }], "estimatedImpact": "Estimation de l'impact business" }
   ],
+  "emergingOpportunities": [
+    { "theme": "Pôle hors-profil dense (ex: Événementiel haut de gamme)", "description": "Ce que ce pôle représente dans le réseau", "anchorContacts": [{ "name": "Nom A" }, { "name": "Nom B" }], "whyNewDoor": "Quelle direction nouvelle ce pôle pourrait ouvrir à l'utilisateur" }
+  ],
   "networkStrength": "Résumé en 1-2 phrases de la force principale de ce réseau",
   "recommendedActionPlan": ["Action 1", "Action 2"]
 }
@@ -241,7 +294,8 @@ ${aggregatedData}
         networkStrength: parsed.networkStrength ?? FALLBACK_SYNTHESIS.networkStrength,
         recommendedActionPlan: parsed.recommendedActionPlan ?? [],
         macroNeeds: filterMacroNeeds(parsed.macroNeeds),
-        valueChains: parsed.valueChains ?? []
+        valueChains: parsed.valueChains ?? [],
+        emergingOpportunities: filterEmergingOpportunities(parsed.emergingOpportunities)
       };
     }
     console.error('Mistral REDUCE: réponse JSON invalide, fallback appliqué.', text);

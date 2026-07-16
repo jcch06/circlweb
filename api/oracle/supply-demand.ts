@@ -122,7 +122,13 @@ async function callMistralServer(client: Mistral, prompt: string, model: string 
   // src/lib/mistral.ts for the client-side retry that actually rides out a
   // sustained per-minute rate limit (observed as low as 4 req/min on some
   // account tiers).
-  const maxAttempts = 3;
+  //
+  // Only 2 attempts here (vs 3 in map-batch.ts/reduce.ts): this prompt carries
+  // the full contact catalog in one shot (see buildSupplyDemandMatrix) and is
+  // the slowest single completion in the pipeline — leaving less in-function
+  // retry budget makes room for that completion time itself, instead of
+  // risking the whole invocation getting killed mid-retry.
+  const maxAttempts = 2;
   let lastError: any = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -137,7 +143,7 @@ async function callMistralServer(client: Mistral, prompt: string, model: string 
     } catch (err: any) {
       lastError = err;
       if (attempt === maxAttempts) break;
-      const delay = err.statusCode === 429 ? Math.min(5000 * attempt, 10000) : 1000;
+      const delay = err.statusCode === 429 ? 5000 : 1000;
       await sleep(delay);
     }
   }
@@ -179,7 +185,14 @@ async function buildSupplyDemandMatrix(client: Mistral, contacts: any[], notes: 
   // enrichProfileFromScraping / autoEnrichContact) — never read from this
   // contact's actual notes. notesUtilisateur is what the user personally
   // wrote about this contact — the only genuinely verified signal.
-  const catalog = contacts.slice(0, 200).map(c => {
+  // Capped conservatively: unlike map-batch.ts (15-30 contacts per call),
+  // this is the ONE call in the whole pipeline that puts every analyzable
+  // contact in a single prompt — on a large/merged network the resulting
+  // completion can run long enough to collide with this function's own
+  // maxDuration (60s, see vercel.json), especially layered on top of
+  // whatever retry backoff a rate-limited account already ate. Smaller
+  // catalog, faster completion, more headroom.
+  const catalog = contacts.slice(0, 100).map(c => {
     const contactNotes = notes.filter(n => n.contact_id === c.id).map(n => n.content).join(' | ').substring(0, 400);
     const skills: string[] = Array.isArray(c.skills) ? c.skills : [];
     const needs: string[] = Array.isArray(c.inferred_needs) ? c.inferred_needs : [];

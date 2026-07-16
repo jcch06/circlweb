@@ -783,6 +783,7 @@ export interface NormalizedProfile {
  */
 export interface SupplyDemandEntry {
   need: string;
+  rationale?: string;
   demanders: { id: string; name: string }[];
   suppliers: { id: string; name: string }[];
   gapLevel: 'covered' | 'partial' | 'opportunity';

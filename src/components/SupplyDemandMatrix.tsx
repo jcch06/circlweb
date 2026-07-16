@@ -6,6 +6,8 @@ import { Star } from 'lucide-react';
 export interface SupplyDemandEntry {
   /** The need / topic being matched */
   need: string;
+  /** Concrete 2-3 sentence explanation: who needs what, who can supply, first step */
+  rationale?: string;
   /** People who want this */
   demanders: { id: string; name: string }[];
   /** People who can provide this */
@@ -216,13 +218,18 @@ export const SupplyDemandMatrix: React.FC<SupplyDemandMatrixProps> = ({
                 onMouseLeave={() => setHoveredRow(null)}
               >
                 {/* Need */}
-                <td style={{ ...tdBase, fontWeight: 500, color: 'var(--text-primary)' }}>
+                <td style={{ ...tdBase, fontWeight: 500, color: 'var(--text-primary)', maxWidth: 320 }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     {entry.need}
                     {entry.opportunityForUser && (
                       <Star size={13} fill="var(--accent)" color="var(--accent)" aria-label="Opportunité pour vous" />
                     )}
                   </span>
+                  {entry.rationale && (
+                    <span style={{ display: 'block', marginTop: 5, fontWeight: 400, fontSize: 12, lineHeight: 1.5, color: 'var(--text-secondary)' }}>
+                      {entry.rationale}
+                    </span>
+                  )}
                 </td>
 
                 {/* Demanders */}

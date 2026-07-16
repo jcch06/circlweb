@@ -54,6 +54,7 @@ async function selectInChunks<T = any>(
 
 interface SupplyDemandEntry {
   need: string;
+  rationale?: string;
   demanders: { id: string; name: string }[];
   suppliers: { id: string; name: string }[];
   gapLevel: 'covered' | 'partial' | 'opportunity';
@@ -67,7 +68,7 @@ interface SupplyDemandEntry {
 // (often EMPTY) matrix computed under the previous logic, and improvements
 // never reached an already-analyzed network. BUMP when this file's prompt or
 // catalog logic changes.
-const SUPPLY_PROMPT_VERSION = 'supply-v2-richness';
+const SUPPLY_PROMPT_VERSION = 'supply-v3-crosspairs';
 
 // Same formula as topology.ts / map-batch.ts rely on transitively — if this
 // hash is unchanged for every contact in the scope, the cached matrix is
@@ -266,9 +267,10 @@ ${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${loc
 <instructions>
 1. Parcours le catalogue de contacts (chacun a des compétences = OFFRE, et des besoins = DEMANDE).
 2. Regroupe les besoins similaires en une même ligne "need" (ex : "trouver un développeur" et "besoin technique" → "Développement / compétence technique").
-3. Pour chaque besoin, liste les "demanders" (contacts qui expriment ce besoin) et les "suppliers" (contacts dont les compétences y répondent, même indirectement).
+3. Pour chaque besoin, liste les "demanders" (contacts qui expriment ce besoin) et les "suppliers" (contacts dont les compétences y répondent, même indirectement). IMPORTANT : les fournisseurs sont AVANT TOUT d'AUTRES CONTACTS DU RÉSEAU, pas seulement l'utilisateur. Cherche systématiquement, pour chaque besoin d'un contact, quel(s) AUTRE(S) contact(s) du catalogue peu(ven)t y répondre — y compris entre secteurs éloignés (un besoin logistique couvert par un profil tech, un besoin de visibilité couvert par un contact média, etc.). Ces mises en relation contact↔contact sont le cœur de la valeur : ne te contente pas de lister l'utilisateur comme unique fournisseur.
 4. Évalue le "gapLevel" : "opportunity" (forte demande, peu/pas de fournisseur), "partial" (partiellement couverte), "covered" (bien couverte).
-5. Mets "opportunityForUser" à true si l'utilisateur (voir user_context) est bien placé pour capter cette opportunité.
+5. Mets "opportunityForUser" à true si l'utilisateur (voir user_context) est bien placé pour capter cette opportunité — mais une ligne reste PLEINEMENT valable et utile même quand opportunityForUser vaut false (une mise en relation entre deux contacts du réseau qui ne concerne pas directement l'utilisateur a de la valeur).
+6. Rédige un "rationale" par ligne : 2-3 phrases concrètes expliquant qui demande quoi, qui peut fournir et pourquoi, et le premier pas pour provoquer la mise en relation.
 </instructions>
 
 <hierarchie_de_confiance>
@@ -276,11 +278,10 @@ ${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${loc
 </hierarchie_de_confiance>
 
 <rules>
-- RIGUEUR AVANT TOUT : ne crée une ligne QUE si des demanders ET des suppliers réels et nommés existent dans le catalogue. Il vaut mieux 3 lignes solides et vérifiables que 12 lignes spéculatives. Si le catalogue ne contient aucun besoin exploitable, renvoie un tableau vide — c'est une réponse valide et attendue.
-- N'invente JAMAIS un besoin, une compétence ou une mise en relation qui n'est pas ancrée dans les données du contact (skillsEstimeesIA / besoinsEstimesIA / notesUtilisateur). Ne déduis pas un besoin du seul poste si aucune donnée ne l'appuie.
-- Calibre "gapLevel" selon la hiérarchie de confiance : ne marque "covered" (couverture assurée) que si l'offre ET la demande sont corroborées par au moins une "notesUtilisateur" réelle de chaque côté. Si le match ne repose QUE sur des champs estimés par l'IA des deux côtés (aucune note ne corrobore), reste sur "partial" ou "opportunity" plutôt que "covered" — une estimation face à une autre estimation ne justifie jamais une certitude de couverture.
+- ANCRAGE puis GÉNÉROSITÉ : chaque demander et chaque supplier doit être un contact RÉEL du catalogue avec une donnée qui le justifie (skillsEstimeesIA / besoinsEstimesIA / notesUtilisateur) — n'invente jamais un besoin, une compétence ou un contact. Mais dans cette limite, sois GÉNÉREUX : parcours tout le catalogue et remonte CHAQUE besoin qui trouve au moins un fournisseur crédible, y compris les croisements inter-secteurs non évidents. Ne te limite pas à quelques lignes autour de l'utilisateur ; un réseau de 250 contacts diversifiés contient de nombreuses complémentarités contact↔contact. Un match fondé uniquement sur des champs estimés par l'IA reste valable (marque-le "partial"/"opportunity", pas "covered").
+- Calibre "gapLevel" selon la hiérarchie de confiance : ne marque "covered" que si l'offre ET la demande sont corroborées par au moins une "notesUtilisateur" réelle de chaque côté. Une estimation IA des deux côtés ne justifie jamais "covered".
 - Utilise UNIQUEMENT les id/noms fournis dans le catalogue pour demanders/suppliers.
-- Limite-toi aux ~12 lignes les plus pertinentes.
+- Vise 15 à 25 lignes couvrant différents besoins et différents pôles du réseau (pas seulement le secteur de l'utilisateur). Ne renvoie un tableau vide que si le catalogue ne contient réellement aucune complémentarité.
 - Réponds STRICTEMENT avec un objet JSON valide, sans markdown ni texte additionnel.
 </rules>
 
@@ -289,7 +290,7 @@ ${JSON.stringify(catalog, null, 2)}
 </catalog>
 
 <output_format>
-{ "supplyDemand": [ { "need": "Nom clair du besoin consolidé", "demanders": [{ "id": "id exact", "name": "Nom" }], "suppliers": [{ "id": "id exact", "name": "Nom" }], "gapLevel": "opportunity", "opportunityForUser": true } ] }
+{ "supplyDemand": [ { "need": "Nom clair du besoin consolidé", "rationale": "2-3 phrases : qui demande quoi, qui peut fournir et pourquoi, et le premier pas concret pour provoquer la mise en relation.", "demanders": [{ "id": "id exact", "name": "Nom" }], "suppliers": [{ "id": "id exact", "name": "Nom" }], "gapLevel": "opportunity", "opportunityForUser": true } ] }
 </output_format>`;
 
   try {
@@ -300,6 +301,7 @@ ${JSON.stringify(catalog, null, 2)}
         .filter((e: any) => e && typeof e.need === 'string')
         .map((e: any) => ({
           need: e.need,
+          rationale: typeof e.rationale === 'string' ? e.rationale : '',
           demanders: Array.isArray(e.demanders) ? e.demanders : [],
           suppliers: Array.isArray(e.suppliers) ? e.suppliers : [],
           gapLevel: ['covered', 'partial', 'opportunity'].includes(e.gapLevel) ? e.gapLevel : 'partial',

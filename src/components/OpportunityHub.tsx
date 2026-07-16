@@ -814,17 +814,32 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>
-                        L'algorithme a découpé votre réseau en {v3Result.batches.length} lots. Voici les détails extraits pour chaque groupe.
-                      </p>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                        <input type="checkbox" checked={hideWeakSynergies} onChange={e => setHideWeakSynergies(e.target.checked)} />
-                        Masquer les synergies à faible confiance
-                      </label>
-                    </div>
+                    {(() => {
+                      const hasContent = (b: typeof v3Result.batches[number]) =>
+                        b.recurrentNeeds.length > 0 || b.immediateSynergies.length > 0 || b.keyCompetencies.length > 0;
+                      const nonEmpty = v3Result.batches
+                        .map((batch, i) => ({ batch, i }))
+                        .filter(({ batch }) => hasContent(batch));
+                      return (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0, maxWidth: 640 }}>
+                              Vue détaillée brute des synergies détectées <b>à l'intérieur</b> de chaque cluster de contacts similaires. La vraie valeur — les croisements entre pôles — est dans l'onglet <b>Synthèse Globale</b> ; cette vue n'est là que pour inspecter le détail par groupe.
+                              {' '}<span style={{ color: 'var(--text-muted)' }}>{nonEmpty.length} lot(s) sur {v3Result.batches.length} contiennent des synergies internes.</span>
+                            </p>
+                            {nonEmpty.length > 0 && (
+                              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                <input type="checkbox" checked={hideWeakSynergies} onChange={e => setHideWeakSynergies(e.target.checked)} />
+                                Masquer les synergies à faible confiance
+                              </label>
+                            )}
+                          </div>
 
-                    {v3Result.batches.map((batch, i) => (
+                          {nonEmpty.length === 0 ? (
+                            <div className="glass-card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-secondary)' }}>
+                              Aucune synergie interne à un cluster sur ce réseau — c'est normal pour un réseau diversifié où les gens d'un même groupe se ressemblent. Les vraies opportunités (croisements entre secteurs) sont dans <b>Synthèse Globale</b> et <b>Offre / Demande</b>.
+                            </div>
+                          ) : nonEmpty.map(({ batch, i }) => (
                       <div key={i} className="glass-card" style={{ padding: 24, borderLeft: '3px solid var(--border-hover)' }}>
                         <h3 style={{ margin: '0 0 16px 0', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '1rem' }}>Lot d'Analyse #{i + 1}</h3>
 
@@ -896,7 +911,10 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                         </div>
 
                       </div>
-                    ))}
+                          ))}
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
               </div>

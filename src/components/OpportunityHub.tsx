@@ -427,7 +427,7 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
 
-                    {v3Result.dataQuality && v3Result.dataQuality.excluded > 0 && (
+                    {v3Result.dataQuality && (v3Result.dataQuality.excluded > 0 || (v3Result.dataQuality.capped ?? 0) > 0) && (
                       <div style={{
                         display: 'flex', flexDirection: 'column', gap: 10,
                         padding: '12px 20px', borderRadius: 8,
@@ -437,7 +437,12 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                           <Lock size={15} style={{ marginTop: 2, flexShrink: 0, color: 'var(--text-muted)' }} />
                           <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5, flex: 1 }}>
                             Analyse concentrée sur <b style={{ color: 'var(--text-primary)' }}>{v3Result.dataQuality.analyzed} contact(s) suffisamment renseignés</b>.
-                            {' '}{v3Result.dataQuality.excluded} contact(s) ont été écartés faute d'informations exploitables (nom seul, sans poste, entreprise, compétences ni notes) — enrichissez-les pour les inclure dans une prochaine analyse.
+                            {(v3Result.dataQuality.capped ?? 0) > 0 && (
+                              <> Réseau volumineux : l'analyse porte sur les <b style={{ color: 'var(--text-primary)' }}>{v3Result.dataQuality.analyzed} contacts les plus enrichis</b>, {v3Result.dataQuality.capped} autre(s) contact(s) exploitables ont été différés pour cette analyse (limite de taille par passe).</>
+                            )}
+                            {v3Result.dataQuality.excluded > 0 && (
+                              <>{' '}{v3Result.dataQuality.excluded} contact(s) ont été écartés faute d'informations exploitables (nom seul, sans poste, entreprise, compétences ni notes) — enrichissez-les pour les inclure dans une prochaine analyse.</>
+                            )}
                           </span>
                           {v3Result.dataQuality.excludedContacts && v3Result.dataQuality.excludedContacts.length > 0 && (
                             <button

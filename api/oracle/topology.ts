@@ -58,6 +58,43 @@ async function selectInChunks<T = any>(
   return { data: results.flatMap(r => r.data || []), error: null };
 }
 
+// PostgREST caps every request at 1000 rows. A network with more than 1000
+// contacts was silently truncated to the first 1000 (alphabetical) — the rest
+// never reached the analysis. Paginate with .range() so the FULL network is
+// fetched regardless of size. Pass a factory that rebuilds the query per page
+// (a builder can't be reused after it's awaited).
+async function fetchAllRows<T = any>(
+  makeQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: any }>,
+  pageSize = 1000
+): Promise<{ data: T[]; error: any }> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await makeQuery(from, from + pageSize - 1);
+    if (error) return { data: [], error };
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+  return { data: rows, error: null };
+}
+
+// How many contacts a single synchronous run analyzes. The pipeline embeds,
+// clusters and MAP-analyzes every one of these inside 60s serverless
+// functions, so it must stay bounded — on a very large base (e.g. 10k) we
+// analyze the RICHEST subset rather than choke or 504. Contacts beyond the cap
+// aren't "excluded for lack of data" — they're deferred (reported separately).
+const ANALYZE_CAP = 1200;
+
+// Real signal a contact carries — ranks who makes the cut when ANALYZE_CAP
+// trims an oversized analyzable set. A user note (verified) outweighs
+// AI-estimated fields.
+function analyzeRichness(c: any, noteCountById: Map<string, number>): number {
+  const notes = noteCountById.get(c.id) || 0;
+  const skills = Array.isArray(c.skills) ? c.skills.filter((s: any) => s && String(s).trim()).length : 0;
+  const needs = Array.isArray(c.inferred_needs) ? c.inferred_needs.filter((n: any) => n && String(n).trim()).length : 0;
+  const has = (v: any) => (typeof v === 'string' && v.trim() ? 1 : 0);
+  return notes * 10 + skills * 2 + needs * 2 + has(c.job_title) + has(c.company) + has(c.bio);
+}
+
 // ─── Content hashing (shared formula with map-batch.ts / supply-demand.ts) ──
 // Captures everything that feeds either the embedding or the MAP/SUPPLY
 // prompts for a contact — if this hash is unchanged, the contact's prior
@@ -406,9 +443,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       global: { headers: { Authorization: `Bearer ${auth.token}` } }
     });
 
-    let contactsQuery = userSupabase.from('contacts').select('id, first_name, last_name, job_title, company, bio, skills, inferred_needs, space_id').order('first_name');
-    if (spaceId) contactsQuery = contactsQuery.eq('space_id', spaceId);
-    const { data: rawContacts, error: contactsError } = await contactsQuery;
+    const { data: rawContacts, error: contactsError } = await fetchAllRows<any>((from, to) => {
+      let q = userSupabase.from('contacts').select('id, first_name, last_name, job_title, company, bio, skills, inferred_needs, space_id').order('first_name').range(from, to);
+      if (spaceId) q = q.eq('space_id', spaceId);
+      return q;
+    });
     if (contactsError) {
       console.error('Oracle topology: contacts fetch failed', contactsError);
       res.status(500).json({ error: contactsError.message });
@@ -416,7 +455,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (!rawContacts || rawContacts.length === 0) {
-      res.status(200).json({ batches: [], bridgeContacts: [], lockedContactNames: [], analyzedCount: 0, excludedCount: 0, excludedContacts: [] });
+      res.status(200).json({ batches: [], bridgeContacts: [], lockedContactNames: [], analyzedCount: 0, excludedCount: 0, excludedContacts: [], cappedCount: 0 });
       return;
     }
 
@@ -438,8 +477,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const noteCountById = new Map<string, number>();
     (allNotes || []).forEach((n: any) => noteCountById.set(n.contact_id, (noteCountById.get(n.contact_id) || 0) + 1));
 
-    const contacts = rawContacts.filter(c => isAnalyzableContact(c, noteCountById));
-    const excludedCount = rawContacts.length - contacts.length;
+    const analyzable = rawContacts.filter(c => isAnalyzableContact(c, noteCountById));
+    const excludedCount = rawContacts.length - analyzable.length;
     // Capped so the response stays light even on a sparsely-enriched
     // network with hundreds of excluded contacts — the UI only needs
     // enough of a shortlist to point the user at who to enrich next.
@@ -448,8 +487,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .slice(0, 300)
       .map(c => ({ id: c.id, name: `${c.first_name} ${c.last_name || ''}`.trim() }));
 
+    // Bound a very large analyzable set to the RICHEST ANALYZE_CAP contacts so
+    // the synchronous pipeline stays within serverless limits. The rest are
+    // DEFERRED (not "excluded for lack of data") — reported as cappedCount so
+    // the UI can say so honestly.
+    let contacts = analyzable;
+    let cappedCount = 0;
+    if (analyzable.length > ANALYZE_CAP) {
+      contacts = [...analyzable]
+        .sort((a, b) => analyzeRichness(b, noteCountById) - analyzeRichness(a, noteCountById))
+        .slice(0, ANALYZE_CAP);
+      cappedCount = analyzable.length - contacts.length;
+    }
+
     if (contacts.length === 0) {
-      res.status(200).json({ batches: [], bridgeContacts: [], lockedContactNames: [], analyzedCount: 0, excludedCount, excludedContacts });
+      res.status(200).json({ batches: [], bridgeContacts: [], lockedContactNames: [], analyzedCount: 0, excludedCount, excludedContacts, cappedCount: 0 });
       return;
     }
 
@@ -482,7 +534,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     if (contacts.length < 6) {
-      res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames, analyzedCount: contacts.length, excludedCount, excludedContacts });
+      res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames, analyzedCount: contacts.length, excludedCount, excludedContacts, cappedCount });
       return;
     }
 
@@ -522,7 +574,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         freshEmbeddings = await computeEmbeddings(client, needsEmbedding, notesList);
       } catch (err) {
         console.error('topology: embedding failure, falling back to naive batching.', err);
-        res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames, analyzedCount: contacts.length, excludedCount, excludedContacts });
+        res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames, analyzedCount: contacts.length, excludedCount, excludedContacts, cappedCount });
         return;
       }
     }
@@ -549,7 +601,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     freshEmbeddings.forEach(e => embeddingByContactId.set(e.contactId, e.vector));
 
     if (embeddingByContactId.size < 6) {
-      res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames, analyzedCount: contacts.length, excludedCount, excludedContacts });
+      res.status(200).json({ batches: chunkNaive(contactIds), bridgeContacts: [], lockedContactNames, analyzedCount: contacts.length, excludedCount, excludedContacts, cappedCount });
       return;
     }
 
@@ -729,7 +781,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return { contactIds: group, clusterId, contactIdsHash, cached };
     });
 
-    res.status(200).json({ batches, bridgeContacts, lockedContactNames, analyzedCount: contacts.length, excludedCount, excludedContacts });
+    res.status(200).json({ batches, bridgeContacts, lockedContactNames, analyzedCount: contacts.length, excludedCount, excludedContacts, cappedCount });
   } catch (err: any) {
     console.error('Oracle topology failure:', err);
     res.status(500).json({ error: err.message || 'Oracle topology failed' });

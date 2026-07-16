@@ -52,6 +52,23 @@ async function selectInChunks<T = any>(
   return { data: results.flatMap(r => r.data || []), error: null };
 }
 
+// PostgREST caps every request at 1000 rows — a network over 1000 contacts was
+// silently truncated to the first 1000 (alphabetical). Paginate with .range()
+// so the full network is seen before it's ranked/capped for the catalog.
+async function fetchAllRows<T = any>(
+  makeQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: any }>,
+  pageSize = 1000
+): Promise<{ data: T[]; error: any }> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await makeQuery(from, from + pageSize - 1);
+    if (error) return { data: [], error };
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+  return { data: rows, error: null };
+}
+
 interface SupplyDemandEntry {
   need: string;
   rationale?: string;
@@ -346,9 +363,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       global: { headers: { Authorization: `Bearer ${auth.token}` } }
     });
 
-    let contactsQuery = userSupabase.from('contacts').select('*').order('first_name');
-    if (spaceId) contactsQuery = contactsQuery.eq('space_id', spaceId);
-    const { data: rawContacts, error: contactsError } = await contactsQuery;
+    const { data: rawContacts, error: contactsError } = await fetchAllRows<any>((from, to) => {
+      let q = userSupabase.from('contacts').select('*').order('first_name').range(from, to);
+      if (spaceId) q = q.eq('space_id', spaceId);
+      return q;
+    });
     if (contactsError) {
       console.error('Oracle supply-demand: contacts fetch failed', contactsError);
       res.status(500).json({ error: contactsError.message });

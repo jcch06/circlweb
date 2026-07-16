@@ -966,7 +966,7 @@ export interface MistralPipelineResult {
   /** How much of this run was served from the incremental cache vs freshly computed. */
   cacheStats?: { totalBatches: number; reusedBatches: number };
   /** How many contacts passed the enrichment gate vs were excluded as too sparse. */
-  dataQuality?: { analyzed: number; excluded: number; excludedContacts?: { id: string; name: string }[] };
+  dataQuality?: { analyzed: number; excluded: number; excludedContacts?: { id: string; name: string }[]; capped?: number };
   /** Profile-derived leviers actually sent to MAP/REDUCE/SUPPLY, if any were derived (empty = generic fallback was used). */
   analysisAngles?: string[];
 }
@@ -1275,6 +1275,7 @@ export async function runMistralOracleBatchPipeline(
     analyzedCount?: number;
     excludedCount?: number;
     excludedContacts?: { id: string; name: string }[];
+    cappedCount?: number;
   }>('/api/oracle/topology', { spaceId });
   onProgress?.(15);
 
@@ -1328,7 +1329,8 @@ export async function runMistralOracleBatchPipeline(
     dataQuality: {
       analyzed: topology.analyzedCount ?? 0,
       excluded: topology.excludedCount ?? 0,
-      excludedContacts: topology.excludedContacts ?? []
+      excludedContacts: topology.excludedContacts ?? [],
+      capped: topology.cappedCount ?? 0
     },
     analysisAngles: usedAnalysisAngles
   });

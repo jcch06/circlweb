@@ -63,6 +63,15 @@ async function selectInChunks<T = any>(
 // prompts for a contact — if this hash is unchanged, the contact's prior
 // embedding and its cluster's cached MAP result are both still valid.
 
+// Version tag of the MAP synergy prompt/algorithm. It is folded into the
+// per-cluster MAP cache key so that ANY change to how synergies are detected
+// (prompt wording, rigor/recall balance, output shape) automatically
+// invalidates every cached batch result — otherwise a cluster whose contacts
+// didn't change keeps serving synergies computed under the OLD prompt, and
+// prompt improvements silently never reach an already-analyzed network.
+// BUMP THIS whenever the map-batch.ts synergy prompt changes.
+const MAP_PROMPT_VERSION = 'map-v2-recall';
+
 function contactContentHash(c: any, notes: any[]): string {
   const noteText = notes.filter(n => n.contact_id === c.id).map(n => n.content).sort().join('|');
   const skills = Array.isArray(c.skills) ? [...c.skills].sort().join(',') : '';
@@ -71,9 +80,11 @@ function contactContentHash(c: any, notes: any[]): string {
   return createHash('sha256').update(raw).digest('hex');
 }
 
+// NB: the MAP prompt version is part of this key — a prompt bump changes every
+// cluster's hash, forcing a one-time full recompute under the new prompt.
 function clusterContactsHash(contactIds: string[], hashByContactId: Map<string, string>): string {
   const parts = [...contactIds].sort().map(id => `${id}:${hashByContactId.get(id) || ''}`);
-  return createHash('sha256').update(parts.join('|')).digest('hex');
+  return createHash('sha256').update(`${MAP_PROMPT_VERSION}|${parts.join('|')}`).digest('hex');
 }
 
 // ─── vectorMath (ported verbatim from src/lib/vectorMath.ts) ────────────────

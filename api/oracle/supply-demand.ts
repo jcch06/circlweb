@@ -60,6 +60,15 @@ interface SupplyDemandEntry {
   opportunityForUser: boolean;
 }
 
+// Version tag of the SUPPLY/DEMAND prompt + catalog-building logic. Folded
+// into the cache key (see scopeContactsHash) so any change here — prompt
+// wording, catalog cap, contact ordering — invalidates a stale cached matrix.
+// Without this, a network whose contacts didn't change kept re-serving an old
+// (often EMPTY) matrix computed under the previous logic, and improvements
+// never reached an already-analyzed network. BUMP when this file's prompt or
+// catalog logic changes.
+const SUPPLY_PROMPT_VERSION = 'supply-v2-richness';
+
 // Same formula as topology.ts / map-batch.ts rely on transitively — if this
 // hash is unchanged for every contact in the scope, the cached matrix is
 // still valid and the Mistral call can be skipped entirely.
@@ -75,7 +84,23 @@ function scopeContactsHash(contacts: any[], notes: any[]): string {
   const parts = contacts
     .map(c => `${c.id}:${contactContentHash(c, notes)}`)
     .sort();
-  return createHash('sha256').update(parts.join('|')).digest('hex');
+  return createHash('sha256').update(`${SUPPLY_PROMPT_VERSION}|${parts.join('|')}`).digest('hex');
+}
+
+// Rank a contact by how much real signal it carries, so that when the catalog
+// is capped we keep the MOST matchable contacts rather than an arbitrary
+// alphabetical slice. A note (verified) outweighs estimated fields; estimated
+// skills/needs outweigh a bare title/company. On a 1200-contact network this
+// is the difference between a useful matrix and one built on 100 people whose
+// names happen to start with "A".
+function contactRichness(c: any, noteCountById: Map<string, number>): number {
+  const notes = noteCountById.get(c.id) || 0;
+  const skills = Array.isArray(c.skills) ? c.skills.filter((s: any) => s && String(s).trim()).length : 0;
+  const needs = Array.isArray(c.inferred_needs) ? c.inferred_needs.filter((n: any) => n && String(n).trim()).length : 0;
+  const hasTitle = typeof c.job_title === 'string' && c.job_title.trim() ? 1 : 0;
+  const hasCompany = typeof c.company === 'string' && c.company.trim() ? 1 : 0;
+  const hasBio = typeof c.bio === 'string' && c.bio.trim() ? 1 : 0;
+  return notes * 10 + skills * 2 + needs * 2 + hasTitle + hasCompany + hasBio;
 }
 
 const MAP_REDUCE_MODEL = 'mistral-large-latest';
@@ -202,7 +227,7 @@ function isAnalyzableContact(c: any, noteCountById: Map<string, number>): boolea
     || (noteCountById.get(c.id) || 0) > 0;
 }
 
-async function buildSupplyDemandMatrix(client: Mistral, contacts: any[], notes: any[], userContext: string, lockedContext: string): Promise<SupplyDemandEntry[]> {
+async function buildSupplyDemandMatrix(client: Mistral, contacts: any[], notes: any[], userContext: string, lockedContext: string, noteCountById: Map<string, number>): Promise<SupplyDemandEntry[]> {
   if (!contacts || contacts.length === 0) return [];
 
   // Key names spell out provenance explicitly: skillsEstimeesIA/besoinsEstimesIA
@@ -210,14 +235,18 @@ async function buildSupplyDemandMatrix(client: Mistral, contacts: any[], notes: 
   // enrichProfileFromScraping / autoEnrichContact) — never read from this
   // contact's actual notes. notesUtilisateur is what the user personally
   // wrote about this contact — the only genuinely verified signal.
-  // Capped conservatively: unlike map-batch.ts (15-30 contacts per call),
-  // this is the ONE call in the whole pipeline that puts every analyzable
-  // contact in a single prompt — on a large/merged network the resulting
-  // completion can run long enough to collide with this function's own
-  // maxDuration (60s, see vercel.json), especially layered on top of
-  // whatever retry backoff a rate-limited account already ate. Smaller
-  // catalog, faster completion, more headroom.
-  const catalog = contacts.slice(0, 100).map(c => {
+  //
+  // This is the ONE call in the whole pipeline that puts many contacts in a
+  // single prompt, so it must be capped for maxDuration (60s, see vercel.json).
+  // But on a 1200-contact network an alphabetical slice threw away 90%+ of the
+  // graph and produced a near-empty matrix. Two fixes: (1) rank by real signal
+  // (contactRichness) so the cap keeps the most MATCHABLE contacts, not an
+  // arbitrary A-first slice; (2) raise the cap to 250 — Mistral Large handles
+  // that catalog size, and the client-side retry already rides out the rate
+  // limit, so the extra prompt length is an acceptable trade for real recall.
+  const CATALOG_CAP = 250;
+  const ranked = [...contacts].sort((a, b) => contactRichness(b, noteCountById) - contactRichness(a, noteCountById));
+  const catalog = ranked.slice(0, CATALOG_CAP).map(c => {
     const contactNotes = notes.filter(n => n.contact_id === c.id).map(n => n.content).join(' | ').substring(0, 400);
     const skills: string[] = Array.isArray(c.skills) ? c.skills : [];
     const needs: string[] = Array.isArray(c.inferred_needs) ? c.inferred_needs : [];
@@ -386,7 +415,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const userContext = userProfile ? buildUserContext(userProfile) : '';
     const lockedContext = buildLockedContext(lockedNames);
 
-    const supplyDemand = await buildSupplyDemandMatrix(client, contacts, notes || [], userContext, lockedContext);
+    const supplyDemand = await buildSupplyDemandMatrix(client, contacts, notes || [], userContext, lockedContext, noteCountById);
 
     try {
       await userSupabase.from('oracle_supply_demand_cache').upsert({

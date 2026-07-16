@@ -202,6 +202,7 @@ function App() {
               tags={tags}
               spaces={spaces}
               selectedSpaceId={selectedSpaceId}
+              setSelectedSpaceId={setSelectedSpaceId}
               user={session.user}
               onViewContact={(name) => { setSearchQuery(name); setActiveTab('contacts'); }}
             />

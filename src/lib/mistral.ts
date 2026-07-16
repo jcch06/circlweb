@@ -952,6 +952,8 @@ export interface MistralPipelineResult {
   cacheStats?: { totalBatches: number; reusedBatches: number };
   /** How many contacts passed the enrichment gate vs were excluded as too sparse. */
   dataQuality?: { analyzed: number; excluded: number };
+  /** Profile-derived leviers actually sent to MAP/REDUCE/SUPPLY, if any were derived (empty = generic fallback was used). */
+  analysisAngles?: string[];
 }
 
 /**
@@ -1178,11 +1180,15 @@ export async function runMistralOracleBatchPipeline(
   // Derive analysis angles tailored to the user's profile once, then attach
   // them to the profile sent to every LLM step (MAP/REDUCE/SUPPLY). The
   // server prompts prefer these over their static generic-angle fallback.
+  // Kept in its own variable (not just inside profileForPipeline) so it can
+  // be surfaced in the result — otherwise which angles actually drove a
+  // given analysis is invisible to the user.
   let profileForPipeline = userProfile;
+  let usedAnalysisAngles: string[] = [];
   if (userProfile) {
     try {
-      const analysisAngles = await deriveAnalysisAngles(userProfile);
-      if (analysisAngles.length > 0) profileForPipeline = { ...userProfile, analysisAngles };
+      usedAnalysisAngles = await deriveAnalysisAngles(userProfile);
+      if (usedAnalysisAngles.length > 0) profileForPipeline = { ...userProfile, analysisAngles: usedAnalysisAngles };
     } catch { /* keep the raw profile — server falls back to generic angles */ }
   }
   onProgress?.(10);
@@ -1241,7 +1247,8 @@ export async function runMistralOracleBatchPipeline(
     dataQuality: {
       analyzed: topology.analyzedCount ?? 0,
       excluded: topology.excludedCount ?? 0
-    }
+    },
+    analysisAngles: usedAnalysisAngles
   });
 
   onProgress?.(100);

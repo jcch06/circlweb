@@ -397,6 +397,50 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                       </div>
                     )}
 
+                    {v3Result.analysisAngles && v3Result.analysisAngles.length > 0 ? (
+                      <div style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 10,
+                        padding: '12px 20px', borderRadius: 8,
+                        background: 'rgba(27, 23, 37, 0.03)', border: '1px solid var(--border)'
+                      }}>
+                        <Target size={15} style={{ marginTop: 2, flexShrink: 0, color: 'var(--text-muted)' }} />
+                        <div>
+                          <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                            Leviers d'analyse utilisés (dérivés de votre profil) :
+                          </span>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                            {v3Result.analysisAngles.map((angle, i) => (
+                              <span key={i} style={{
+                                fontSize: '0.75rem', padding: '3px 10px', borderRadius: 99,
+                                background: 'rgba(27, 23, 37, 0.05)', border: '1px solid var(--border-hover)',
+                                color: 'var(--text-primary)'
+                              }}>
+                                {angle}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '12px 20px', borderRadius: 8,
+                        background: 'rgba(27, 23, 37, 0.03)', border: '1px solid var(--border)'
+                      }}>
+                        <Target size={15} style={{ flexShrink: 0, color: 'var(--text-muted)' }} />
+                        <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                          Leviers d'analyse génériques utilisés — complétez votre profil (poste, compétences, projets, besoins) pour des leviers personnalisés à votre activité.
+                        </span>
+                        <button
+                          onClick={() => setShowProfilePopup(true)}
+                          className="glass-button"
+                          style={{ fontSize: '0.72rem', padding: '4px 10px', whiteSpace: 'nowrap', marginLeft: 'auto' }}
+                        >
+                          Compléter mon profil
+                        </button>
+                      </div>
+                    )}
+
                     {viewingArchiveId && (
                       <div style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,

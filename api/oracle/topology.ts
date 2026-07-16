@@ -38,6 +38,26 @@ async function authenticateRequest(req: VercelRequest): Promise<{ userId: string
   }
 }
 
+// A PostgREST `.in('col', ids)` filter is serialized straight into the
+// request's query string — on a large merged network (hundreds of contact
+// ids) that URL can exceed the gateway's request-line size limit, which
+// comes back as a bare, non-JSON "400 Bad Request" (no PostgREST error body
+// to parse, no Mistral involved at all). Chunking keeps every single
+// request well under that ceiling.
+async function selectInChunks<T = any>(
+  build: (chunk: string[]) => PromiseLike<{ data: T[] | null; error: any }>,
+  ids: string[],
+  chunkSize = 150
+): Promise<{ data: T[]; error: any }> {
+  if (ids.length === 0) return { data: [], error: null };
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += chunkSize) chunks.push(ids.slice(i, i + chunkSize));
+  const results = await Promise.all(chunks.map(build));
+  const failed = results.find(r => r.error);
+  if (failed) return { data: [], error: failed.error };
+  return { data: results.flatMap(r => r.data || []), error: null };
+}
+
 // ─── Content hashing (shared formula with map-batch.ts / supply-demand.ts) ──
 // Captures everything that feeds either the embedding or the MAP/SUPPLY
 // prompts for a contact — if this hash is unchanged, the contact's prior
@@ -378,7 +398,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let contactsQuery = userSupabase.from('contacts').select('id, first_name, last_name, job_title, company, bio, skills, inferred_needs, space_id').order('first_name');
     if (spaceId) contactsQuery = contactsQuery.eq('space_id', spaceId);
     const { data: rawContacts, error: contactsError } = await contactsQuery;
-    if (contactsError) { res.status(500).json({ error: contactsError.message }); return; }
+    if (contactsError) {
+      console.error('Oracle topology: contacts fetch failed', contactsError);
+      res.status(500).json({ error: contactsError.message });
+      return;
+    }
 
     if (!rawContacts || rawContacts.length === 0) {
       res.status(200).json({ batches: [], bridgeContacts: [], lockedContactNames: [], analyzedCount: 0, excludedCount: 0, excludedContacts: [] });
@@ -389,7 +413,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // front (they're one of the signals that make a contact analyzable) and
     // reused for hashing/embedding below.
     const rawContactIds = rawContacts.map(c => c.id);
-    const { data: allNotes } = await userSupabase.from('notes').select('*').in('contact_id', rawContactIds);
+    const { data: allNotes, error: allNotesError } = await selectInChunks<any>(
+      chunk => userSupabase.from('notes').select('*').in('contact_id', chunk),
+      rawContactIds
+    );
+    if (allNotesError) {
+      // Non-fatal by design (a contact with unreadable notes just falls back
+      // to its other signals) but MUST be logged — silently swallowing this
+      // used to make a real fetch failure indistinguishable from "nobody has
+      // notes," which then wrongly excluded contacts as unanalyzable.
+      console.error('Oracle topology: notes fetch failed, continuing without notes', allNotesError);
+    }
     const noteCountById = new Map<string, number>();
     (allNotes || []).forEach((n: any) => noteCountById.set(n.contact_id, (noteCountById.get(n.contact_id) || 0) + 1));
 
@@ -410,11 +444,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const contactIds = contacts.map(c => c.id);
 
-    const { data: visibility, error: visibilityError } = await userSupabase
-      .from('contacts_visible')
-      .select('id, is_unlocked')
-      .in('id', contactIds);
-    if (visibilityError) { res.status(500).json({ error: visibilityError.message }); return; }
+    const { data: visibility, error: visibilityError } = await selectInChunks<any>(
+      chunk => userSupabase.from('contacts_visible').select('id, is_unlocked').in('id', chunk),
+      contactIds
+    );
+    if (visibilityError) {
+      console.error('Oracle topology: visibility fetch failed', visibilityError);
+      res.status(500).json({ error: visibilityError.message });
+      return;
+    }
 
     const visibleIds = new Set((visibility || []).filter(v => v.is_unlocked).map(v => v.id));
     const isLocked = (id?: string) => Boolean(id) && !visibleIds.has(id as string);
@@ -449,10 +487,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // the pre-incremental behavior, just without the speedup.
     let cachedEmbeddings = new Map<string, { vector: number[]; clusterId: string | null }>();
     try {
-      const { data: cacheRows } = await userSupabase
-        .from('contact_embeddings')
-        .select('contact_id, content_hash, embedding, cluster_id')
-        .in('contact_id', contactIds);
+      const { data: cacheRows, error: cacheRowsError } = await selectInChunks<any>(
+        chunk => userSupabase.from('contact_embeddings').select('contact_id, content_hash, embedding, cluster_id').in('contact_id', chunk),
+        contactIds
+      );
+      if (cacheRowsError) throw cacheRowsError;
       (cacheRows || []).forEach((row: any) => {
         if (row.content_hash === hashByContactId.get(row.contact_id)) {
           cachedEmbeddings.set(row.contact_id, { vector: row.embedding as number[], clusterId: row.cluster_id });

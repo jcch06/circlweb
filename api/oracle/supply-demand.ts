@@ -27,6 +27,31 @@ async function authenticateRequest(req: VercelRequest): Promise<{ userId: string
   }
 }
 
+// A PostgREST `.in('col', ids)` filter is serialized straight into the
+// request's query string — on a large merged network (hundreds of contact
+// ids) that URL can exceed the gateway's request-line size limit, which
+// comes back as a bare, non-JSON "400 Bad Request" (no PostgREST error body
+// to parse, no Mistral involved at all — the terse "Bad Request" message
+// this endpoint has been observed to surface, unlike every real Mistral
+// SDKError elsewhere in this pipeline, which always reads "API error
+// occurred: Status X..."). Chunking keeps every single request well under
+// that ceiling. This endpoint fetches the FULL network's notes/visibility in
+// one shot (unlike map-batch.ts, which only ever queries one 15-30 contact
+// cluster at a time), so it's the one most exposed to this.
+async function selectInChunks<T = any>(
+  build: (chunk: string[]) => PromiseLike<{ data: T[] | null; error: any }>,
+  ids: string[],
+  chunkSize = 150
+): Promise<{ data: T[]; error: any }> {
+  if (ids.length === 0) return { data: [], error: null };
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += chunkSize) chunks.push(ids.slice(i, i + chunkSize));
+  const results = await Promise.all(chunks.map(build));
+  const failed = results.find(r => r.error);
+  if (failed) return { data: [], error: failed.error };
+  return { data: results.flatMap(r => r.data || []), error: null };
+}
+
 interface SupplyDemandEntry {
   need: string;
   demanders: { id: string; name: string }[];
@@ -293,15 +318,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let contactsQuery = userSupabase.from('contacts').select('*').order('first_name');
     if (spaceId) contactsQuery = contactsQuery.eq('space_id', spaceId);
     const { data: rawContacts, error: contactsError } = await contactsQuery;
-    if (contactsError) { res.status(500).json({ error: contactsError.message }); return; }
+    if (contactsError) {
+      console.error('Oracle supply-demand: contacts fetch failed', contactsError);
+      res.status(500).json({ error: contactsError.message });
+      return;
+    }
     if (!rawContacts || rawContacts.length === 0) {
       res.status(200).json([]);
       return;
     }
 
     const rawContactIds = rawContacts.map(c => c.id);
-    const { data: notes, error: notesError } = await userSupabase.from('notes').select('*').in('contact_id', rawContactIds);
-    if (notesError) { res.status(500).json({ error: notesError.message }); return; }
+    const { data: notes, error: notesError } = await selectInChunks<any>(
+      chunk => userSupabase.from('notes').select('*').in('contact_id', chunk),
+      rawContactIds
+    );
+    if (notesError) {
+      console.error('Oracle supply-demand: notes fetch failed', notesError);
+      res.status(500).json({ error: notesError.message });
+      return;
+    }
 
     // Enrichment gate — only contacts with a real signal enter the matrix.
     const noteCountById = new Map<string, number>();
@@ -314,11 +350,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const contactIds = contacts.map(c => c.id);
 
-    const { data: visibility, error: visibilityError } = await userSupabase
-      .from('contacts_visible')
-      .select('id, is_unlocked')
-      .in('id', contactIds);
-    if (visibilityError) { res.status(500).json({ error: visibilityError.message }); return; }
+    const { data: visibility, error: visibilityError } = await selectInChunks<any>(
+      chunk => userSupabase.from('contacts_visible').select('id, is_unlocked').in('id', chunk),
+      contactIds
+    );
+    if (visibilityError) {
+      console.error('Oracle supply-demand: visibility fetch failed', visibilityError);
+      res.status(500).json({ error: visibilityError.message });
+      return;
+    }
 
     const visibleIds = new Set((visibility || []).filter(v => v.is_unlocked).map(v => v.id));
     const lockedNames = contacts.filter(c => !visibleIds.has(c.id)).map(c => `${c.first_name} ${c.last_name}`);

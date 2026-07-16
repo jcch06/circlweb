@@ -158,6 +158,26 @@ function safeParseJSON(text: string): any {
   }
 }
 
+// Garde-fou : un Macro-Besoin n'a de sens que s'il CONSOLIDE réellement — au
+// moins 2 contacts concernés OU au moins 2 besoins bruts distincts fusionnés.
+// Le prompt le demande déjà, mais Mistral produit parfois des besoins isolés
+// recopiés ("1 contact · fusionne : <le même libellé>") qui polluent la
+// synthèse sur un réseau éclaté. On les écarte ici plutôt que de les afficher.
+function filterMacroNeeds(raw: any): MacroNeed[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((n: any) => {
+    if (!n || typeof n.label !== 'string' || !n.label.trim()) return false;
+    const merged = Array.isArray(n.mergedFrom)
+      ? n.mergedFrom.filter((m: any) => typeof m === 'string' && m.trim())
+      : [];
+    // Besoins bruts réellement distincts (insensible à la casse/espaces) —
+    // deux fois le même libellé ne compte pas comme une consolidation.
+    const distinctMerged = new Set(merged.map((m: string) => m.trim().toLowerCase()));
+    const contactsCount = Number(n.affectedContactsCount) || 0;
+    return contactsCount >= 2 || distinctMerged.size >= 2;
+  });
+}
+
 async function synthesizeNetwork(
   client: Mistral,
   batchResults: MistralBatchResult[],
@@ -183,7 +203,7 @@ ${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${bri
 
 <rules>
 - RIGUEUR AVANT TOUT, mais UNIQUEMENT sur "macroNeeds", "valueChains" et "crossBatchSynergies" (qui exigent des connexions crédibles entre contacts) : ne consolide que ce que les données agrégées soutiennent réellement. Il vaut mieux 2 macro-besoins et 1 chaîne de valeur SOLIDES que des listes étoffées de connexions spéculatives. Si les données ne soutiennent pas de synergie transversale crédible, renvoie peu d'éléments sur CES champs (voire des tableaux vides) — c'est une réponse valide. "globalThemes" en revanche est un simple résumé factuel de ce qui existe dans <aggregated_batch_data> (besoins récurrents, compétences clés déjà extraits par lot) : il ne dépend d'AUCUNE synergie ni d'aucun alignement avec le profil utilisateur, et ne doit être vide que si <aggregated_batch_data> est lui-même vide.
-- Un "Macro-Besoin" doit regrouper au moins un besoin réel présent dans "mergedFrom", jamais inventé de toutes pièces.
+- Un "Macro-Besoin" est par définition une CONSOLIDATION : il ne se justifie que s'il regroupe au moins DEUX contacts distincts OU au moins deux besoins bruts distincts dans "mergedFrom". Ne crée JAMAIS un macro-besoin qui ne concerne qu'un seul contact avec un seul besoin recopié — ce n'est pas un macro-besoin, c'est un besoin isolé, et il n'a pas sa place ici. Si le réseau ne présente aucun besoin réellement partagé par plusieurs contacts, renvoie un tableau "macroNeeds" vide : c'est une réponse valide et préférable à des besoins triviaux. "mergedFrom" et "affectedContactsCount" doivent refléter la réalité (jamais gonflés pour atteindre le seuil).
 - Une "valueChain" ne doit relier que des contacts RÉELLEMENT nommés dans les données agrégées, chacun avec un rôle concret tiré de ses données. N'ajoute JAMAIS un maillon générique du type "un profil pertinent dans le réseau" ni un rôle vague ("profil technique ou opérationnel", "client potentiel") : si tu n'as pas de rôle précis pour un contact, ne l'inclus pas dans la chaîne.
 - Chaque synergie agrégée porte un "confidence" ("high"/"medium"/"low") hérité du MAP — "high" y signifie qu'une note réelle de l'utilisateur corrobore le lien, "medium"/"low" signifient une pure estimation IA. Privilégie les synergies "high" pour bâtir les "valueChains" et macro-besoins les plus mis en avant ; une chaîne construite uniquement sur des synergies "low" doit rester marginale, pas headline.
 - Le "recommendedActionPlan" ne doit citer que des contacts, entreprises ou organisations RÉELLEMENT présents dans les données agrégées. N'invente JAMAIS un tiers plausible (syndicat professionnel, entreprise cible, segment de marché précis) qui n'apparaît nulle part dans <aggregated_batch_data> — une action peut rester généraliste ("Prendre contact avec X pour explorer Y") plutôt que de nommer une entité non vérifiée.
@@ -220,7 +240,7 @@ ${aggregatedData}
         crossBatchSynergies: parsed.crossBatchSynergies ?? [],
         networkStrength: parsed.networkStrength ?? FALLBACK_SYNTHESIS.networkStrength,
         recommendedActionPlan: parsed.recommendedActionPlan ?? [],
-        macroNeeds: parsed.macroNeeds ?? [],
+        macroNeeds: filterMacroNeeds(parsed.macroNeeds),
         valueChains: parsed.valueChains ?? []
       };
     }

@@ -87,7 +87,7 @@ interface MistralBatchResult {
   keyCompetencies: string[];
 }
 
-interface MacroNeed { label: string; mergedFrom: string[]; affectedContactsCount: number; priority: 'high' | 'medium' | 'low'; }
+interface MacroNeed { label: string; description?: string; mergedFrom: string[]; affectedContactsCount: number; priority: 'high' | 'medium' | 'low'; }
 interface ValueChainLink { step: number; contactName: string; role: string; contribution: string; }
 interface ValueChain { title: string; description: string; chain: ValueChainLink[]; estimatedImpact: string; }
 // Un pôle DENSE mais HORS-PROFIL : un thème/besoin réellement partagé par
@@ -315,6 +315,7 @@ ${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${bri
 - Chaque synergie agrégée porte un "confidence" ("high"/"medium"/"low") hérité du MAP — "high" y signifie qu'une note réelle de l'utilisateur corrobore le lien, "medium"/"low" signifient une pure estimation IA. Privilégie les synergies "high" pour bâtir les "valueChains" et macro-besoins les plus mis en avant ; une chaîne construite uniquement sur des synergies "low" doit rester marginale, pas headline.
 - Le "recommendedActionPlan" ne doit citer que des contacts, entreprises ou organisations RÉELLEMENT présents dans les données agrégées. N'invente JAMAIS un tiers plausible (syndicat professionnel, entreprise cible, segment de marché précis) qui n'apparaît nulle part dans <aggregated_batch_data> — une action peut rester généraliste ("Prendre contact avec X pour explorer Y") plutôt que de nommer une entité non vérifiée.
 - Une "emergingOpportunity" (Porte à Explorer) suit la MÊME RIGUEUR : elle doit s'appuyer sur au moins DEUX contacts réels et nommés (dans "anchorContacts") qui partagent réellement ce thème/besoin dans les données agrégées. N'invente jamais un pôle ou une tendance à partir d'un seul contact ou d'une extrapolation. Ne remonte ici QUE des thèmes hors-profil (ceux qui collent aux leviers de l'utilisateur ont déjà leur place dans macroNeeds/valueChains) ; si tout le réseau est déjà aligné, renvoie un tableau "emergingOpportunities" vide. Le champ "whyNewDoor" explique concrètement quelle direction nouvelle ce pôle pourrait ouvrir à l'utilisateur.
+- RICHESSE DES DESCRIPTIONS : les champs "description" (macroNeeds, crossBatchSynergies, valueChains, emergingOpportunities) et "contribution" (maillons) ne doivent JAMAIS être des étiquettes creuses d'une ligne. Écris des explications concrètes et actionnables (plusieurs phrases) : QUI (contacts nommés), QUOI (le besoin/la ressource précise), POURQUOI ça crée de la valeur, et COMMENT l'activer (premier pas concret). Un utilisateur doit pouvoir agir en lisant la description, sans avoir à deviner. Ancre chaque détail dans les données réelles — riche ne veut pas dire inventé.
 - Réponds STRICTEMENT avec un objet JSON valide respectant le format ci-dessous, sans markdown ni texte additionnel.
 </rules>
 
@@ -326,16 +327,16 @@ ${aggregatedData}
 {
   "globalThemes": ["thème dominant 1", "thème dominant 2"],
   "crossBatchSynergies": [
-    { "theme": "Thème de la synergie globale", "description": "Explication de pourquoi ce réseau a de la valeur ici", "potentialImpact": "Estimation de l'impact (ex: Fort potentiel commercial)" }
+    { "theme": "Thème de la synergie globale", "description": "3 à 5 phrases DÉTAILLÉES : quels contacts précis de quels pôles se croisent, quel besoin de l'un rencontre quelle compétence de l'autre, le mécanisme concret de la collaboration possible, et le premier pas pour l'activer. Nomme les contacts réels quand c'est pertinent.", "potentialImpact": "Estimation de l'impact (ex: Fort potentiel commercial), justifiée en une phrase" }
   ],
   "macroNeeds": [
-    { "label": "Nom du besoin consolidé (ex: Recrutement Tech Senior)", "mergedFrom": ["besoin brut 1", "besoin brut 2"], "affectedContactsCount": 3, "priority": "high" }
+    { "label": "Nom du besoin consolidé (ex: Recrutement Tech Senior)", "description": "2 à 4 phrases : en quoi consiste ce besoin partagé, quels contacts précis l'expriment et pourquoi, et comment l'utilisateur pourrait y répondre concrètement.", "mergedFrom": ["besoin brut 1", "besoin brut 2"], "affectedContactsCount": 3, "priority": "high" }
   ],
   "valueChains": [
-    { "title": "Nom de la chaîne de valeur", "description": "Comment ces contacts s'enchaînent pour créer de la valeur", "chain": [{ "step": 1, "contactName": "Nom", "role": "Poste", "contribution": "Ce qu'il apporte à la chaîne" }], "estimatedImpact": "Estimation de l'impact business" }
+    { "title": "Nom de la chaîne de valeur", "description": "3 à 5 phrases riches : le scénario business complet, quel déclencheur, comment les maillons s'enchaînent concrètement, et quel résultat final concret pour l'utilisateur.", "chain": [{ "step": 1, "contactName": "Nom", "role": "Poste", "contribution": "Ce qu'il apporte à la chaîne, concrètement (1-2 phrases)" }], "estimatedImpact": "Estimation de l'impact business, chiffrée ou qualifiée" }
   ],
   "emergingOpportunities": [
-    { "theme": "Pôle hors-profil dense (ex: Événementiel haut de gamme)", "description": "Ce que ce pôle représente dans le réseau", "anchorContacts": [{ "name": "Nom A" }, { "name": "Nom B" }], "whyNewDoor": "Quelle direction nouvelle ce pôle pourrait ouvrir à l'utilisateur" }
+    { "theme": "Pôle hors-profil dense (ex: Événementiel haut de gamme)", "description": "Ce que ce pôle représente dans le réseau, en détail", "anchorContacts": [{ "name": "Nom A" }, { "name": "Nom B" }], "whyNewDoor": "Quelle direction nouvelle ce pôle pourrait ouvrir à l'utilisateur" }
   ],
   "networkStrength": "Résumé en 1-2 phrases de la force principale de ce réseau",
   "recommendedActionPlan": ["Action 1", "Action 2"]

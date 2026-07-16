@@ -913,6 +913,7 @@ export interface MistralBatchResult {
 
 export interface MacroNeed {
   label: string;
+  description?: string;
   mergedFrom: string[];
   affectedContactsCount: number;
   priority: 'high' | 'medium' | 'low';
@@ -981,6 +982,7 @@ function normalizeMacroNeed(mn: any): MacroNeed {
   if (mn && typeof mn === 'object') {
     return {
       label: typeof mn.label === 'string' ? mn.label : String(mn.label ?? ''),
+      description: typeof mn.description === 'string' ? mn.description : undefined,
       mergedFrom: Array.isArray(mn.mergedFrom) ? mn.mergedFrom : [],
       affectedContactsCount: typeof mn.affectedContactsCount === 'number' ? mn.affectedContactsCount : 0,
       priority: mn.priority === 'high' || mn.priority === 'low' ? mn.priority : 'medium'

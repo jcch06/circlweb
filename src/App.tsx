@@ -11,6 +11,7 @@ import { ContactsPage } from './components/ContactsPage';
 import { SpacesPage } from './components/SpacesPage';
 import { TagsPage } from './components/TagsPage';
 import { NotesPage } from './components/NotesPage';
+import { DuplicatesPage } from './components/DuplicatesPage';
 
 
 function App() {
@@ -254,6 +255,15 @@ function App() {
             <NotesPage
               notes={notes}
               contacts={contacts}
+              user={session.user}
+              onRefreshData={fetchNetworkData}
+            />
+          )}
+
+          {activeTab === 'duplicates' && (
+            <DuplicatesPage
+              contacts={contacts}
+              notes={notes}
               user={session.user}
               onRefreshData={fetchNetworkData}
             />

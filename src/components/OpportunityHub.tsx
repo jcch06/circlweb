@@ -617,7 +617,10 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
                                   border: mn.priority === 'low' ? '1px solid var(--border)' : 'none'
                                 }}>{mn.priority}</span>
                               </div>
-                              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 8 }}>
+                              {mn.description && (
+                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.55, marginBottom: 8 }}>{mn.description}</p>
+                              )}
+                              <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginBottom: 0 }}>
                                 {mn.affectedContactsCount} contact(s) concerné(s) · fusionne : {mn.mergedFrom.join(', ')}
                               </p>
                             </div>

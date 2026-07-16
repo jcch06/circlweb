@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { LogOut } from 'lucide-react';
 
-export type TabType = 'dashboard' | 'galaxy' | 'oracle' | 'ingestion' | 'contacts' | 'spaces' | 'tags' | 'notes';
+export type TabType = 'dashboard' | 'galaxy' | 'oracle' | 'ingestion' | 'contacts' | 'spaces' | 'tags' | 'notes' | 'duplicates';
 
 interface SidebarProps {
   activeTab: TabType;
@@ -58,6 +58,11 @@ const IconSpaces = () => (
     <path d="M12 3l9 5-9 5-9-5z" /><path d="M3 13l9 5 9-5" />
   </svg>
 );
+const IconDuplicates = () => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+    <rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </svg>
+);
 
 const NAV: { tab: TabType; label: string; icon: () => React.JSX.Element }[] = [
   { tab: 'contacts', label: 'Contacts', icon: IconContacts },
@@ -66,6 +71,7 @@ const NAV: { tab: TabType; label: string; icon: () => React.JSX.Element }[] = [
   { tab: 'ingestion', label: 'Ingestion', icon: IconIngestion },
   { tab: 'tags', label: 'Tags', icon: IconTags },
   { tab: 'notes', label: 'Notes', icon: IconNotes },
+  { tab: 'duplicates', label: 'Doublons', icon: IconDuplicates },
   { tab: 'spaces', label: 'Espaces', icon: IconSpaces },
 ];
 

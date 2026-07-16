@@ -1059,9 +1059,21 @@ function normalizeSynergy(s: any): ImmediateSynergy {
 }
 
 function normalizeBatchResult(batch: any): MistralBatchResult {
+  const synergies = Array.isArray(batch?.immediateSynergies) ? batch.immediateSynergies.map(normalizeSynergy) : [];
+  // Drop degenerate "X & X" synergies: same contact id, or the same
+  // (normalized) name — the latter catches duplicate contact records (same
+  // person imported twice with different ids), which the model otherwise
+  // pairs with itself. A contact is never a synergy with itself.
+  const deduped = synergies.filter((s: ImmediateSynergy) => {
+    if (s.contactId1 && s.contactId2 && s.contactId1 === s.contactId2) return false;
+    const n1 = s.contactName1.trim().toLowerCase();
+    const n2 = s.contactName2.trim().toLowerCase();
+    if (n1 && n2 && n1 === n2) return false;
+    return true;
+  });
   return {
     recurrentNeeds: normalizeStringArray(batch?.recurrentNeeds),
-    immediateSynergies: Array.isArray(batch?.immediateSynergies) ? batch.immediateSynergies.map(normalizeSynergy) : [],
+    immediateSynergies: deduped,
     keyCompetencies: normalizeStringArray(batch?.keyCompetencies)
   };
 }

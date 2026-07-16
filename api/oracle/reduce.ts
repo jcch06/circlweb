@@ -107,7 +107,9 @@ function buildUserContext(userProfile: any): string {
 L'utilisateur veut MONÉTISER et VALORISER son réseau. Leviers de valeur prioritaires, dérivés de SON profil :
 ${angles.map((a: string, i: number) => `${i + 1}. ${a}`).join('\n')}
 
-ADAPTE ton analyse au profil ci-dessus. Si le poste/les compétences pointent vers un domaine précis (ex : "architecte" → immobilier/urbanisme, "développeur" → consulting tech, "avocat" → conseil juridique, "élu/politique" → influence & coalitions, "dirigeant associatif" → mécénat & partenariats), PRIORISE les opportunités ALIGNÉES avec son expertise et ses objectifs déclarés.`;
+ADAPTE ton analyse au profil ci-dessus. Si le poste/les compétences pointent vers un domaine précis (ex : "architecte" → immobilier/urbanisme, "développeur" → consulting tech, "avocat" → conseil juridique, "élu/politique" → influence & coalitions, "dirigeant associatif" → mécénat & partenariats), PRIORISE les opportunités ALIGNÉES avec son expertise et ses objectifs déclarés.
+
+IMPORTANT : cet alignement sert à PRIORISER et à construire le plan d'action, jamais à faire disparaître une observation réelle. Si le réseau analysé ne colle à aucun des leviers ci-dessus, dis-le explicitement dans "networkStrength" — mais continue de rapporter les thèmes, besoins et compétences RÉELLEMENT présents dans les données, même hors sujet par rapport au profil de l'utilisateur. Un réseau sans lien avec son activité reste un réseau réel avec de vrais thèmes ; ne le réduis jamais à des tableaux vides sous prétexte qu'il ne sert pas directement l'utilisateur.`;
 }
 
 function buildLockedContext(lockedNames: string[]): string {
@@ -171,7 +173,7 @@ ${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${bri
 </instructions>
 
 <rules>
-- RIGUEUR AVANT TOUT : ne consolide que ce que les données agrégées soutiennent réellement. Il vaut mieux 2 macro-besoins et 1 chaîne de valeur SOLIDES que des listes étoffées de connexions spéculatives. Si les données ne soutiennent pas de synergie transversale crédible, renvoie peu d'éléments (voire des tableaux vides) — c'est une réponse valide.
+- RIGUEUR AVANT TOUT, mais UNIQUEMENT sur "macroNeeds", "valueChains" et "crossBatchSynergies" (qui exigent des connexions crédibles entre contacts) : ne consolide que ce que les données agrégées soutiennent réellement. Il vaut mieux 2 macro-besoins et 1 chaîne de valeur SOLIDES que des listes étoffées de connexions spéculatives. Si les données ne soutiennent pas de synergie transversale crédible, renvoie peu d'éléments sur CES champs (voire des tableaux vides) — c'est une réponse valide. "globalThemes" en revanche est un simple résumé factuel de ce qui existe dans <aggregated_batch_data> (besoins récurrents, compétences clés déjà extraits par lot) : il ne dépend d'AUCUNE synergie ni d'aucun alignement avec le profil utilisateur, et ne doit être vide que si <aggregated_batch_data> est lui-même vide.
 - Un "Macro-Besoin" doit regrouper au moins un besoin réel présent dans "mergedFrom", jamais inventé de toutes pièces.
 - Une "valueChain" ne doit relier que des contacts RÉELLEMENT nommés dans les données agrégées, chacun avec un rôle concret tiré de ses données. N'ajoute JAMAIS un maillon générique du type "un profil pertinent dans le réseau" ni un rôle vague ("profil technique ou opérationnel", "client potentiel") : si tu n'as pas de rôle précis pour un contact, ne l'inclus pas dans la chaîne.
 - Chaque synergie agrégée porte un "confidence" ("high"/"medium"/"low") hérité du MAP — "high" y signifie qu'une note réelle de l'utilisateur corrobore le lien, "medium"/"low" signifient une pure estimation IA. Privilégie les synergies "high" pour bâtir les "valueChains" et macro-besoins les plus mis en avant ; une chaîne construite uniquement sur des synergies "low" doit rester marginale, pas headline.

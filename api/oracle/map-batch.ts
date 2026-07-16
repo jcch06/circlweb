@@ -131,6 +131,13 @@ function safeParseJSON(text: string): any {
 }
 
 async function processContactBatch(client: Mistral, batch: any[], notes: any[], userContext: string, lockedContext: string): Promise<MistralBatchResult> {
+  // Tag names spell out the provenance explicitly: skills/needs are an AI
+  // guess derived from job title/sector at enrichment time (see
+  // enrichProfileFromScraping / autoEnrichContact prompts) — never read from
+  // this contact's actual notes. <notes_utilisateur> is the one field the
+  // user personally wrote about this contact, so it's the only genuinely
+  // verified signal. The model needs this distinction spelled out to avoid
+  // treating a guess and a fact as equally solid ground for "confidence".
   const batchData = batch.map(c => {
     const contactNotes = notes.filter(n => n.contact_id === c.id).map(n => n.content).join(' | ');
     const skills: string[] = Array.isArray(c.skills) ? c.skills : [];
@@ -139,9 +146,9 @@ async function processContactBatch(client: Mistral, batch: any[], notes: any[], 
   <name>${c.first_name} ${c.last_name}</name>
   <role>${c.job_title || 'Inconnu'}</role>
   <company>${c.company || 'Inconnue'}</company>
-  <skills>${skills.length > 0 ? skills.join(', ') : 'Non renseignées'}</skills>
-  <needs>${needs.length > 0 ? needs.join(', ') : 'Non renseignés'}</needs>
-  <notes>${contactNotes || 'Aucune note disponible'}</notes>
+  <skills_estimees_ia>${skills.length > 0 ? skills.join(', ') : 'Non renseignées'}</skills_estimees_ia>
+  <besoins_estimes_ia>${needs.length > 0 ? needs.join(', ') : 'Non renseignés'}</besoins_estimes_ia>
+  <notes_utilisateur>${contactNotes || 'Aucune note disponible'}</notes_utilisateur>
 </contact>`;
   }).join('\n');
 
@@ -156,12 +163,16 @@ Analyse EN PROFONDEUR le lot de contacts fourni ci-dessous et extrais :
 3. Les compétences clés (mots-clés) qui ressortent du groupe.
 </instructions>
 
+<hierarchie_de_confiance>
+<skills_estimees_ia> et <besoins_estimes_ia> sont une ESTIMATION automatique déduite du poste/secteur au moment de l'enrichissement — jamais vérifiée, jamais tirée d'une vraie conversation avec ce contact. <notes_utilisateur> est écrit par l'utilisateur lui-même à partir de sa connaissance réelle du contact — c'est la seule donnée réellement vérifiée. Un contact sans notes n'a AUCUNE donnée vérifiée, seulement une estimation générique.
+</hierarchie_de_confiance>
+
 <rules>
 - RIGUEUR AVANT TOUT : ne propose une synergie QUE si elle s'appuie sur des données réelles du contact (poste, compétences, besoins, notes). Il vaut mieux renvoyer 0 ou 1 synergie SOLIDE qu'un lot de synergies plausibles mais inventées. Un tableau "immediateSynergies" vide est une réponse VALIDE et attendue quand les données ne soutiennent aucune synergie crédible.
 - N'invente JAMAIS un besoin, une compétence, un rôle ou une identité qui ne figure pas explicitement dans les balises <contact>. Si un contact n'a qu'un nom et aucune autre donnée, ne construis AUCUNE synergie autour de lui.
 - Chaque synergie doit citer, dans sa "reason", l'élément concret (compétence, besoin ou note) de CHAQUE contact qui la justifie — pas une généralité.
-- Chaque synergie porte un "confidence" honnête : "high" seulement si le besoin ET la compétence complémentaire sont EXPLICITEMENT écrits dans les données des deux contacts (ex: besoin="Recrutement Tech" chez A, skills contient "Recrutement" chez B). "medium" si le lien est plausible mais repose sur une déduction (ex: poste/secteur suggère la compétence sans qu'elle soit listée). "low" si c'est une hypothèse plus lointaine que tu choisis quand même de proposer. Ne mets jamais "high" par défaut.
-- "evidence" cite le texte EXACT (mot pour mot) tiré de <skills>, <needs> ou <notes> qui fonde la synergie — pas une paraphrase, pas une reformulation.
+- Chaque synergie porte un "confidence" honnête, calibré selon la hiérarchie ci-dessus : "high" UNIQUEMENT si au moins un des deux contacts a une <notes_utilisateur> qui corrobore directement le lien (le besoin/la compétence apparaît dans une vraie note, pas seulement dans l'estimation IA). "medium" si le lien ne s'appuie QUE sur <skills_estimees_ia>/<besoins_estimes_ia> des deux côtés, sans corroboration par une note réelle — c'est plausible mais reste une estimation contre une estimation. "low" pour une hypothèse plus lointaine que tu choisis quand même de proposer. N'attribue JAMAIS "high" à une synergie qui ne repose que sur des champs estimés par l'IA.
+- "evidence" cite le texte EXACT (mot pour mot) tiré de <skills_estimees_ia>, <besoins_estimes_ia> ou <notes_utilisateur> qui fonde la synergie — pas une paraphrase. Préfère toujours citer <notes_utilisateur> quand elle contient l'élément pertinent, plutôt qu'un champ estimé.
 - Réponds STRICTEMENT avec un objet JSON valide respectant le format ci-dessous, sans aucun texte, markdown ou commentaire additionnel.
 </rules>
 

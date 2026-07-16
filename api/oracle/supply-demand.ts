@@ -163,6 +163,11 @@ function isAnalyzableContact(c: any, noteCountById: Map<string, number>): boolea
 async function buildSupplyDemandMatrix(client: Mistral, contacts: any[], notes: any[], userContext: string, lockedContext: string): Promise<SupplyDemandEntry[]> {
   if (!contacts || contacts.length === 0) return [];
 
+  // Key names spell out provenance explicitly: skillsEstimeesIA/besoinsEstimesIA
+  // are an AI guess derived from job title/sector at enrichment time (see
+  // enrichProfileFromScraping / autoEnrichContact) — never read from this
+  // contact's actual notes. notesUtilisateur is what the user personally
+  // wrote about this contact — the only genuinely verified signal.
   const catalog = contacts.slice(0, 200).map(c => {
     const contactNotes = notes.filter(n => n.contact_id === c.id).map(n => n.content).join(' | ').substring(0, 400);
     const skills: string[] = Array.isArray(c.skills) ? c.skills : [];
@@ -172,7 +177,7 @@ async function buildSupplyDemandMatrix(client: Mistral, contacts: any[], notes: 
       name: `${c.first_name} ${c.last_name}`,
       role: c.job_title || 'Inconnu',
       company: c.company || 'Inconnue',
-      skills, needs, notes: contactNotes
+      skillsEstimeesIA: skills, besoinsEstimesIA: needs, notesUtilisateur: contactNotes
     };
   });
 
@@ -188,9 +193,14 @@ ${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${loc
 5. Mets "opportunityForUser" à true si l'utilisateur (voir user_context) est bien placé pour capter cette opportunité.
 </instructions>
 
+<hierarchie_de_confiance>
+"skillsEstimeesIA" et "besoinsEstimesIA" sont une ESTIMATION automatique déduite du poste/secteur au moment de l'enrichissement — jamais vérifiée, jamais tirée d'une vraie conversation avec ce contact. "notesUtilisateur" est écrit par l'utilisateur lui-même à partir de sa connaissance réelle du contact — c'est la seule donnée réellement vérifiée. Un contact sans notes n'a AUCUNE donnée vérifiée, seulement une estimation générique.
+</hierarchie_de_confiance>
+
 <rules>
 - RIGUEUR AVANT TOUT : ne crée une ligne QUE si des demanders ET des suppliers réels et nommés existent dans le catalogue. Il vaut mieux 3 lignes solides et vérifiables que 12 lignes spéculatives. Si le catalogue ne contient aucun besoin exploitable, renvoie un tableau vide — c'est une réponse valide et attendue.
-- N'invente JAMAIS un besoin, une compétence ou une mise en relation qui n'est pas ancrée dans les données du contact (skills / needs / notes). Ne déduis pas un besoin du seul poste si aucune donnée ne l'appuie.
+- N'invente JAMAIS un besoin, une compétence ou une mise en relation qui n'est pas ancrée dans les données du contact (skillsEstimeesIA / besoinsEstimesIA / notesUtilisateur). Ne déduis pas un besoin du seul poste si aucune donnée ne l'appuie.
+- Calibre "gapLevel" selon la hiérarchie de confiance : ne marque "covered" (couverture assurée) que si l'offre ET la demande sont corroborées par au moins une "notesUtilisateur" réelle de chaque côté. Si le match ne repose QUE sur des champs estimés par l'IA des deux côtés (aucune note ne corrobore), reste sur "partial" ou "opportunity" plutôt que "covered" — une estimation face à une autre estimation ne justifie jamais une certitude de couverture.
 - Utilise UNIQUEMENT les id/noms fournis dans le catalogue pour demanders/suppliers.
 - Limite-toi aux ~12 lignes les plus pertinentes.
 - Réponds STRICTEMENT avec un objet JSON valide, sans markdown ni texte additionnel.

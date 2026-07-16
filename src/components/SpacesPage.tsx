@@ -255,11 +255,39 @@ export const SpacesPage: React.FC<SpacesPageProps> = ({
           source: 'manual'
         }));
 
+      // The pre-check above can't be perfectly race-proof — another member
+      // syncing at the same moment, or a row this client couldn't see when
+      // it fetched existingContacts, can still collide with the DB's unique
+      // constraints. Try the fast path (one batch insert) first; only on an
+      // actual unique-violation do we pay the cost of inserting row-by-row so
+      // the contacts that AREN'T in conflict still go through instead of the
+      // whole sync failing.
       const { error: insertError } = await supabase.from('contacts').insert(insertPayload);
-      if (insertError) throw insertError;
+
+      if (!insertError) {
+        await onRefreshData();
+        alert(`${insertPayload.length} contacts synchronisés avec succès dans cet espace !`);
+        return;
+      }
+
+      if (insertError.code !== '23505') throw insertError;
+
+      let succeeded = 0;
+      let skipped = 0;
+      for (const row of insertPayload) {
+        const { error: rowError } = await supabase.from('contacts').insert(row);
+        if (rowError) {
+          if (rowError.code === '23505') { skipped++; continue; }
+          throw rowError;
+        }
+        succeeded++;
+      }
 
       await onRefreshData();
-      alert(`${insertPayload.length} contacts synchronisés avec succès dans cet espace !`);
+      alert(
+        `${succeeded} contact(s) synchronisé(s) avec succès.` +
+        (skipped > 0 ? ` ${skipped} contact(s) ignoré(s) : un numéro ou un email correspond déjà à un contact présent dans cet espace.` : '')
+      );
     } catch (err: any) {
       console.error(err);
       alert(`Erreur lors de la synchronisation : ${err.message}`);

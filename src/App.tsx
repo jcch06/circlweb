@@ -13,6 +13,7 @@ import { CirclesPage } from './pages/CirclesPage';
 import { NetworkPage } from './pages/NetworkPage';
 import { CapturePage } from './pages/CapturePage';
 import { OpportunitiesPage } from './pages/OpportunitiesPage';
+import { DuplicatesRoute } from './pages/DuplicatesRoute';
 
 function App() {
   const [session, setSession] = useState<any>(null);
@@ -63,6 +64,7 @@ function App() {
               <Route path="/opportunites" element={<OpportunitiesPage />} />
               <Route path="/cercles" element={<CirclesPage />} />
               <Route path="/capture" element={<CapturePage />} />
+              <Route path="/doublons" element={<DuplicatesRoute />} />
               <Route path="*" element={<Navigate to="/accueil" replace />} />
             </Route>
           </Routes>

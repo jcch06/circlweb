@@ -313,6 +313,26 @@ a { color: var(--accent); text-decoration: none; }
   font-variant-numeric: tabular-nums;
 }
 
+/* Sous cette largeur, un rail fixe de 240 px laisse trop peu de place au
+   contenu (les panneaux et la fiche se retrouvent compressés) : on réduit
+   la sidebar à un rail d'icônes. Règle de jcch06, portée sur la coquille
+   refondue (classes .side-rail / .nav-i / .side-foot). */
+@media (max-width: 760px) {
+  .side-rail { width: 64px !important; padding: 16px 8px !important; }
+  .side-rail .brand-name,
+  .side-rail .nav-label,
+  .side-rail .search-label,
+  .side-rail .t-meta,
+  .side-rail .side-foot .nm,
+  .side-rail .capture-label { display: none; }
+  .side-rail .nav-item { justify-content: center; padding: 10px; }
+  .side-rail .side-foot { justify-content: center; }
+  .side-rail .btn { justify-content: center; padding: 8px; }
+  /* Le sélecteur de cercle garde sa pastille de couleur, seul repère du
+     cercle actif quand les libellés disparaissent. */
+  .side-rail .btn-ghost > span:not([style*="border-radius: 999"]) { display: none; }
+}
+
 /* Sélecteur de vue segmenté (Table | Réseau, À traiter | Historique…).
    Un changement de vue est structurant : il se voit. */
 .seg { display: inline-flex; background: var(--hover); border-radius: 10px; padding: 3px; gap: 2px; flex: none; }

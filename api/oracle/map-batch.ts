@@ -30,7 +30,12 @@ async function authenticateRequest(req: VercelRequest): Promise<{ userId: string
 
 interface MistralBatchResult {
   recurrentNeeds: string[];
-  immediateSynergies: { contactId1: string; contactName1: string; contactId2: string; contactName2: string; reason: string }[];
+  immediateSynergies: {
+    contactId1: string; contactName1: string; contactId2: string; contactName2: string;
+    reason: string;
+    confidence: 'high' | 'medium' | 'low';
+    evidence: string;
+  }[];
   keyCompetencies: string[];
 }
 
@@ -73,12 +78,21 @@ function buildUserContext(userProfile: any): string {
     needs ? `Besoins / objectifs déclarés : ${needs}` : ''
   ].filter(Boolean);
 
+  // Prefer the leviers Mistral derived from THIS user's profile (client-side,
+  // see deriveAnalysisAngles) over the static generic list — the latter is
+  // only a fallback when no profile-specific angles were produced.
+  const angles: string[] = Array.isArray(userProfile?.analysisAngles) && userProfile.analysisAngles.length > 0
+    ? userProfile.analysisAngles
+    : genericAngles;
+
   return `${lines.join('\n')}
 
-L'utilisateur veut MONÉTISER et VALORISER son réseau. Angles de valeur à explorer en priorité :
-${genericAngles.map((a, i) => `${i + 1}. ${a}`).join('\n')}
+L'utilisateur veut MONÉTISER et VALORISER son réseau. Leviers de valeur prioritaires, dérivés de SON profil :
+${angles.map((a: string, i: number) => `${i + 1}. ${a}`).join('\n')}
 
-ADAPTE ton analyse au profil ci-dessus. Si le poste/les compétences pointent vers un domaine précis (ex : "architecte" → immobilier/urbanisme, "développeur" → consulting tech, "avocat" → conseil juridique, "élu/politique" → influence & coalitions, "dirigeant associatif" → mécénat & partenariats), PRIORISE les opportunités ALIGNÉES avec son expertise et ses objectifs déclarés.`;
+ADAPTE ton analyse au profil ci-dessus. Si le poste/les compétences pointent vers un domaine précis (ex : "architecte" → immobilier/urbanisme, "développeur" → consulting tech, "avocat" → conseil juridique, "élu/politique" → influence & coalitions, "dirigeant associatif" → mécénat & partenariats), PRIORISE les opportunités ALIGNÉES avec son expertise et ses objectifs déclarés.
+
+IMPORTANT : cet alignement sert à PRIORISER, jamais à faire disparaître une observation réelle. "recurrentNeeds" et "keyCompetencies" sont un résumé factuel de ce lot de contacts — ils doivent exister dès que le lot contient des données exploitables, même si rien ne colle au profil de l'utilisateur. Seules "immediateSynergies" (qui exigent une vraie complémentarité entre deux contacts) peuvent légitimement rester vides.`;
 }
 
 function buildLockedContext(lockedNames: string[]): string {
@@ -87,10 +101,18 @@ function buildLockedContext(lockedNames: string[]): string {
 }
 
 async function callMistralServer(client: Mistral, prompt: string, model: string = MAP_REDUCE_MODEL): Promise<string> {
-  let retries = 3;
+  // Kept modest and bounded well under this function's own maxDuration
+  // (60s, see vercel.json) — a 429 here needs the caller to retry the WHOLE
+  // request after a real delay (a fresh invocation gets a fresh budget),
+  // not this function stalling on a backoff long enough to get killed
+  // mid-retry by its own execution timeout. See postOracleStep in
+  // src/lib/mistral.ts for the client-side retry that actually rides out a
+  // sustained per-minute rate limit (observed as low as 4 req/min on some
+  // account tiers).
+  const maxAttempts = 3;
   let lastError: any = null;
 
-  while (retries > 0) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const response = await client.chat.complete({
         model,
@@ -101,8 +123,9 @@ async function callMistralServer(client: Mistral, prompt: string, model: string 
       return typeof choice === 'string' ? choice : (choice ? String(choice) : '{}');
     } catch (err: any) {
       lastError = err;
-      await sleep(err.statusCode === 429 ? 3000 : 1000);
-      retries--;
+      if (attempt === maxAttempts) break;
+      const delay = err.statusCode === 429 ? Math.min(5000 * attempt, 10000) : 1000;
+      await sleep(delay);
     }
   }
   throw lastError || new Error('Mistral API failure');
@@ -119,6 +142,13 @@ function safeParseJSON(text: string): any {
 }
 
 async function processContactBatch(client: Mistral, batch: any[], notes: any[], userContext: string, lockedContext: string): Promise<MistralBatchResult> {
+  // Tag names spell out the provenance explicitly: skills/needs are an AI
+  // guess derived from job title/sector at enrichment time (see
+  // enrichProfileFromScraping / autoEnrichContact prompts) — never read from
+  // this contact's actual notes. <notes_utilisateur> is the one field the
+  // user personally wrote about this contact, so it's the only genuinely
+  // verified signal. The model needs this distinction spelled out to avoid
+  // treating a guess and a fact as equally solid ground for "confidence".
   const batchData = batch.map(c => {
     const contactNotes = notes.filter(n => n.contact_id === c.id).map(n => n.content).join(' | ');
     const skills: string[] = Array.isArray(c.skills) ? c.skills : [];
@@ -127,9 +157,9 @@ async function processContactBatch(client: Mistral, batch: any[], notes: any[], 
   <name>${c.first_name} ${c.last_name}</name>
   <role>${c.job_title || 'Inconnu'}</role>
   <company>${c.company || 'Inconnue'}</company>
-  <skills>${skills.length > 0 ? skills.join(', ') : 'Non renseignées'}</skills>
-  <needs>${needs.length > 0 ? needs.join(', ') : 'Non renseignés'}</needs>
-  <notes>${contactNotes || 'Aucune note disponible'}</notes>
+  <skills_estimees_ia>${skills.length > 0 ? skills.join(', ') : 'Non renseignées'}</skills_estimees_ia>
+  <besoins_estimes_ia>${needs.length > 0 ? needs.join(', ') : 'Non renseignés'}</besoins_estimes_ia>
+  <notes_utilisateur>${contactNotes || 'Aucune note disponible'}</notes_utilisateur>
 </contact>`;
   }).join('\n');
 
@@ -144,10 +174,16 @@ Analyse EN PROFONDEUR le lot de contacts fourni ci-dessous et extrais :
 3. Les compétences clés (mots-clés) qui ressortent du groupe.
 </instructions>
 
+<hierarchie_de_confiance>
+<skills_estimees_ia> et <besoins_estimes_ia> sont une ESTIMATION automatique déduite du poste/secteur au moment de l'enrichissement — jamais vérifiée, jamais tirée d'une vraie conversation avec ce contact. <notes_utilisateur> est écrit par l'utilisateur lui-même à partir de sa connaissance réelle du contact — c'est la seule donnée réellement vérifiée. Un contact sans notes n'a AUCUNE donnée vérifiée, seulement une estimation générique.
+</hierarchie_de_confiance>
+
 <rules>
-- INTERDICTION FORMELLE de renvoyer un tableau "immediateSynergies" vide si le lot contient au moins 2 contacts. Si aucune synergie évidente n'existe, tu DOIS déduire une opportunité d'échange de compétences plausible même entre profils qui semblent éloignés au premier abord (ex : un besoin abstrait chez A peut être résolu par une compétence indirecte ou un réseau détenu par B). Sois créatif mais réaliste.
-- N'invente jamais d'identité : utilise uniquement les id/noms fournis dans les balises <contact>.
-- Chaque synergie doit avoir une "reason" concrète et actionnable, pas une généralité.
+- ANCRAGE DANS LES DONNÉES, puis GÉNÉROSITÉ : ne propose une synergie que si elle s'appuie sur des données réelles présentes dans les balises <contact> (poste, compétences, besoins, notes). Mais dans cette limite, ton rôle est de RÉVÉLER les complémentarités — y compris NON ÉVIDENTES et INTER-SECTORIELLES : un besoin d'un côté que la compétence de l'autre couvre, deux ressources qui se renforcent, un pont possible entre deux mondes différents. Une complémentarité réelle mais fondée uniquement sur les champs estimés par l'IA (sans note) n'est PAS à écarter : remonte-la en "medium". Ne te limite pas à 1 ou 2 liens — s'il existe plusieurs complémentarités réelles dans le lot, remonte-les TOUTES, chacune calibrée par son "confidence". Un tableau "immediateSynergies" vide n'est justifié QUE si le lot ne contient réellement aucune complémentarité exploitable (ex : contacts d'un même métier sans besoin ni ressource qui se répondent).
+- N'invente JAMAIS un besoin, une compétence, un rôle ou une identité qui ne figure pas explicitement dans les balises <contact>. Si un contact n'a qu'un nom et aucune autre donnée, ne construis AUCUNE synergie autour de lui.
+- Chaque synergie doit citer, dans sa "reason", l'élément concret (compétence, besoin ou note) de CHAQUE contact qui la justifie — pas une généralité.
+- Chaque synergie porte un "confidence" honnête, calibré selon la hiérarchie ci-dessus : "high" UNIQUEMENT si au moins un des deux contacts a une <notes_utilisateur> qui corrobore directement le lien (le besoin/la compétence apparaît dans une vraie note, pas seulement dans l'estimation IA). "medium" si le lien ne s'appuie QUE sur <skills_estimees_ia>/<besoins_estimes_ia> des deux côtés, sans corroboration par une note réelle — c'est plausible mais reste une estimation contre une estimation. "low" pour une hypothèse plus lointaine que tu choisis quand même de proposer. N'attribue JAMAIS "high" à une synergie qui ne repose que sur des champs estimés par l'IA.
+- "evidence" cite le texte EXACT (mot pour mot) tiré de <skills_estimees_ia>, <besoins_estimes_ia> ou <notes_utilisateur> qui fonde la synergie — pas une paraphrase. Préfère toujours citer <notes_utilisateur> quand elle contient l'élément pertinent, plutôt qu'un champ estimé.
 - Réponds STRICTEMENT avec un objet JSON valide respectant le format ci-dessous, sans aucun texte, markdown ou commentaire additionnel.
 </rules>
 
@@ -164,7 +200,9 @@ ${batchData}
       "contactName1": "Nom du premier",
       "contactId2": "id exact du deuxieme contact",
       "contactName2": "Nom du deuxieme",
-      "reason": "Explication concrète et actionnable de la synergie, même indirecte"
+      "reason": "Explication concrète et actionnable de la synergie, même indirecte",
+      "confidence": "high | medium | low",
+      "evidence": "Citation exacte de la donnée (skill/need/note) qui justifie la synergie"
     }
   ],
   "keyCompetencies": ["mot cle 1", "mot cle 2"]
@@ -179,8 +217,14 @@ ${batchData}
     }
     console.error('Mistral MAP: réponse JSON invalide, fallback appliqué.', text);
     return { ...FALLBACK_BATCH_RESULT };
-  } catch (err) {
+  } catch (err: any) {
     console.error('Mistral MAP batch failure:', err);
+    // A rate-limit exhaustion is not "nothing found" — silently returning the
+    // empty fallback here made a saturated Mistral account look identical to
+    // a network with no synergies, and the client had no way to tell the
+    // difference or retry. Let it propagate so the handler can report it
+    // distinctly (429) instead of masquerading as a real empty result.
+    if (err?.statusCode === 429) throw err;
     return { ...FALLBACK_BATCH_RESULT };
   }
 }
@@ -263,7 +307,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ...result,
       immediateSynergies: result.immediateSynergies.map(s => {
         if (isLocked(s.contactId1) || isLocked(s.contactId2)) {
-          return { ...s, reason: "Synergie potentielle détectée — demandez l'accès aux contacts concernés pour voir les détails." };
+          // "evidence" quotes a locked contact's note/skill verbatim — must be
+          // masked here too, not just "reason", or the redaction is a leak.
+          return { ...s, reason: "Synergie potentielle détectée — demandez l'accès aux contacts concernés pour voir les détails.", evidence: '' };
         }
         return s;
       })
@@ -272,6 +318,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(200).json(redacted);
   } catch (err: any) {
     console.error('Oracle map-batch failure:', err);
-    res.status(500).json({ error: err.message || 'Oracle map-batch failed' });
+    // Surfaced as 429 (not 500) so the client can tell "Mistral's account-wide
+    // rate limit is saturated, retry the whole call after a real delay" apart
+    // from a genuine failure — see postOracleStep in src/lib/mistral.ts.
+    const status = err?.statusCode === 429 ? 429 : 500;
+    res.status(status).json({ error: err.message || 'Oracle map-batch failed', rateLimited: status === 429 });
   }
 }

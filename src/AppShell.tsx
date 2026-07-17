@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   Home, Users, Bell, BookOpen, Lightbulb, Layers,
-  Plus, Search, LogOut, ChevronDown, Check,
+  Plus, Search, LogOut, ChevronDown, Check, Copy,
 } from 'lucide-react';
 import { useData } from './data';
 import { CommandPalette } from './ui/CommandPalette';
@@ -18,6 +18,7 @@ const NAV = [
   { to: '/journal', label: 'Journal', icon: BookOpen },
   { to: '/opportunites', label: 'Opportunités', icon: Lightbulb },
   { to: '/cercles', label: 'Cercles', icon: Layers },
+  { to: '/doublons', label: 'Doublons', icon: Copy },
 ];
 
 export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
@@ -59,6 +60,7 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   return (
     <div style={{ display: 'flex', height: '100vh', background: 'var(--wash)' }}>
       <aside
+        className="side-rail"
         style={{
           width: 240, flex: 'none', background: 'var(--card)',
           borderRight: '1px solid var(--line)',
@@ -78,14 +80,14 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
               <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2" />
             </svg>
           </span>
-          <span style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em', flex: 1 }}>Circl</span>
+          <span className="brand-name" style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em', flex: 1 }}>Circl</span>
           <button
             className="btn btn-primary"
             style={{ padding: '6px 10px', fontSize: 12.5 }}
             title="Capturer une note ou un texte (C)"
             onClick={() => navigate('/capture')}
           >
-            <Plus size={13} /> Capturer
+            <Plus size={13} /> <span className="capture-label">Capturer</span>
           </button>
         </div>
 
@@ -139,7 +141,7 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           onClick={() => setPaletteOpen(true)}
         >
           <Search size={14} style={{ position: 'absolute', left: 10, top: 10, color: 'var(--faint)' }} />
-          Rechercher…
+          <span className="search-label">Rechercher…</span>
           <span className="t-meta" style={{ position: 'absolute', right: 10, top: 9, border: '1px solid var(--line-strong)', borderRadius: 5, padding: '0 5px', color: 'var(--faint)' }}>⌘K</span>
         </button>
 
@@ -152,7 +154,7 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
             >
               <Icon size={16} />
-              <span style={{ flex: 1 }}>{label}</span>
+              <span className="nav-label" style={{ flex: 1 }}>{label}</span>
               {badge === 'updates' && pendingCount > 0 && (
                 <span className="badge">{pendingCount}</span>
               )}
@@ -161,7 +163,7 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
         </nav>
 
         {/* Footer : profil seulement */}
-        <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="side-foot" style={{ borderTop: '1px solid var(--line)', paddingTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
           <span
             style={{
               width: 32, height: 32, borderRadius: 999, background: 'var(--accent)',
@@ -170,7 +172,7 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           >
             {initialsUser}
           </span>
-          <span className="t-sec" style={{ flex: 1, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span className="t-sec nm" style={{ flex: 1, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {userName}
           </span>
           <button className="btn btn-quiet" style={{ padding: 6 }} title="Se déconnecter" onClick={onLogout}>

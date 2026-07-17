@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, X, LogOut, Trash2, Send } from 'lucide-react';
+import { Plus, X, LogOut, Trash2, Send, Upload } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useData } from '../data';
 import { useToast } from '../ui/Toast';
 import { DecisionPair, ConfirmModal, SectionLabel } from '../ui/Bits';
+import { PushNetworkPanel } from '../ui/PushNetworkPanel';
 import { fullName, circleColor, relativeFR, avatarColor } from '../ui/format';
 
 // Cercles (brief 4.7) : la seule page de gestion conservée.
@@ -20,6 +21,7 @@ export const CirclesPage: React.FC = () => {
   const [invites, setInvites] = useState<any[]>([]);
   const [accessRequests, setAccessRequests] = useState<any[]>([]);
   const [openSpaceId, setOpenSpaceId] = useState<string | null>(null);
+  const [pushToSpaceId, setPushToSpaceId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
   const load = async () => {
@@ -230,7 +232,12 @@ export const CirclesPage: React.FC = () => {
             profiles={profiles}
             onClose={() => setOpenSpaceId(null)}
             onChanged={async () => { await Promise.all([load(), data.refresh()]); }}
+            onPush={(id) => { setOpenSpaceId(null); setPushToSpaceId(id); }}
           />
+        )}
+
+        {pushToSpaceId && (
+          <PushNetworkPanel targetSpaceId={pushToSpaceId} onClose={() => setPushToSpaceId(null)} />
         )}
 
         {showCreate && <CreateCircleModal onClose={() => setShowCreate(false)} onCreated={load} />}
@@ -246,7 +253,8 @@ const CircleDetailPanel: React.FC<{
   profiles: Map<string, any>;
   onClose: () => void;
   onChanged: () => Promise<void>;
-}> = ({ spaceId, members, profiles, onClose, onChanged }) => {
+  onPush: (spaceId: string) => void;
+}> = ({ spaceId, members, profiles, onClose, onChanged, onPush }) => {
   const data = useData();
   const { toast } = useToast();
   const space = data.spaceById.get(spaceId);
@@ -402,9 +410,14 @@ const CircleDetailPanel: React.FC<{
 
           <div>
             <SectionLabel>Contenu</SectionLabel>
-            <div className="t-sec" style={{ color: 'var(--ink-2)' }}>
+            <div className="t-sec" style={{ color: 'var(--ink-2)', marginBottom: 10 }}>
               <span className="tnum">{contactCount}</span> contact{contactCount > 1 ? 's' : ''} dans ce cercle.
             </div>
+            {!isPersonal && (
+              <button className="btn btn-ghost" style={{ width: '100%', justifyContent: 'center' }} onClick={() => onPush(spaceId)}>
+                <Upload size={14} /> Pousser mon réseau ici
+              </button>
+            )}
           </div>
         </div>
 

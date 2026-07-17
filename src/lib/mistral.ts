@@ -232,25 +232,25 @@ export async function detectSynergies(contacts: any[], notes: any[]): Promise<Sy
     };
   });
 
-  const prompt = `Tu es l'algorithme "Oracle" de Circl Web. Ton r├┤le est de scanner ce r├®seau de contacts et d'identifier des synergies cach├®es.
-Trouve des bin├┤mes de contacts (Contact A et Contact B) o├╣ l'un poss├¿de une comp├®tence, une ressource ou un profil qui peut r├®soudre un probl├¿me ou r├®pondre ├á un besoin exprim├® par l'autre dans ses notes/bio.
+  const prompt = `Tu es l'algorithme "Oracle" de Circl Web. Ton rôle est de scanner ce réseau de contacts et d'identifier des synergies cachées.
+Trouve des binômes de contacts (Contact A et Contact B) où l'un possède une compétence, une ressource ou un profil qui peut résoudre un problème ou répondre à un besoin exprimé par l'autre dans ses notes/bio.
 
-Voici les donn├®es r├®seau en JSON :
+Voici les données réseau en JSON :
 ${JSON.stringify(networkData, null, 2)}
 
-Retourne un tableau JSON contenant jusqu'├á 5 synergies les plus fortes avec la structure suivante :
+Retourne un tableau JSON contenant jusqu'à 5 synergies les plus fortes avec la structure suivante :
 [
   {
     "title": "Nom accrocheur de la synergie (ex: Synergie Financement ou Synergie Dev Mobile)",
     "description": "Explication de la synergie en une phrase",
     "sourceContact": { "id": "ID du contact ayant le besoin", "name": "Nom complet", "role": "Poste", "company": "Entreprise" },
-    "targetContact": { "id": "ID du contact ayant la solution/comp├®tence", "name": "Nom complet", "role": "Poste", "company": "Entreprise" },
-    "matchReason": "Explication d├®taill├®e de pourquoi ces deux personnes doivent se parler (en fran├ºais, max 3 phrases)",
-    "recommendedIntroPath": "Comment le propri├®taire du r├®seau (l'utilisateur) doit-il les connecter (ex: pr├®senter A ├á B ├á propos de X)"
+    "targetContact": { "id": "ID du contact ayant la solution/compétence", "name": "Nom complet", "role": "Poste", "company": "Entreprise" },
+    "matchReason": "Explication détaillée de pourquoi ces deux personnes doivent se parler (en français, max 3 phrases)",
+    "recommendedIntroPath": "Comment le propriétaire du réseau (l'utilisateur) doit-il les connecter (ex: présenter A à B à propos de X)"
   }
 ]
 
-R├¿gle absolue : Ne propose que des synergies r├®alistes bas├®es sur les donn├®es fournies. R├®ponds uniquement avec le JSON.`;
+Règle absolue : Ne propose que des synergies réalistes basées sur les données fournies. Réponds uniquement avec le JSON.`;
 
   let text = await callMistral(prompt, true);
   
@@ -283,28 +283,28 @@ export async function brainstormProjects(
     };
   });
 
-  const prompt = `Tu es un consultant en business et innovation. L'utilisateur veut cr├®er un projet (SaaS, service de consulting ou micro-logiciel) en s'appuyant sur ses propres comp├®tences et sur les besoins non r├®solus de son r├®seau de contacts.
+  const prompt = `Tu es un consultant en business et innovation. L'utilisateur veut créer un projet (SaaS, service de consulting ou micro-logiciel) en s'appuyant sur ses propres compétences et sur les besoins non résolus de son réseau de contacts.
 
-Mes comp├®tences (l'utilisateur) :
+Mes compétences (l'utilisateur) :
 ${JSON.stringify(mySkills)}
 
-Le r├®seau de contacts et leurs besoins identifi├®s (dans leurs notes de rendez-vous) :
+Le réseau de contacts et leurs besoins identifiés (dans leurs notes de rendez-vous) :
 ${JSON.stringify(networkData, null, 2)}
 
-Propose 3 id├®es de projets de services ou de produits num├®riques ├á d├®velopper. Pour chaque id├®e, associe l'utilisateur avec un ou plusieurs contacts de son r├®seau qui pourraient ├¬tre des cofondateurs, des apporteurs d'affaires, des conseillers ou des premiers clients (design partners).
+Propose 3 idées de projets de services ou de produits numériques à développer. Pour chaque idée, associe l'utilisateur avec un ou plusieurs contacts de son réseau qui pourraient être des cofondateurs, des apporteurs d'affaires, des conseillers ou des premiers clients (design partners).
 
-Format de r├®ponse attendu (Strictement ce JSON) :
+Format de réponse attendu (Strictement ce JSON) :
 [
   {
     "title": "Nom du Projet",
-    "tagline": "Une phrase d'accroche r├®sumant la proposition de valeur",
-    "problem": "Le probl├¿me identifi├® dans le r├®seau qui a inspir├® cette id├®e",
-    "solution": "Ce que fait le produit/service et comment il r├®sout le probl├¿me en utilisant les comp├®tences de l'utilisateur",
+    "tagline": "Une phrase d'accroche résumant la proposition de valeur",
+    "problem": "Le problème identifié dans le réseau qui a inspiré cette idée",
+    "solution": "Ce que fait le produit/service et comment il résout le problème en utilisant les compétences de l'utilisateur",
     "techStackSuggested": ["React", "Supabase", "Mistral API", "etc."],
     "involvedContacts": [
-      { "id": "ID du contact", "name": "Nom complet", "role": "Poste", "contribution": "Son r├┤le dans le projet (ex: Premier client test, Conseiller sectoriel, Associ├® commercial)" }
+      { "id": "ID du contact", "name": "Nom complet", "role": "Poste", "contribution": "Son rôle dans le projet (ex: Premier client test, Conseiller sectoriel, Associé commercial)" }
     ],
-    "marketPotential": "Estimation du potentiel de march├® (ex: niche B2B, fort potentiel SaaS, etc.)",
+    "marketPotential": "Estimation du potentiel de marché (ex: niche B2B, fort potentiel SaaS, etc.)",
     "difficulty": "Facile" | "Moyen" | "Difficile"
   }
 ]`;
@@ -332,23 +332,23 @@ export async function suggestWarmIntros(
     location: c.location || ''
   }));
 
-  const prompt = `L'utilisateur cherche ├á entrer en contact avec quelqu'un occupant le poste de "${targetRole}" au sein de l'entreprise "${targetCompany}".
-Analyse la liste des contacts de l'utilisateur et trouve les 3 meilleurs interm├®diaires (connecteurs) qui travaillent dans la m├¬me bo├«te, le m├¬me secteur, ou qui ont un profil qui faciliterait une introduction "warm".
+  const prompt = `L'utilisateur cherche à entrer en contact avec quelqu'un occupant le poste de "${targetRole}" au sein de l'entreprise "${targetCompany}".
+Analyse la liste des contacts de l'utilisateur et trouve les 3 meilleurs intermédiaires (connecteurs) qui travaillent dans la même boîte, le même secteur, ou qui ont un profil qui faciliterait une introduction "warm".
 
-R├®seau disponible :
+Réseau disponible :
 ${JSON.stringify(networkData, null, 2)}
 
-Pour chaque connecteur identifi├®, g├®n├¿re un e-mail type en fran├ºais que l'utilisateur peut lui envoyer pour demander la mise en relation.
+Pour chaque connecteur identifié, génère un e-mail type en français que l'utilisateur peut lui envoyer pour demander la mise en relation.
 
 Format attendu :
 [
   {
     "targetName": "Nom de la cible (ou 'Un profil cible' si inconnu)",
     "targetCompany": "${targetCompany}",
-    "connectorName": "Nom du contact interm├®diaire identifi├®",
-    "connectorCloseness": 4, // Note de 1 (faible) ├á 5 (tr├¿s proche) bas├®e sur la pertinence
-    "reason": "Pourquoi ce contact est un bon connecteur (ex: travaille dans le m├¬me secteur ou a travaill├® chez cette cible)",
-    "introEmailDraft": "Le projet d'e-mail complet r├®dig├® de mani├¿re professionnelle et chaleureuse en fran├ºais"
+    "connectorName": "Nom du contact intermédiaire identifié",
+    "connectorCloseness": 4, // Note de 1 (faible) à 5 (très proche) basée sur la pertinence
+    "reason": "Pourquoi ce contact est un bon connecteur (ex: travaille dans le même secteur ou a travaillé chez cette cible)",
+    "introEmailDraft": "Le projet d'e-mail complet rédigé de manière professionnelle et chaleureuse en français"
   }
 ]`;
 
@@ -368,25 +368,25 @@ export async function enrichProfileFromScraping(
   company: string,
   scrapedText: string
 ): Promise<EnrichmentResult> {
-  const prompt = `Tu es un agent d'enrichissement de donn├®es de contact.
-├Ç partir des informations brutes scrapp├®es sur internet concernant ${name} qui travaille chez ${company}, extrais et structure les informations de profil.
+  const prompt = `Tu es un agent d'enrichissement de données de contact.
+À partir des informations brutes scrappées sur internet concernant ${name} qui travaille chez ${company}, extrais et structure les informations de profil.
 
-Texte brut scrapp├® :
+Texte brut scrappé :
 \"\"\"
 ${scrapedText}
 \"\"\"
 
 Retourne STRICTEMENT le JSON suivant :
 {
-  "industry": "secteur d'activit├® d├®duit (ex: FinTech, SaaS, Sant├®)",
-  "companySize": "Taille estim├®e de l'entreprise (ex: 1-10, 11-50, 51-200, 201-1000, 1000+)",
-  "bio": "R├®sum├® de son profil professionnel en 1 ou 2 phrases concises",
-  "skills": ["liste de 3 ├á 5 comp├®tences cl├®s extraites, ex: React, Growth Hacking, Vente"],
-  "inferredNeeds": ["liste de 2 ├á 3 besoins ou challenges potentiels d├®duits de son poste ou secteur, ex: Recrutement technique, Automatisation CRM"],
-  "aiContext": "Un paragraphe d'analyse contextuelle destin├® ├á l'utilisateur pour l'aider ├á aborder ce contact lors d'un rendez-vous."
+  "industry": "secteur d'activité déduit (ex: FinTech, SaaS, Santé)",
+  "companySize": "Taille estimée de l'entreprise (ex: 1-10, 11-50, 51-200, 201-1000, 1000+)",
+  "bio": "Résumé de son profil professionnel en 1 ou 2 phrases concises",
+  "skills": ["liste de 3 à 5 compétences clés extraites, ex: React, Growth Hacking, Vente"],
+  "inferredNeeds": ["liste de 2 à 3 besoins ou challenges potentiels déduits de son poste ou secteur, ex: Recrutement technique, Automatisation CRM"],
+  "aiContext": "Un paragraphe d'analyse contextuelle destiné à l'utilisateur pour l'aider à aborder ce contact lors d'un rendez-vous."
 }
 
-R├¿gle : Reste factuel, ne sur-interpr├¿te pas si le texte ne contient rien de pertinent.`;
+Règle : Reste factuel, ne sur-interprète pas si le texte ne contient rien de pertinent.`;
 
   let text = await callMistral(prompt, true);
   
@@ -447,28 +447,28 @@ export async function detectContactSynergies(
     };
   });
 
-  const prompt = `Tu es l'algorithme "Oracle" de Circl Web. Ton r├┤le est de scanner le r├®seau pour identifier des synergies entre un contact d'int├®r├¬t sp├®cifique et les autres membres du r├®seau.
+  const prompt = `Tu es l'algorithme "Oracle" de Circl Web. Ton rôle est de scanner le réseau pour identifier des synergies entre un contact d'intérêt spécifique et les autres membres du réseau.
 
-Voici le contact d'int├®r├¬t s├®lectionn├® :
+Voici le contact d'intérêt sélectionné :
 ${JSON.stringify(selectedContactData, null, 2)}
 
-Voici le reste du r├®seau de contacts disponible en JSON :
+Voici le reste du réseau de contacts disponible en JSON :
 ${JSON.stringify(networkData, null, 2)}
 
-Identifie s'il existe des opportunit├®s de synergie claires et pertinentes (jusqu'├á 3 max) entre ce contact s├®lectionn├® et les autres membres du r├®seau. Par exemple, l'un a un besoin d'aide ou un projet ├á lancer, et l'autre a la comp├®tence, l'int├®r├¬t ou les ressources n├®cessaires.
+Identifie s'il existe des opportunités de synergie claires et pertinentes (jusqu'à 3 max) entre ce contact sélectionné et les autres membres du réseau. Par exemple, l'un a un besoin d'aide ou un projet à lancer, et l'autre a la compétence, l'intérêt ou les ressources nécessaires.
 
-Retourne un tableau JSON contenant les synergies trouv├®es avec cette structure exacte :
+Retourne un tableau JSON contenant les synergies trouvées avec cette structure exacte :
 [
   {
     "title": "Nom de la synergie (ex: Synergie Recrutement Tech ou Synergie Co-investissement)",
-    "description": "R├®sum├® court de la synergie en une phrase",
-    "targetContact": { "id": "ID du contact compl├®mentaire trouv├®", "name": "Nom complet", "role": "Poste", "company": "Entreprise" },
-    "matchReason": "Explication claire de pourquoi ces deux personnes doivent entrer en relation (en fran├ºais, max 3 phrases)",
-    "recommendedIntroPath": "Comment l'utilisateur peut les mettre en relation (ex: Proposer ├á A d'accompagner B sur le sujet Y)"
+    "description": "Résumé court de la synergie en une phrase",
+    "targetContact": { "id": "ID du contact complémentaire trouvé", "name": "Nom complet", "role": "Poste", "company": "Entreprise" },
+    "matchReason": "Explication claire de pourquoi ces deux personnes doivent entrer en relation (en français, max 3 phrases)",
+    "recommendedIntroPath": "Comment l'utilisateur peut les mettre en relation (ex: Proposer à A d'accompagner B sur le sujet Y)"
   }
 ]
 
-R├¿gle absolue : Ne propose que des synergies r├®alistes bas├®es sur les donn├®es fournies. S'il n'y a aucune synergie ├®vidente ou sens├®e, renvoie un tableau vide []. R├®ponds uniquement avec le JSON.`;
+Règle absolue : Ne propose que des synergies réalistes basées sur les données fournies. S'il n'y a aucune synergie évidente ou sensée, renvoie un tableau vide []. Réponds uniquement avec le JSON.`;
 
   let text = await callMistral(prompt, true);
   
@@ -617,23 +617,23 @@ export async function detectGroupSynergies(contacts: any[], notes: any[]): Promi
     };
   });
 
-  const prompt = `Tu es un expert en analyse de r├®seaux (Network Science). Ton but est d'analyser ce r├®seau professionnel pour identifier des "clusters" (groupes de personnes) ayant des besoins, d├®fis ou int├®r├¬ts communs.
+  const prompt = `Tu es un expert en analyse de réseaux (Network Science). Ton but est d'analyser ce réseau professionnel pour identifier des "clusters" (groupes de personnes) ayant des besoins, défis ou intérêts communs.
 
-Voici les membres du r├®seau avec leurs besoins, comp├®tences et notes contextuelles :
+Voici les membres du réseau avec leurs besoins, compétences et notes contextuelles :
 ${JSON.stringify(networkData, null, 2)}
 
-Analyse tout le r├®seau et identifie jusqu'├á 4 groupes de personnes (minimum 2 personnes par groupe) qui partagent une probl├®matique majeure ou qui auraient int├®r├¬t ├á collaborer ensemble.
+Analyse tout le réseau et identifie jusqu'à 4 groupes de personnes (minimum 2 personnes par groupe) qui partagent une problématique majeure ou qui auraient intérêt à collaborer ensemble.
 
 Retourne UNIQUEMENT un tableau JSON valide avec cette structure exacte :
 [
   {
     "clusterName": "Nom accrocheur du groupe (ex: Les pionniers de l'IA RH)",
-    "commonNeeds": ["Besoin majeur partag├® 1", "Besoin partag├® 2"],
+    "commonNeeds": ["Besoin majeur partagé 1", "Besoin partagé 2"],
     "members": [
       { "id": "ID du contact", "name": "Nom complet", "role": "Poste", "company": "Entreprise" }
     ],
-    "potentialService": "Id├®e de service, produit, ou ├®v├®nement qui pourrait r├®soudre leur probl├¿me commun",
-    "matchReason": "Explication d├®taill├®e de pourquoi ces personnes forment un groupe coh├®rent et ce qu'elles ont ├á gagner ├á se rencontrer"
+    "potentialService": "Idée de service, produit, ou événement qui pourrait résoudre leur problème commun",
+    "matchReason": "Explication détaillée de pourquoi ces personnes forment un groupe cohérent et ce qu'elles ont à gagner à se rencontrer"
   }
 ]`;
 
@@ -662,27 +662,27 @@ export async function brainstormUserOpportunities(userProfile: any, contacts: an
     };
   });
 
-  const prompt = `Tu es un conseiller strat├®gique (Business Strategist). Ton but est d'analyser le r├®seau de l'utilisateur pour lui sugg├®rer des offres, services ou projets tr├¿s concrets qu'il pourrait cr├®er pour mon├®tiser son r├®seau ou y apporter de la valeur, en te basant sur SON profil.
+  const prompt = `Tu es un conseiller stratégique (Business Strategist). Ton but est d'analyser le réseau de l'utilisateur pour lui suggérer des offres, services ou projets très concrets qu'il pourrait créer pour monétiser son réseau ou y apporter de la valeur, en te basant sur SON profil.
 
-Voici le profil de l'utilisateur (celui qui poss├¿de ce r├®seau) :
+Voici le profil de l'utilisateur (celui qui possède ce réseau) :
 ${JSON.stringify(userProfile, null, 2)}
 
-Voici les contacts de son r├®seau avec leurs besoins et contextes :
+Voici les contacts de son réseau avec leurs besoins et contextes :
 ${JSON.stringify(networkData, null, 2)}
 
-Identifie les plus grandes opportunit├®s (jusqu'├á 4) o├╣ les comp├®tences de l'utilisateur croisent un besoin partag├® par plusieurs contacts de son r├®seau.
+Identifie les plus grandes opportunités (jusqu'à 4) où les compétences de l'utilisateur croisent un besoin partagé par plusieurs contacts de son réseau.
 
 Retourne UNIQUEMENT un tableau JSON valide avec cette structure exacte :
 [
   {
-    "opportunityTitle": "Nom de l'offre/projet (ex: Cr├®ation d'une formation IA pour les RH)",
-    "targetAudience": "Description du segment cible dans le r├®seau",
-    "problemSolved": "Quel probl├¿me profond cette opportunit├® r├®sout-elle ?",
-    "proposedSolution": "Comment l'utilisateur peut-il utiliser ses comp├®tences pour r├®pondre ├á ce besoin ?",
+    "opportunityTitle": "Nom de l'offre/projet (ex: Création d'une formation IA pour les RH)",
+    "targetAudience": "Description du segment cible dans le réseau",
+    "problemSolved": "Quel problème profond cette opportunité résout-elle ?",
+    "proposedSolution": "Comment l'utilisateur peut-il utiliser ses compétences pour répondre à ce besoin ?",
     "relevantContacts": [
       { "id": "ID du contact cible", "name": "Nom", "role": "Poste", "company": "Entreprise" }
     ],
-    "actionPlan": "Les 3 prochaines ├®tapes concr├¿tes pour lancer cette opportunit├®."
+    "actionPlan": "Les 3 prochaines étapes concrètes pour lancer cette opportunité."
   }
 ]`;
 
@@ -783,6 +783,7 @@ export interface NormalizedProfile {
  */
 export interface SupplyDemandEntry {
   need: string;
+  rationale?: string;
   demanders: { id: string; name: string }[];
   suppliers: { id: string; name: string }[];
   gapLevel: 'covered' | 'partial' | 'opportunity';
@@ -895,20 +896,25 @@ ADAPTE ton analyse au profil ci-dessus. Si le poste/les compétences pointent ve
 // ============================================================================
 // MAP: Process a single batch
 // ============================================================================
+export interface ImmediateSynergy {
+  contactId1: string;
+  contactName1: string;
+  contactId2: string;
+  contactName2: string;
+  reason: string;
+  confidence: 'high' | 'medium' | 'low';
+  evidence: string;
+}
+
 export interface MistralBatchResult {
   recurrentNeeds: string[];
-  immediateSynergies: {
-    contactId1: string;
-    contactName1: string;
-    contactId2: string;
-    contactName2: string;
-    reason: string;
-  }[];
+  immediateSynergies: ImmediateSynergy[];
   keyCompetencies: string[];
 }
 
 export interface MacroNeed {
   label: string;
+  description?: string;
   mergedFrom: string[];
   affectedContactsCount: number;
   priority: 'high' | 'medium' | 'low';
@@ -928,6 +934,14 @@ export interface ValueChain {
   estimatedImpact: string;
 }
 
+/** A dense-but-off-profile cluster surfaced as a new direction to explore. */
+export interface EmergingOpportunity {
+  theme: string;
+  description: string;
+  anchorContacts: { name: string }[];
+  whyNewDoor: string;
+}
+
 export interface MistralGlobalSynthesis {
   globalThemes: string[];
   crossBatchSynergies: {
@@ -939,6 +953,7 @@ export interface MistralGlobalSynthesis {
   recommendedActionPlan: string[];
   macroNeeds: MacroNeed[];
   valueChains: ValueChain[];
+  emergingOpportunities: EmergingOpportunity[];
   tokenUsage?: TokenUsage;
 }
 
@@ -950,6 +965,128 @@ export interface MistralPipelineResult {
   timestamp: number;
   /** How much of this run was served from the incremental cache vs freshly computed. */
   cacheStats?: { totalBatches: number; reusedBatches: number };
+  /** How many contacts passed the enrichment gate vs were excluded as too sparse. */
+  dataQuality?: { analyzed: number; excluded: number; excludedContacts?: { id: string; name: string }[]; capped?: number };
+  /** Profile-derived leviers actually sent to MAP/REDUCE/SUPPLY, if any were derived (empty = generic fallback was used). */
+  analysisAngles?: string[];
+}
+
+/**
+ * The Reduce step's JSON schema (macroNeeds/valueChains as nested objects)
+ * is only a prompt convention, not something Mistral is guaranteed to follow —
+ * a run can persist a macroNeed/valueChain as a bare string. That's harmless
+ * until the UI calls a method on the expected nested field (`mn.mergedFrom.join`,
+ * `vc.chain.map`) and crashes. Coerces any non-compliant entry back into shape
+ * so archived analyses stay renderable no matter what got saved.
+ */
+function normalizeMacroNeed(mn: any): MacroNeed {
+  if (mn && typeof mn === 'object') {
+    return {
+      label: typeof mn.label === 'string' ? mn.label : String(mn.label ?? ''),
+      description: typeof mn.description === 'string' ? mn.description : undefined,
+      mergedFrom: Array.isArray(mn.mergedFrom) ? mn.mergedFrom : [],
+      affectedContactsCount: typeof mn.affectedContactsCount === 'number' ? mn.affectedContactsCount : 0,
+      priority: mn.priority === 'high' || mn.priority === 'low' ? mn.priority : 'medium'
+    };
+  }
+  return { label: String(mn ?? ''), mergedFrom: [], affectedContactsCount: 0, priority: 'medium' };
+}
+
+function normalizeValueChain(vc: any): ValueChain {
+  return {
+    title: typeof vc?.title === 'string' ? vc.title : '',
+    description: typeof vc?.description === 'string' ? vc.description : '',
+    chain: Array.isArray(vc?.chain) ? vc.chain : [],
+    estimatedImpact: typeof vc?.estimatedImpact === 'string' ? vc.estimatedImpact : ''
+  };
+}
+
+function normalizeEmergingOpportunity(o: any): EmergingOpportunity {
+  const anchors = Array.isArray(o?.anchorContacts)
+    ? o.anchorContacts
+        .map((c: any) => (typeof c === 'string' ? { name: c } : c))
+        .filter((c: any) => c && typeof c.name === 'string' && c.name.trim())
+        .map((c: any) => ({ name: c.name }))
+    : [];
+  return {
+    theme: typeof o?.theme === 'string' ? o.theme : '',
+    description: typeof o?.description === 'string' ? o.description : '',
+    anchorContacts: anchors,
+    whyNewDoor: typeof o?.whyNewDoor === 'string' ? o.whyNewDoor : ''
+  };
+}
+
+/**
+ * Several fields (globalThemes, recommendedActionPlan, a batch's
+ * recurrentNeeds/keyCompetencies) are rendered as `{entry}` directly — a
+ * bare string is expected. An older/non-compliant run can persist those as
+ * objects instead (e.g. `{action, priority, expectedOutcome}`), which React
+ * refuses to render as a child at all (error #31) and takes the whole page
+ * down with it. Coerces every entry down to a display string first.
+ */
+function normalizeStringArray(arr: any, objectKeys: string[] = ['label', 'action', 'name', 'theme', 'text']): string[] {
+  if (!Array.isArray(arr)) return [];
+  return arr.map(entry => {
+    if (typeof entry === 'string') return entry;
+    if (entry && typeof entry === 'object') {
+      const key = objectKeys.find(k => typeof entry[k] === 'string');
+      return key ? entry[key] : JSON.stringify(entry);
+    }
+    return String(entry ?? '');
+  });
+}
+
+function normalizeSynthesis(synthesis: MistralGlobalSynthesis): MistralGlobalSynthesis {
+  return {
+    ...synthesis,
+    globalThemes: normalizeStringArray(synthesis?.globalThemes),
+    recommendedActionPlan: normalizeStringArray(synthesis?.recommendedActionPlan),
+    macroNeeds: Array.isArray(synthesis?.macroNeeds) ? synthesis.macroNeeds.map(normalizeMacroNeed) : [],
+    valueChains: Array.isArray(synthesis?.valueChains) ? synthesis.valueChains.map(normalizeValueChain) : [],
+    emergingOpportunities: Array.isArray(synthesis?.emergingOpportunities) ? synthesis.emergingOpportunities.map(normalizeEmergingOpportunity) : []
+  };
+}
+
+function normalizeSynergy(s: any): ImmediateSynergy {
+  return {
+    contactId1: typeof s?.contactId1 === 'string' ? s.contactId1 : '',
+    contactName1: typeof s?.contactName1 === 'string' ? s.contactName1 : '',
+    contactId2: typeof s?.contactId2 === 'string' ? s.contactId2 : '',
+    contactName2: typeof s?.contactName2 === 'string' ? s.contactName2 : '',
+    reason: typeof s?.reason === 'string' ? s.reason : '',
+    // Older cached/archived synergies predate this field entirely — treat as
+    // "medium" (neither hidden by a "low" filter nor falsely flagged "high").
+    confidence: s?.confidence === 'high' || s?.confidence === 'low' ? s.confidence : 'medium',
+    evidence: typeof s?.evidence === 'string' ? s.evidence : ''
+  };
+}
+
+function normalizeBatchResult(batch: any): MistralBatchResult {
+  const synergies = Array.isArray(batch?.immediateSynergies) ? batch.immediateSynergies.map(normalizeSynergy) : [];
+  // Drop degenerate "X & X" synergies: same contact id, or the same
+  // (normalized) name — the latter catches duplicate contact records (same
+  // person imported twice with different ids), which the model otherwise
+  // pairs with itself. A contact is never a synergy with itself.
+  const deduped = synergies.filter((s: ImmediateSynergy) => {
+    if (s.contactId1 && s.contactId2 && s.contactId1 === s.contactId2) return false;
+    const n1 = s.contactName1.trim().toLowerCase();
+    const n2 = s.contactName2.trim().toLowerCase();
+    if (n1 && n2 && n1 === n2) return false;
+    return true;
+  });
+  return {
+    recurrentNeeds: normalizeStringArray(batch?.recurrentNeeds),
+    immediateSynergies: deduped,
+    keyCompetencies: normalizeStringArray(batch?.keyCompetencies)
+  };
+}
+
+function normalizePipelineResult<T extends MistralPipelineResult>(result: T): T {
+  return {
+    ...result,
+    synthesis: normalizeSynthesis(result.synthesis),
+    batches: Array.isArray(result.batches) ? result.batches.map(normalizeBatchResult) : []
+  };
 }
 
 
@@ -985,18 +1122,108 @@ export interface AnalysisHistoryMeta {
   label?: string;
 }
 
+/**
+ * A 429 here means Mistral's account-wide rate limit (observed as low as
+ * 4 req/minute on some tiers) is saturated — the server-side retry inside
+ * each api/oracle/*.ts call is deliberately short (bounded well under its
+ * own maxDuration, see vercel.json) so it can't itself wait out a per-minute
+ * window without getting killed mid-retry. Only the client can afford a real
+ * wait: each retried call here is a brand-new serverless invocation with its
+ * own fresh execution budget, so retrying the WHOLE request after a genuine
+ * delay is what actually rides out a sustained rate limit.
+ */
 async function postOracleStep<T>(path: string, body: any): Promise<T> {
-  const authHeader = await getAuthHeader();
-  const response = await fetch(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeader },
-    body: JSON.stringify(body)
-  });
-  if (!response.ok) {
+  const maxAttempts = 4;
+  let lastError: any = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const authHeader = await getAuthHeader();
+    const response = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader },
+      body: JSON.stringify(body)
+    });
+    if (response.ok) return response.json();
+
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || `Oracle proxy error ${response.status} (${path})`);
+    lastError = new Error(err.error || `Oracle proxy error ${response.status} (${path})`);
+    if (response.status !== 429 || attempt === maxAttempts) throw lastError;
+    await sleep(20000 * attempt);
   }
-  return response.json();
+  throw lastError;
+}
+
+/** Tiny stable string hash (djb2) for cache keys — not cryptographic. */
+function djb2(str: string): string {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+/**
+ * Derive 4–6 value-creation "leviers d'analyse" tailored to the user's own
+ * profile, instead of injecting the same 15 static monetization angles into
+ * every network (which pushed a deeptech founder's analysis toward "cercles
+ * premium / masterclasses / courtage immobilier"). Mistral reads the profile
+ * and synthesizes the angles that actually fit the person's trade. Cached in
+ * localStorage keyed by the profile's content so it costs one small call the
+ * first time and nothing on repeat runs. Returns [] on empty profile or
+ * failure — callers fall back to the generic angles server-side.
+ */
+export async function deriveAnalysisAngles(userProfile: any): Promise<string[]> {
+  if (!userProfile) return [];
+
+  const role = userProfile?.role || userProfile?.title || userProfile?.job_title || '';
+  const company = userProfile?.company || '';
+  const skills: string[] = Array.isArray(userProfile?.skills) ? userProfile.skills : [];
+  const projects = userProfile?.currentProjects || userProfile?.bio || userProfile?.description || '';
+  const needs = userProfile?.needs || '';
+
+  // Nothing to reason about — let the generic fallback apply, skip the call.
+  if (!role && !company && skills.length === 0 && !projects && !needs) return [];
+
+  const cacheKey = `circl_analysis_angles_${djb2(JSON.stringify({ role, company, skills, projects, needs }))}`;
+  try {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch { /* ignore */ }
+
+  const prompt = `<role>
+Tu es un stratège en développement business. Tu analyses le profil d'un professionnel pour déterminer par quels leviers CONCRETS et RÉALISTES il peut valoriser et monétiser son réseau.
+</role>
+<profil>
+Poste : ${role || 'non renseigné'}
+Entreprise : ${company || 'non renseignée'}
+Compétences : ${skills.join(', ') || 'non renseignées'}
+Projets en cours : ${projects || 'non renseignés'}
+Besoins / objectifs : ${needs || 'non renseignés'}
+</profil>
+<instructions>
+Identifie les 4 à 6 leviers de valeur les plus pertinents pour CE profil précis. Reste strictement ancré sur son métier et ses objectifs réels : n'inclus JAMAIS un levier hors-sujet (ex : ne propose pas "courtage immobilier" ou "gestion de patrimoine" à un fondateur deeptech). Chaque levier est une formule courte et actionnable.
+</instructions>
+<rules>
+- Entre 4 et 6 leviers, jamais plus.
+- Spécifiques à ce profil, jamais des généralités passe-partout.
+- Réponds STRICTEMENT en JSON valide : { "angles": ["levier 1", "levier 2", "levier 3", "levier 4"] }
+</rules>`;
+
+  try {
+    const text = await callMistral(prompt, true, 'mistral-small-latest');
+    const parsed = safeParseJSON(text);
+    const angles: string[] = Array.isArray(parsed?.angles)
+      ? parsed.angles.filter((a: any) => typeof a === 'string' && a.trim()).slice(0, 6)
+      : [];
+    if (angles.length > 0) {
+      try { localStorage.setItem(cacheKey, JSON.stringify(angles)); } catch { /* ignore */ }
+    }
+    return angles;
+  } catch (err) {
+    console.warn('deriveAnalysisAngles: dérivation échouée, fallback sur angles génériques.', err);
+    return [];
+  }
 }
 
 /**
@@ -1025,10 +1252,30 @@ export async function runMistralOracleBatchPipeline(
   const spaceId = historyMeta?.spaceId ?? null;
   onProgress?.(5);
 
+  // Derive analysis angles tailored to the user's profile once, then attach
+  // them to the profile sent to every LLM step (MAP/REDUCE/SUPPLY). The
+  // server prompts prefer these over their static generic-angle fallback.
+  // Kept in its own variable (not just inside profileForPipeline) so it can
+  // be surfaced in the result — otherwise which angles actually drove a
+  // given analysis is invisible to the user.
+  let profileForPipeline = userProfile;
+  let usedAnalysisAngles: string[] = [];
+  if (userProfile) {
+    try {
+      usedAnalysisAngles = await deriveAnalysisAngles(userProfile);
+      if (usedAnalysisAngles.length > 0) profileForPipeline = { ...userProfile, analysisAngles: usedAnalysisAngles };
+    } catch { /* keep the raw profile — server falls back to generic angles */ }
+  }
+  onProgress?.(10);
+
   const topology = await postOracleStep<{
     batches: { contactIds: string[]; clusterId: string | null; contactIdsHash: string | null; cached: MistralBatchResult | null }[];
     bridgeContacts: BridgeContact[];
     lockedContactNames: string[];
+    analyzedCount?: number;
+    excludedCount?: number;
+    excludedContacts?: { id: string; name: string }[];
+    cappedCount?: number;
   }>('/api/oracle/topology', { spaceId });
   onProgress?.(15);
 
@@ -1047,7 +1294,7 @@ export async function runMistralOracleBatchPipeline(
       contactIdsHash: batch.contactIdsHash,
       spaceId,
       lockedContactNames: topology.lockedContactNames,
-      userProfile
+      userProfile: profileForPipeline
     });
     batchResults.push(batchResult);
     onProgress?.(15 + Math.round(((i + 1) / Math.max(totalBatches, 1)) * 55));
@@ -1055,26 +1302,38 @@ export async function runMistralOracleBatchPipeline(
 
   const synthesis = await postOracleStep<MistralGlobalSynthesis>('/api/oracle/reduce', {
     batchResults,
+    // Per-batch membership so REDUCE can fetch a real roster (name/role/company
+    // per contact, server-side + redacted) and ground cross-batch synergies on
+    // actual profiles instead of only the compact needs/competencies summary.
+    batches: topology.batches.map(b => b.contactIds),
+    spaceId,
     bridgeContacts: topology.bridgeContacts,
     lockedContactNames: topology.lockedContactNames,
-    userProfile
+    userProfile: profileForPipeline
   });
   onProgress?.(85);
 
   const supplyDemand = await postOracleStep<SupplyDemandEntry[]>('/api/oracle/supply-demand', {
     spaceId,
-    userProfile
+    userProfile: profileForPipeline
   });
   onProgress?.(95);
 
-  const result: MistralPipelineResult = {
+  const result: MistralPipelineResult = normalizePipelineResult({
     batches: batchResults,
     synthesis,
     supplyDemand,
     bridgeContacts: topology.bridgeContacts,
     timestamp: Date.now(),
-    cacheStats: { totalBatches, reusedBatches }
-  };
+    cacheStats: { totalBatches, reusedBatches },
+    dataQuality: {
+      analyzed: topology.analyzedCount ?? 0,
+      excluded: topology.excludedCount ?? 0,
+      excludedContacts: topology.excludedContacts ?? [],
+      capped: topology.cappedCount ?? 0
+    },
+    analysisAngles: usedAnalysisAngles
+  });
 
   onProgress?.(100);
 
@@ -1166,7 +1425,8 @@ export async function getAnalysisById(id: string): Promise<(MistralPipelineResul
     return null;
   }
 
-  return { ...(data.result as MistralPipelineResult), id: data.id, label: data.label };
+  const result = normalizePipelineResult(data.result as MistralPipelineResult);
+  return { ...result, id: data.id, label: data.label };
 }
 
 export async function deleteAnalysis(id: string): Promise<void> {
@@ -1260,12 +1520,12 @@ ${JSON.stringify(compact(after), null, 2)}
     if (parsed && typeof parsed.networkEvolutionSummary === 'string') {
       return {
         networkEvolutionSummary: parsed.networkEvolutionSummary,
-        newThemes: parsed.newThemes ?? [],
-        resolvedThemes: parsed.resolvedThemes ?? [],
-        newMacroNeeds: parsed.newMacroNeeds ?? [],
-        emergingSynergies: parsed.emergingSynergies ?? [],
-        bridgeContactChanges: parsed.bridgeContactChanges ?? [],
-        recommendedNextSteps: parsed.recommendedNextSteps ?? []
+        newThemes: normalizeStringArray(parsed.newThemes),
+        resolvedThemes: normalizeStringArray(parsed.resolvedThemes),
+        newMacroNeeds: normalizeStringArray(parsed.newMacroNeeds),
+        emergingSynergies: normalizeStringArray(parsed.emergingSynergies),
+        bridgeContactChanges: normalizeStringArray(parsed.bridgeContactChanges),
+        recommendedNextSteps: normalizeStringArray(parsed.recommendedNextSteps)
       };
     }
     console.error('Mistral DELTA: réponse JSON invalide, fallback appliqué.', text);

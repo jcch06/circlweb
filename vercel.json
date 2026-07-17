@@ -1,10 +1,28 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/oracle/*.ts": {
+      "maxDuration": 60
+    }
+  },
   "rewrites": [
     {
-      "comment": "SPA : toute route non trouvée sur le disque retombe sur index.html, sinon un rafraîchissement sur /contacts/:id renvoie un 404. /api/* est exclu pour laisser passer les fonctions serverless (Mistral, Oracle, enrichissement).",
       "source": "/((?!api/).*)",
       "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/((?!api/|assets/).*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+      ]
     }
   ]
 }

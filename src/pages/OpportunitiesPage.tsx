@@ -136,25 +136,46 @@ export const OpportunitiesPage: React.FC = () => {
     return () => { cancelled = true; };
   }, [tab, history, delta]);
 
-  /* Intros proposées par l'analyse, moins celles déjà tranchées. */
+  /* Intros proposées par l'analyse, moins celles déjà tranchées.
+     Source primaire : les immediateSynergies de jcch06 — l'IA y nomme
+     directement la paire, sa raison et sa preuve. Le croisement
+     offre/demande ne sert que de complément pour les paires qu'elles
+     n'ont pas vues. */
   const intros: Intro[] = useMemo(() => {
     if (!result) return [];
     const out: Intro[] = [];
     const seen = new Set<string>();
+    const CONF: Record<string, number> = { high: 0.9, medium: 0.72, low: 0.55 };
+
+    const add = (fromId: string, toId: string, rationale: string, confidence: number) => {
+      if (fromId === toId) return;
+      const key = `${fromId}|${toId}`;
+      const mirror = `${toId}|${fromId}`;
+      if (seen.has(key) || seen.has(mirror)) return;
+      if (!data.contactById.get(fromId) || !data.contactById.get(toId)) return;
+      seen.add(key);
+      out.push({ from_contact_id: fromId, to_contact_id: toId, rationale, confidence });
+    };
+
+    for (const batch of result.batches ?? []) {
+      for (const syn of batch.immediateSynergies ?? []) {
+        const reason = [syn.reason, syn.evidence && `Ce qui le laisse penser : ${syn.evidence}`]
+          .filter(Boolean)
+          .join(' ');
+        add(syn.contactId1, syn.contactId2, reason, CONF[syn.confidence] ?? 0.7);
+      }
+    }
+
     for (const sd of result.supplyDemand ?? []) {
       for (const d of sd.demanders ?? []) {
         for (const s of sd.suppliers ?? []) {
-          if (d.id === s.id) continue;
-          const key = `${d.id}|${s.id}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          if (!data.contactById.get(d.id) || !data.contactById.get(s.id)) continue;
-          out.push({
-            from_contact_id: d.id,
-            to_contact_id: s.id,
-            rationale: `${d.name} cherche « ${sd.need} », et ${s.name} sait le faire. Une intro directe vaut mieux qu'un cold outreach.`,
-            confidence: sd.gapLevel === 'covered' ? 0.9 : sd.gapLevel === 'partial' ? 0.72 : 0.6,
-          });
+          add(
+            d.id,
+            s.id,
+            sd.rationale?.trim()
+              || `${d.name} cherche « ${sd.need} », et ${s.name} sait le faire. Une intro directe vaut mieux qu'un cold outreach.`,
+            sd.gapLevel === 'covered' ? 0.9 : sd.gapLevel === 'partial' ? 0.72 : 0.6
+          );
         }
       }
     }
@@ -374,6 +395,15 @@ export const OpportunitiesPage: React.FC = () => {
                 <p className="t-sec" style={{ color: 'var(--ink-2)', lineHeight: '21px' }}>
                   {result.synthesis?.networkStrength}
                 </p>
+                {result.dataQuality && (
+                  <p className="t-meta tnum" style={{ color: 'var(--mut)', marginTop: 8 }}>
+                    Analyse portée sur {result.dataQuality.analyzed} contact{result.dataQuality.analyzed > 1 ? 's' : ''}
+                    {result.dataQuality.excluded > 0 && (
+                      <> · {result.dataQuality.excluded} écarté{result.dataQuality.excluded > 1 ? 's' : ''} faute de fiche assez remplie</>
+                    )}
+                    {result.dataQuality.capped ? <> · plafonnée à {result.dataQuality.capped} pour tenir le temps de calcul</> : null}
+                  </p>
+                )}
                 {result.synthesis?.crossBatchSynergies?.length > 0 && (
                   <div style={{ marginTop: 10 }}>
                     <button className="btn btn-quiet" style={{ padding: '4px 0', gap: 5 }} onClick={() => setSynthesisOpen((o) => !o)}>
@@ -498,6 +528,38 @@ export const OpportunitiesPage: React.FC = () => {
                           </div>
                         </div>
                       </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Portes qui s'ouvrent (emergingOpportunities de jcch06) */}
+              {result.synthesis?.emergingOpportunities?.length > 0 && (
+                <div>
+                  <SectionLabel>Les portes que votre réseau ouvre</SectionLabel>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
+                    {result.synthesis.emergingOpportunities.map((eo, i) => (
+                      <AICard key={i}>
+                        <div className="t-name" style={{ fontSize: 14, marginBottom: 4 }}>{eo.theme}</div>
+                        <div className="t-sec" style={{ color: 'var(--ink-2)', marginBottom: 8 }}>{eo.description}</div>
+                        {eo.whyNewDoor && (
+                          <div className="t-meta" style={{ color: 'var(--mut)', marginBottom: 8 }}>{eo.whyNewDoor}</div>
+                        )}
+                        {eo.anchorContacts?.length > 0 && (
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                            {eo.anchorContacts.map((a, j) => {
+                              const c = data.contacts.find((x) => fullName(x).toLowerCase() === a.name?.toLowerCase());
+                              return c ? (
+                                <button key={j} className="chip clickable" style={{ height: 22, fontSize: 11.5 }} onClick={() => navigate(`/contacts/${c.id}`)}>
+                                  {a.name}
+                                </button>
+                              ) : (
+                                <span key={j} className="chip" style={{ height: 22, fontSize: 11.5 }}>{a.name}</span>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </AICard>
                     ))}
                   </div>
                 </div>

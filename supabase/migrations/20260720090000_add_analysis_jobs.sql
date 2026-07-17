@@ -28,6 +28,11 @@ create table if not exists public.analysis_jobs (
   -- map progress
   total_batches int not null default 0,
   completed_batches int not null default 0,
+  -- hierarchical reduce progress: batches are reduced in groups into partial
+  -- syntheses, then the partials are merged into the final synthesis.
+  reduce_groups_total int not null default 0,
+  reduce_groups_done int not null default 0,
+  reduce_partials jsonb not null default '[]'::jsonb,
   -- carried context / partial + final results
   user_profile jsonb,
   bridge_contacts jsonb,
@@ -84,3 +89,10 @@ create policy "owner manages own job batches" on public.analysis_job_batches
   ) with check (
     job_id in (select id from public.analysis_jobs where owner_id = auth.uid())
   );
+
+-- Idempotent: if an earlier version of this migration was applied before the
+-- hierarchical-reduce columns existed, add them now (create-table-if-not-exists
+-- above would have skipped them on a re-run).
+alter table public.analysis_jobs add column if not exists reduce_groups_total int not null default 0;
+alter table public.analysis_jobs add column if not exists reduce_groups_done int not null default 0;
+alter table public.analysis_jobs add column if not exists reduce_partials jsonb not null default '[]'::jsonb;

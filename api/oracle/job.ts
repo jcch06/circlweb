@@ -27,7 +27,12 @@ import { createClient } from '@supabase/supabase-js';
 
 const EMBED_WAVE = 250;        // contacts embedded per advance call
 const MAP_WAVE = 6;            // batches MAP-analyzed per advance call
-const MAX_REDUCE_BATCHES = 80; // batches fed to the single reduce pass (see TODO)
+// Hierarchical reduce: batches are reduced in groups of REDUCE_GROUP into
+// partial syntheses (REDUCE_WAVE groups per advance), then merged. A network
+// with <= SINGLE_REDUCE_MAX batches skips grouping and does one reduce.
+const REDUCE_GROUP = 20;
+const REDUCE_WAVE = 2;
+const SINGLE_REDUCE_MAX = 25;
 
 async function authenticateRequest(req: VercelRequest): Promise<{ userId: string; token: string } | null> {
   const authHeader = req.headers.authorization || '';
@@ -77,7 +82,7 @@ function progressFor(job: any): number {
     case 'embed': return job.total_to_embed > 0 ? 5 + Math.round((job.embedded / job.total_to_embed) * 20) : 25;
     case 'plan': return 28;
     case 'map': return job.total_batches > 0 ? 30 + Math.round((job.completed_batches / job.total_batches) * 55) : 85;
-    case 'reduce': return 88;
+    case 'reduce': return job.reduce_groups_total > 0 ? 85 + Math.round((job.reduce_groups_done / job.reduce_groups_total) * 8) : 88;
     case 'supply': return 95;
     case 'done': return 100;
     default: return job.progress || 0;
@@ -258,25 +263,54 @@ async function advance(req: VercelRequest, token: string, db: any, job: any): Pr
     return save({ completed_batches: count ?? job.completed_batches });
   }
 
-  // ── reduce: synthesize (single pass over the richest batches) ────────────────
-  // TODO(scale): for a very large network (> MAX_REDUCE_BATCHES batches) this
-  // should be hierarchical — reduce batches in groups into partial syntheses,
-  // then reduce the partials. For now we feed the richest MAX_REDUCE_BATCHES.
+  // ── reduce: hierarchical synthesis ──────────────────────────────────────────
+  // Small network: one reduce over everything. Large: reduce batches in groups
+  // into partial syntheses (a few groups per advance so no call 504s), then a
+  // final merge of the partials. Every batch reaches the synthesis, not just a
+  // richest subset.
   if (job.phase === 'reduce') {
     const { data: done } = await db.from('analysis_job_batches')
       .select('batch_index, contact_ids, result').eq('job_id', jobId).eq('status', 'done').order('batch_index');
     const withResults = (done || []).filter((b: any) => b.result);
-    // Richest = most immediate synergies + needs first.
-    const ranked = withResults.sort((a: any, b: any) => scoreBatch(b.result) - scoreBatch(a.result)).slice(0, MAX_REDUCE_BATCHES);
-    const batchResults = ranked.map((b: any) => b.result);
-    const batchMembership = ranked.map((b: any) => b.contact_ids);
 
-    const synthesis = await callInternal(req, token, '/api/oracle/reduce', {
-      batchResults, batches: batchMembership,
+    const reduceOne = (items: any[]) => callInternal(req, token, '/api/oracle/reduce', {
+      batchResults: items.map((b: any) => b.result),
+      batches: items.map((b: any) => b.contact_ids),
       bridgeContacts: job.bridge_contacts ?? [], lockedContactNames: job.locked_names ?? [],
       userProfile: job.user_profile ?? null
     });
-    return save({ phase: 'supply', synthesis });
+
+    // Not yet grouped: decide single-pass vs grouped.
+    if ((job.reduce_groups_total ?? 0) === 0) {
+      if (withResults.length <= SINGLE_REDUCE_MAX) {
+        const synthesis = await reduceOne(withResults);
+        return save({ phase: 'supply', synthesis });
+      }
+      const total = Math.ceil(withResults.length / REDUCE_GROUP);
+      return save({ reduce_groups_total: total, reduce_groups_done: 0, reduce_partials: [] });
+    }
+
+    // Grouped: process the next wave of groups into partial syntheses.
+    const total: number = job.reduce_groups_total;
+    const start: number = job.reduce_groups_done ?? 0;
+    const end = Math.min(start + REDUCE_WAVE, total);
+    const partials: any[] = Array.isArray(job.reduce_partials) ? [...job.reduce_partials] : [];
+    for (let g = start; g < end; g++) {
+      const group = withResults.slice(g * REDUCE_GROUP, (g + 1) * REDUCE_GROUP);
+      if (group.length === 0) continue;
+      partials.push(await reduceOne(group));
+    }
+
+    if (end >= total) {
+      // Final merge of all partials.
+      const synthesis = await callInternal(req, token, '/api/oracle/reduce', {
+        partialSyntheses: partials,
+        bridgeContacts: job.bridge_contacts ?? [], lockedContactNames: job.locked_names ?? [],
+        userProfile: job.user_profile ?? null
+      });
+      return save({ phase: 'supply', synthesis, reduce_groups_done: end, reduce_partials: partials });
+    }
+    return save({ reduce_groups_done: end, reduce_partials: partials });
   }
 
   // ── supply: offre/demande matrix ────────────────────────────────────────────
@@ -288,12 +322,4 @@ async function advance(req: VercelRequest, token: string, db: any, job: any): Pr
   }
 
   return job;
-}
-
-function scoreBatch(result: any): number {
-  if (!result) return 0;
-  const syn = Array.isArray(result.immediateSynergies) ? result.immediateSynergies.length : 0;
-  const needs = Array.isArray(result.recurrentNeeds) ? result.recurrentNeeds.length : 0;
-  const comps = Array.isArray(result.keyCompetencies) ? result.keyCompetencies.length : 0;
-  return syn * 3 + needs + comps;
 }

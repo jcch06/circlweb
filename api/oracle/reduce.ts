@@ -1,6 +1,23 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Mistral } from '@mistralai/mistralai';
 import { createClient } from '@supabase/supabase-js';
+import { createHmac } from 'node:crypto';
+
+// See topology.ts — local check of the cron's short-lived oracle_cron JWT.
+function verifyCronToken(token: string): string | null {
+  const secret = process.env.SUPABASE_JWT_SECRET;
+  if (!secret) return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    if (!payload || payload.oracle_cron !== true) return null;
+    const expected = createHmac('sha256', secret).update(`${parts[0]}.${parts[1]}`).digest('base64url');
+    if (expected !== parts[2]) return null;
+    if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp) return null;
+    return typeof payload.sub === 'string' ? payload.sub : null;
+  } catch { return null; }
+}
 
 // Step 3/4 of the Oracle pipeline (see topology.ts, map-batch.ts,
 // supply-demand.ts). No DB fetch needed — inputs are the already-redacted
@@ -13,6 +30,8 @@ async function authenticateRequest(req: VercelRequest): Promise<{ userId: string
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (!token) return null;
+  const cronSub = verifyCronToken(token);
+  if (cronSub) return { userId: cronSub, token };
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
   const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseAnonKey) return null;

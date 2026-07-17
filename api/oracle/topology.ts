@@ -1,7 +1,27 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Mistral } from '@mistralai/mistralai';
 import { createClient } from '@supabase/supabase-js';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
+
+// A Vercel cron (api/cron/advance-jobs.ts) has no user session; it mints a
+// short-lived JWT signed with SUPABASE_JWT_SECRET and marked `oracle_cron` for
+// a job's owner so RLS applies exactly as if that user called. Verified locally
+// here — taken ONLY for tokens carrying the oracle_cron claim, so normal user
+// tokens keep going through Supabase getUser unchanged (zero regression).
+function verifyCronToken(token: string): string | null {
+  const secret = process.env.SUPABASE_JWT_SECRET;
+  if (!secret) return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    if (!payload || payload.oracle_cron !== true) return null;
+    const expected = createHmac('sha256', secret).update(`${parts[0]}.${parts[1]}`).digest('base64url');
+    if (expected !== parts[2]) return null;
+    if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp) return null;
+    return typeof payload.sub === 'string' ? payload.sub : null;
+  } catch { return null; }
+}
 
 // Step 1/4 of the Oracle pipeline (see api/oracle/map-batch.ts, reduce.ts,
 // supply-demand.ts). Split into short calls, each well under any Vercel
@@ -24,6 +44,8 @@ async function authenticateRequest(req: VercelRequest): Promise<{ userId: string
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (!token) return null;
+  const cronSub = verifyCronToken(token);
+  if (cronSub) return { userId: cronSub, token };
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
   const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseAnonKey) return null;

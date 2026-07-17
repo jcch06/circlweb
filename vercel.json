@@ -3,8 +3,14 @@
   "functions": {
     "api/oracle/*.ts": {
       "maxDuration": 60
+    },
+    "api/cron/*.ts": {
+      "maxDuration": 60
     }
   },
+  "crons": [
+    { "path": "/api/cron/advance-jobs", "schedule": "* * * * *" }
+  ],
   "rewrites": [
     {
       "source": "/((?!api/).*)",

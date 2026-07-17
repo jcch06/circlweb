@@ -436,8 +436,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
     if (!supabaseUrl || !supabaseAnonKey) { res.status(500).json({ error: 'Supabase is not configured on the server' }); return; }
 
-    const { spaceId } = req.body || {};
+    const { spaceId, maxAnalyze, embedOnly, embedLimit } = req.body || {};
     const scopeKey: string = spaceId || `user:${auth.userId}`;
+    // Async job pipeline (see api/oracle/job.ts) overrides the sync cap so a
+    // job can analyze the whole network, and can ask topology to only WARM the
+    // embedding cache in bounded waves (embedOnly) so a fresh 10k network never
+    // embeds thousands of contacts in one 60s call.
+    const cap = typeof maxAnalyze === 'number' && maxAnalyze > 0 ? maxAnalyze : ANALYZE_CAP;
 
     const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: `Bearer ${auth.token}` } }
@@ -493,10 +498,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // the UI can say so honestly.
     let contacts = analyzable;
     let cappedCount = 0;
-    if (analyzable.length > ANALYZE_CAP) {
+    if (analyzable.length > cap) {
       contacts = [...analyzable]
         .sort((a, b) => analyzeRichness(b, noteCountById) - analyzeRichness(a, noteCountById))
-        .slice(0, ANALYZE_CAP);
+        .slice(0, cap);
       cappedCount = analyzable.length - contacts.length;
     }
 
@@ -568,6 +573,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const needsEmbedding = contacts.filter(c => !cachedEmbeddings.has(c.id));
 
     const client = new Mistral({ apiKey });
+
+    // ── embedOnly: warm the embedding cache in bounded waves ────────────────
+    // The async job calls this repeatedly (embedLimit contacts per call) until
+    // `remaining` hits 0, then switches to a normal plan call. Keeps each
+    // invocation well under maxDuration even on a fresh 10k network.
+    if (embedOnly) {
+      const limit = typeof embedLimit === 'number' && embedLimit > 0 ? embedLimit : 200;
+      const wave = needsEmbedding.slice(0, limit);
+      let embeddedNow = 0;
+      if (wave.length > 0) {
+        try {
+          const fresh = await computeEmbeddings(client, wave, notesList);
+          if (fresh.length > 0) {
+            const rows = fresh.map(e => ({
+              contact_id: e.contactId,
+              space_id: contactById.get(e.contactId)?.space_id,
+              content_hash: hashByContactId.get(e.contactId),
+              embedding: e.vector,
+              updated_at: new Date().toISOString()
+            }));
+            await userSupabase.from('contact_embeddings').upsert(rows, { onConflict: 'contact_id' });
+            embeddedNow = fresh.length;
+          }
+        } catch (err) {
+          console.error('topology embedOnly: embedding wave failed', err);
+          res.status(500).json({ error: 'embedding wave failed' });
+          return;
+        }
+      }
+      res.status(200).json({
+        mode: 'embed',
+        embeddedNow,
+        remaining: Math.max(0, needsEmbedding.length - embeddedNow),
+        totalToEmbed: needsEmbedding.length,
+        analyzedCount: contacts.length,
+        excludedCount,
+        cappedCount
+      });
+      return;
+    }
+
     let freshEmbeddings: { contactId: string; vector: number[] }[] = [];
     if (needsEmbedding.length > 0) {
       try {

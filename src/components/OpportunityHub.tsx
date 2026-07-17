@@ -11,6 +11,7 @@ import {
   deleteAnalysis,
   compareAnalyses
 } from '../lib/mistral';
+import { createAndRunAnalysisJob, type JobState } from '../lib/oracleJob';
 import { UserProfilePopup } from './UserProfilePopup';
 import { SupplyDemandMatrix } from './SupplyDemandMatrix';
 
@@ -46,6 +47,8 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
   const [loading, setLoading] = useState(false);
   const [pipelineRunning, setPipelineRunning] = useState(false);
   const [pipelineProgress, setPipelineProgress] = useState(0);
+  // Async (background job) pipeline — for large networks, see lib/oracleJob.ts.
+  const [asyncJob, setAsyncJob] = useState<JobState | null>(null);
 
   const [v3Result, setV3Result] = useState<MistralPipelineResult | null>(null);
   const [viewingArchiveId, setViewingArchiveId] = useState<string | null>(null);
@@ -254,6 +257,51 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
     }
   };
 
+  // Async pipeline for large networks: creates a resumable server-side job and
+  // drives it slice-by-slice, so hundreds of MAP calls never blow a single 60s
+  // function and the tab can be reopened to resume. Maps the final job state
+  // into the same result shape the UI already renders.
+  const triggerAsyncPipeline = async () => {
+    setLoading(true);
+    setViewingArchiveId(null);
+    setAsyncJob(null);
+    try {
+      const userProfile = loadUserProfile(user);
+      const final = await createAndRunAnalysisJob(
+        selectedSpaceId ?? null,
+        userProfile,
+        (s) => setAsyncJob(s)
+      );
+      if (final.status === 'error') {
+        alert(`Analyse en tâche de fond échouée : ${final.error || 'erreur inconnue'}`);
+        return;
+      }
+      if (!final.synthesis) {
+        alert("L'analyse est terminée mais n'a produit aucune synthèse (réseau trop peu enrichi ?).");
+        return;
+      }
+      setV3Result({
+        batches: [],
+        synthesis: final.synthesis,
+        supplyDemand: final.supplyDemand ?? [],
+        bridgeContacts: final.bridgeContacts ?? [],
+        timestamp: Date.now(),
+        dataQuality: {
+          analyzed: final.analyzedCount ?? 0,
+          excluded: final.excludedCount ?? 0,
+          capped: final.cappedCount ?? 0
+        }
+      });
+      refreshHistory();
+    } catch (err: any) {
+      console.error(err);
+      alert(`Erreur analyse en tâche de fond : ${err?.message || 'inconnue'}`);
+    } finally {
+      setLoading(false);
+      setAsyncJob(null);
+    }
+  };
+
   const triggerWarmIntroSearch = async () => {
     if (!targetCompany.trim() || !targetRole.trim()) {
       alert("Renseignez l'entreprise et le poste cible.");
@@ -321,8 +369,36 @@ export const OpportunityHub: React.FC<OpportunityHubProps> = ({ contacts, notes,
           >
             {loading ? 'Analyse...' : 'Lancer l\'analyse'}
           </button>
+          <button
+            className="glass-button"
+            onClick={triggerAsyncPipeline}
+            disabled={loading || contacts.length === 0}
+            title="Pour un très gros réseau : analyse résumable en tâche de fond (survit au rafraîchissement)."
+            style={{ fontSize: '0.8rem', padding: '6px 14px', whiteSpace: 'nowrap' }}
+          >
+            Gros réseau
+          </button>
         </div>
       </div>
+
+      {asyncJob && (asyncJob.status === 'running' || asyncJob.status === 'pending') && (
+        <div className="glass-card" style={{ padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+            <span>
+              Analyse en tâche de fond — {(
+                { init: 'initialisation', embed: 'vectorisation', plan: 'clustering', map: 'analyse des lots', reduce: 'synthèse', supply: 'offre/demande', done: 'terminé' } as Record<string, string>
+              )[asyncJob.phase] || asyncJob.phase}
+              {asyncJob.phase === 'embed' && asyncJob.totalToEmbed ? ` (${asyncJob.embedded}/${asyncJob.totalToEmbed})` : ''}
+              {asyncJob.phase === 'map' && asyncJob.totalBatches ? ` (${asyncJob.completedBatches}/${asyncJob.totalBatches} lots)` : ''}
+              {asyncJob.rateLimited ? ' · limite Mistral, patiente…' : ''}
+            </span>
+            <span>{asyncJob.progress}%</span>
+          </div>
+          <div style={{ height: 6, borderRadius: 999, background: 'rgba(27,23,37,0.08)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${asyncJob.progress}%`, background: 'var(--accent)', transition: 'width 0.3s ease' }} />
+          </div>
+        </div>
+      )}
 
       {/* Périmètre courant — visible en clair sous le header */}
       {hasApiKey && (

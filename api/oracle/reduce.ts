@@ -397,6 +397,92 @@ ${aggregatedData}
   }
 }
 
+// Compact a partial synthesis into the text the merge prompt reasons over —
+// enough to consolidate (themes, needs, chains, synergies, doors) without
+// resending every field verbatim.
+function summarizePartial(p: any, i: number): string {
+  const themes = Array.isArray(p?.globalThemes) ? p.globalThemes.join(' · ') : '';
+  const macro = Array.isArray(p?.macroNeeds) ? p.macroNeeds.map((m: any) => `${m.label} (${m.affectedContactsCount ?? '?'} contacts)`).join(' | ') : '';
+  const chains = Array.isArray(p?.valueChains) ? p.valueChains.map((v: any) => `${v.title} [${(v.chain || []).map((l: any) => l.contactName).join(' → ')}]`).join(' | ') : '';
+  const synergies = Array.isArray(p?.crossBatchSynergies) ? p.crossBatchSynergies.map((s: any) => s.theme).join(' | ') : '';
+  const doors = Array.isArray(p?.emergingOpportunities) ? p.emergingOpportunities.map((o: any) => `${o.theme} [${(o.anchorContacts || []).map((c: any) => c.name).join(', ')}]`).join(' | ') : '';
+  return `### Synthèse partielle ${i + 1}
+Thèmes : ${themes || '—'}
+Macro-besoins : ${macro || '—'}
+Chaînes de valeur : ${chains || '—'}
+Synergies transversales : ${synergies || '—'}
+Portes à explorer : ${doors || '—'}
+Force : ${typeof p?.networkStrength === 'string' ? p.networkStrength : '—'}
+Plan : ${Array.isArray(p?.recommendedActionPlan) ? p.recommendedActionPlan.join(' ; ') : '—'}`;
+}
+
+// Hierarchical reduce, level 2. Consolidates the partial syntheses (each already
+// grounded on named contacts) into ONE final synthesis — dedup overlapping
+// themes/needs, keep the strongest chains/synergies across partials, surface
+// cross-partial patterns. It must NOT invent a contact or entity absent from the
+// partials; the partials are the sole source of truth here.
+async function mergePartialSyntheses(client: Mistral, partials: any[], userContext: string, lockedContext: string): Promise<MistralGlobalSynthesis> {
+  const partialsText = partials.map((p, i) => summarizePartial(p, i)).join('\n\n');
+
+  const prompt = `<role>
+Tu es "Oracle MERGE". On t'a découpé un grand réseau en groupes, chacun déjà synthétisé séparément. Ta mission : FUSIONNER ces synthèses partielles en UNE synthèse globale finale, sans perdre les meilleures pistes ni dupliquer.
+</role>
+${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${lockedContext}
+<instructions>
+1. Consolide les "globalThemes" en dédupliquant les thèmes équivalents entre partielles.
+2. Fusionne les macro-besoins similaires (additionne le nombre de contacts concernés quand c'est le même besoin).
+3. Garde les chaînes de valeur les plus solides à travers TOUTES les partielles (5 maximum) — privilégie celles qui couvrent des pôles différents.
+4. Consolide les synergies transversales (6 maximum, les plus fortes), en repérant aussi les croisements ENTRE deux partielles différentes.
+5. Regroupe les "Portes à Explorer" (pôles hors-profil) en dédupliquant.
+6. Rédige une "networkStrength" globale et un "recommendedActionPlan" priorisé pour l'ensemble du réseau.
+</instructions>
+
+<rules>
+- N'utilise QUE des contacts, entreprises et entités qui apparaissent déjà dans les synthèses partielles ci-dessous. N'invente RIEN de nouveau — tu consolides, tu ne déduis pas de zéro.
+- Descriptions riches et actionnables (plusieurs phrases : qui / quoi / pourquoi / premier pas), jamais des étiquettes creuses.
+- Une "emergingOpportunity" doit garder au moins 2 anchorContacts réels issus des partielles.
+- Réponds STRICTEMENT avec un objet JSON valide au format ci-dessous, sans markdown.
+</rules>
+
+<syntheses_partielles>
+${partialsText}
+</syntheses_partielles>
+
+<output_format>
+{
+  "globalThemes": ["thème 1", "thème 2"],
+  "crossBatchSynergies": [ { "theme": "…", "description": "3-5 phrases détaillées, contacts nommés", "potentialImpact": "…" } ],
+  "macroNeeds": [ { "label": "…", "description": "2-4 phrases", "mergedFrom": ["…"], "affectedContactsCount": 4, "priority": "high" } ],
+  "valueChains": [ { "title": "…", "description": "3-5 phrases", "chain": [{ "step": 1, "contactName": "Nom", "role": "Poste", "contribution": "…" }], "estimatedImpact": "…" } ],
+  "emergingOpportunities": [ { "theme": "…", "description": "…", "anchorContacts": [{ "name": "Nom A" }, { "name": "Nom B" }], "whyNewDoor": "…" } ],
+  "networkStrength": "1-2 phrases",
+  "recommendedActionPlan": ["Action 1", "Action 2"]
+}
+</output_format>`;
+
+  try {
+    const text = await callMistralServer(client, prompt);
+    const parsed = safeParseJSON(text);
+    if (parsed && Array.isArray(parsed.globalThemes)) {
+      return {
+        globalThemes: parsed.globalThemes ?? [],
+        crossBatchSynergies: parsed.crossBatchSynergies ?? [],
+        networkStrength: parsed.networkStrength ?? FALLBACK_SYNTHESIS.networkStrength,
+        recommendedActionPlan: parsed.recommendedActionPlan ?? [],
+        macroNeeds: filterMacroNeeds(parsed.macroNeeds),
+        valueChains: parsed.valueChains ?? [],
+        emergingOpportunities: filterEmergingOpportunities(parsed.emergingOpportunities)
+      };
+    }
+    console.error('Mistral MERGE: réponse JSON invalide, fallback appliqué.', text);
+    return { ...FALLBACK_SYNTHESIS };
+  } catch (err: any) {
+    console.error('Mistral MERGE failure:', err);
+    if (err?.statusCode === 429) throw err;
+    return { ...FALLBACK_SYNTHESIS };
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -413,8 +499,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const apiKey = process.env.MISTRAL_API_KEY;
     if (!apiKey) { res.status(500).json({ error: 'Mistral API key is not configured on the server' }); return; }
 
-    const { batchResults, batches, bridgeContacts, lockedContactNames, userProfile } = req.body || {};
-    if (!Array.isArray(batchResults)) {
+    const { batchResults, batches, bridgeContacts, lockedContactNames, userProfile, partialSyntheses } = req.body || {};
+    const isMerge = Array.isArray(partialSyntheses) && partialSyntheses.length > 0;
+    if (!isMerge && !Array.isArray(batchResults)) {
       res.status(400).json({ error: 'batchResults must be an array' });
       return;
     }
@@ -424,6 +511,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const lockedNames: string[] = Array.isArray(lockedContactNames) ? lockedContactNames : [];
     const lockedContext = buildLockedContext(lockedNames);
     const lockedNameSet = new Set(lockedNames);
+
+    // ── Hierarchical reduce, level 2: merge partial syntheses into one final
+    // synthesis (see api/oracle/job.ts). Each partial already summarizes ~20
+    // batches with named, grounded contacts — merging is consolidation of
+    // already-grounded content, not fresh inference.
+    if (isMerge) {
+      const merged = await mergePartialSyntheses(client, partialSyntheses, userContext, lockedContext);
+      const redactedMerge: MistralGlobalSynthesis = {
+        ...merged,
+        valueChains: merged.valueChains.map(vc => ({
+          ...vc,
+          chain: vc.chain.map(link =>
+            lockedNameSet.has(link.contactName)
+              ? { ...link, role: 'Verrouillé', contribution: 'Détails masqués — accès non accordé.' }
+              : link
+          )
+        }))
+      };
+      res.status(200).json(redactedMerge);
+      return;
+    }
 
     // Build the real per-batch roster (name/role/company/skills/needs) so
     // REDUCE can cross-match specific profiles across batches. Best-effort:

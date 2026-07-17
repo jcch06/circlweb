@@ -28,8 +28,12 @@ does ONE bounded slice and persists it, so no single invocation risks a 504:
    batch definitions. Batches with an inline cached MAP result start `done`.
 3. **map** — run `MAP_WAVE` (6) pending batches per advance via `map-batch`;
    store each result and mark it done.
-4. **reduce** — synthesize via `reduce`. **Single pass over the richest
-   `MAX_REDUCE_BATCHES` (80).**
+4. **reduce** — hierarchical. A network with <= `SINGLE_REDUCE_MAX` (25)
+   batches does one reduce. Larger: reduce batches in groups of `REDUCE_GROUP`
+   (20) into partial syntheses, `REDUCE_WAVE` (2) groups per advance, then a
+   final **merge** pass (reduce endpoint's `partialSyntheses` mode) consolidates
+   the partials into one synthesis. Every batch reaches the synthesis — not just
+   a richest subset.
 5. **supply** — build the offre/demande matrix via `supply-demand`.
 
 It REUSES the existing endpoints (topology/map-batch/reduce/supply-demand) over
@@ -47,10 +51,6 @@ done, reporting progress. Because all state is in Supabase, the loop is
 
 ## Known limitations / next steps
 
-- **Hierarchical reduce.** REDUCE currently feeds only the richest 80 batches to
-  a single reduce call. A true 10k (hundreds of batches) needs partial reduces
-  per group of batches, then a final reduce of the partials — otherwise the tail
-  of the network never reaches the synthesis. This is the main follow-up.
 - **Autonomous background (cron).** Today the job advances only while a tab
   drives it (it IS resumable on return, but not fully unattended). A Vercel cron
   that pushes stale-`heartbeat_at` running jobs forward needs a service-role

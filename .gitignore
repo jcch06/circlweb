@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 
 .vercel
+
+# graphify generated knowledge graph (regenerate with: graphify update <path>)
+graphify-out/

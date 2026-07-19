@@ -25,3 +25,6 @@ dist-ssr
 
 .vercel
 supabase/.temp/
+
+# graphify generated knowledge graph (regenerate with: graphify update <path>)
+graphify-out/

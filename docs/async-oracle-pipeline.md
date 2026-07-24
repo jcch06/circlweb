@@ -5,12 +5,14 @@ contacts) can be analyzed in bounded chunks instead of one synchronous
 browser-driven run that blows past every 60s serverless limit.
 
 **Status: first cut — needs live testing against Supabase + Mistral.** The
-synchronous pipeline on `main` is untouched and remains the default; this is an
-additive, opt-in path ("Gros réseau" button).
+synchronous pipeline is untouched and remains the default; this is an
+additive, opt-in path — a "Gros réseau" button on `OpportunitiesPage`
+(`src/pages/OpportunitiesPage.tsx`, rebased there after the redesign retired
+the old `OpportunityHub`).
 
 ## How it works
 
-State lives in two tables (`supabase/migrations/20260720090000_add_analysis_jobs.sql`):
+State lives in two tables (`supabase/migrations/20260720110000_add_analysis_jobs.sql`):
 
 - `analysis_jobs` — one row per run: `status`, `phase`, progress counters,
   carried context (userProfile, bridge/locked), and the final `synthesis` /
@@ -62,7 +64,7 @@ no service-role data access, no cross-user scoping to get wrong.
 
 ## Before it works, you must
 
-1. **Apply the migration** (`20260720090000_add_analysis_jobs.sql`).
+1. **Apply the migration** (`20260720110000_add_analysis_jobs.sql`).
 2. **Set env vars** in Vercel:
    - `SUPABASE_JWT_SECRET` — the project's JWT secret (Supabase → Settings →
      API → JWT Secret). Needed to mint + verify the cron's owner tokens.

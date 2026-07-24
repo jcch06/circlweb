@@ -95,13 +95,19 @@ export const CapturePage: React.FC = () => {
         clean_note: note.trim(),
         context: preview.context,
         field_updates: preview.field_updates
-          .filter((_, i) => checkedUpdates.has(i))
+          // Map BEFORE filter so editedValues is read by the ORIGINAL index it
+          // was keyed with at render time. Filtering first re-indexes the array,
+          // which made a user's edit land on the wrong field (or get lost) as
+          // soon as an earlier update was unchecked.
           .map((u, i) => ({
             field: u.field,
             new_value: (editedValues[i] ?? u.new_value).trim(),
             summary: u.summary ?? undefined,
             confidence: u.confidence ?? undefined,
-          })),
+            _i: i,
+          }))
+          .filter((u) => checkedUpdates.has(u._i))
+          .map(({ _i, ...u }) => u),
         follow_ups: followUps.filter((f) => f.kept && f.label && f.date).map((f) => ({ label: f.label, date: f.date })),
         updated_memory: preview.updated_memory,
         mentioned_names: preview.mentioned_names,

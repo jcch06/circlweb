@@ -7,7 +7,7 @@ import { useToast } from '../ui/Toast';
 import { Avatar, AICard, SectionLabel, ConfirmModal } from '../ui/Bits';
 import { OpportunityCard, type Intro } from '../ui/OpportunityCard';
 import { UserProfilePopup } from '../components/UserProfilePopup';
-import { fullName, dayFR, relativeFR } from '../ui/format';
+import { fullName, dayFR, relativeFR, timeFR } from '../ui/format';
 import type { MistralPipelineResult, AnalysisHistoryEntry, AnalysisDelta } from '../lib/mistral';
 import {
   isMistralConfigured,
@@ -701,7 +701,7 @@ export const OpportunitiesPage: React.FC = () => {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="t-name" style={{ fontSize: 14 }}>{h.label ?? `Analyse du ${dayFR(h.createdAt)}`}</div>
                   <div className="t-meta tnum" style={{ color: 'var(--mut)' }}>
-                    {h.contactCount} contacts · {relativeFR(h.createdAt)}
+                    {h.contactCount} contacts · {relativeFR(h.createdAt)} à {timeFR(h.createdAt)}
                   </div>
                 </div>
                 <button className="btn btn-ghost" style={{ padding: '5px 10px', fontSize: 12.5 }} onClick={() => openArchive(h.id)}>

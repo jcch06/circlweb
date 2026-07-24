@@ -83,6 +83,16 @@ export function dayFR(iso?: string | null): string {
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+// HH:mm — needed alongside relativeFR/dayFR wherever several same-day
+// entries must stay distinguishable (e.g. two analyses run hours apart on
+// the same day both otherwise read "aujourd'hui").
+export function timeFR(iso?: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
 /* ---- Couleur canonique d'un cercle (brief 2.2.4) ----
    Attribution stable par hash de l'id tant que la table spaces
    ne porte pas de color_hex. Le cercle personnel prend le pétrole. */

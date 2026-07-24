@@ -1371,11 +1371,21 @@ async function saveAnalysisSnapshot(
   meta: AnalysisHistoryMeta
 ): Promise<void> {
   try {
+    // `contacts` here is only the CLIENT's loose pre-filter (job_title OR
+    // company OR ai_context — see the caller) used for the cache key and this
+    // insert's contact_ids, not what the server actually analyzed. The
+    // server's enrichment gate (topology.ts's isAnalyzableContact) is
+    // stricter and can end up analyzing fewer contacts than this list —
+    // result.dataQuality.analyzed is the true count. Without this, history
+    // entries showed a number that never matched what was actually analyzed,
+    // and diverged from the async pipeline's history entries (job.ts),
+    // which always persist the true server-side count.
+    const contactCount = result.dataQuality?.analyzed ?? contacts.length;
     const { error } = await supabase.from('network_analyses').insert({
       owner_id: meta.ownerId,
       space_id: meta.spaceId,
       label: meta.label || null,
-      contact_count: contacts.length,
+      contact_count: contactCount,
       contact_ids: contacts.map(c => c.id),
       result
     });

@@ -105,7 +105,7 @@ interface SupplyDemandEntry {
 // (often EMPTY) matrix computed under the previous logic, and improvements
 // never reached an already-analyzed network. BUMP when this file's prompt or
 // catalog logic changes.
-const SUPPLY_PROMPT_VERSION = 'supply-v3-crosspairs';
+const SUPPLY_PROMPT_VERSION = 'supply-v4-embed-candidates';
 
 // Same formula as topology.ts / map-batch.ts rely on transitively — if this
 // hash is unchanged for every contact in the scope, the cached matrix is
@@ -139,6 +139,202 @@ function contactRichness(c: any, noteCountById: Map<string, number>): number {
   const hasCompany = typeof c.company === 'string' && c.company.trim() ? 1 : 0;
   const hasBio = typeof c.bio === 'string' && c.bio.trim() ? 1 : 0;
   return notes * 10 + skills * 2 + needs * 2 + hasTitle + hasCompany + hasBio;
+}
+
+// This is the ONE call in the whole pipeline that puts many contacts in a
+// single prompt, so it must be capped for maxDuration (60s, see vercel.json).
+// But on a 1200-contact network an alphabetical slice threw away 90%+ of the
+// graph and produced a near-empty matrix. Rank by real signal (contactRichness)
+// so the cap keeps the most MATCHABLE contacts, not an arbitrary A-first slice.
+const CATALOG_CAP = 250;
+
+function rankedCatalogContacts(contacts: any[], noteCountById: Map<string, number>): any[] {
+  return [...contacts]
+    .sort((a, b) => contactRichness(b, noteCountById) - contactRichness(a, noteCountById))
+    .slice(0, CATALOG_CAP);
+}
+
+// ─── Embedding-based candidate pre-filtering (needs ↔ skills) ──────────────
+// Asking the LLM to cross-reference every need against every skill across a
+// 250-contact catalog in one completion is a lot of implicit O(n²) reasoning
+// to get right in a single pass — especially cross-sector matches, where the
+// wording differs but the underlying need is close. Skills and needs are
+// embedded SEPARATELY here (unlike topology.ts's whole-profile embedding,
+// used only for topic clustering — a demander and a supplier are
+// complementary, not similar, so mixing both into one vector would blur
+// exactly the signal this needs) and a cheap cosine-similarity search
+// pre-selects the most promising need→skill pairs. These are handed to the
+// model as a worked shortlist in <candidate_matches> — it still sees the
+// full catalog and can find matches beyond the shortlist; the shortlist just
+// steers it toward pairs it might otherwise skip.
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length || a.length === 0) return 0;
+  let dot = 0, magA = 0, magB = 0;
+  for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; magA += a[i] * a[i]; magB += b[i] * b[i]; }
+  const denom = Math.sqrt(magA) * Math.sqrt(magB);
+  return denom === 0 ? 0 : Math.max(0, Math.min(1, dot / denom));
+}
+
+function fieldText(c: any, field: 'skill' | 'need'): string {
+  const role = `${c.job_title || ''}${c.company ? ` chez ${c.company}` : ''}`.trim();
+  const values: any[] = field === 'skill'
+    ? (Array.isArray(c.skills) ? c.skills : [])
+    : (Array.isArray(c.inferred_needs) ? c.inferred_needs : []);
+  const clean = values.filter(v => v && String(v).trim()).map(String);
+  if (clean.length === 0) return '';
+  const label = field === 'skill' ? 'Compétences' : 'Besoins';
+  return `${role ? `Rôle: ${role}. ` : ''}${label}: ${clean.join(', ')}`.substring(0, 2000);
+}
+
+function fieldContentHash(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
+}
+
+async function computeFieldEmbeddings(
+  client: Mistral,
+  entries: { contactId: string; text: string }[]
+): Promise<{ contactId: string; vector: number[] }[]> {
+  const BATCH_SIZE = 20;
+  const batches: { contactId: string; text: string }[][] = [];
+  for (let i = 0; i < entries.length; i += BATCH_SIZE) batches.push(entries.slice(i, i + BATCH_SIZE));
+  const results = await Promise.all(batches.map(async (batch) => {
+    try {
+      const embedResponse = await client.embeddings.create({ model: 'mistral-embed', inputs: batch.map(e => e.text) });
+      return embedResponse.data.map((d, idx) => ({ contactId: batch[idx].contactId, vector: d.embedding as number[] }));
+    } catch (err) {
+      console.error('supply-demand: field embedding batch failed', err);
+      return [];
+    }
+  }));
+  return results.flat();
+}
+
+interface CandidateMatch {
+  demanderId: string;
+  demanderName: string;
+  need: string;
+  candidates: { supplierId: string; supplierName: string; skill: string; score: number }[];
+}
+
+// Bounded to the same catalogContacts the LLM will actually see — this pre-
+// filters WITHIN the prompt's own catalog, it doesn't (yet) extend recall
+// beyond CATALOG_CAP. Best-effort: any embedding/cache failure here just
+// yields an empty candidate list, never a hard failure of the whole matrix.
+async function buildCandidateMatches(userSupabase: any, client: Mistral, catalogContacts: any[]): Promise<CandidateMatch[]> {
+  const hashByKey = new Map<string, string>(); // `${contactId}:${field}` -> content hash
+  const needEntries: { contactId: string; text: string }[] = [];
+  const skillEntries: { contactId: string; text: string }[] = [];
+  catalogContacts.forEach(c => {
+    const needText = fieldText(c, 'need');
+    if (needText) { needEntries.push({ contactId: c.id, text: needText }); hashByKey.set(`${c.id}:need`, fieldContentHash(needText)); }
+    const skillText = fieldText(c, 'skill');
+    if (skillText) { skillEntries.push({ contactId: c.id, text: skillText }); hashByKey.set(`${c.id}:skill`, fieldContentHash(skillText)); }
+  });
+  if (needEntries.length === 0 || skillEntries.length === 0) return [];
+
+  const contactById = new Map(catalogContacts.map(c => [c.id, c]));
+  const allIds = catalogContacts.map(c => c.id);
+
+  const cached = new Map<string, number[]>(); // key `${id}:${field}` -> vector
+  try {
+    const { data: cacheRows, error } = await selectInChunks<any>(
+      chunk => userSupabase.from('contact_field_embeddings').select('contact_id, field, content_hash, embedding').in('contact_id', chunk),
+      allIds
+    );
+    if (error) throw error;
+    (cacheRows || []).forEach((row: any) => {
+      const key = `${row.contact_id}:${row.field}`;
+      if (row.content_hash === hashByKey.get(key)) cached.set(key, row.embedding as number[]);
+    });
+  } catch (err) {
+    console.warn('supply-demand: contact_field_embeddings cache unavailable, continuing without it (non-fatal).', err);
+  }
+
+  const needsMissing = needEntries.filter(e => !cached.has(`${e.contactId}:need`));
+  const skillsMissing = skillEntries.filter(e => !cached.has(`${e.contactId}:skill`));
+
+  let freshNeeds: { contactId: string; vector: number[] }[] = [];
+  let freshSkills: { contactId: string; vector: number[] }[] = [];
+  try {
+    [freshNeeds, freshSkills] = await Promise.all([
+      needsMissing.length > 0 ? computeFieldEmbeddings(client, needsMissing) : Promise.resolve([]),
+      skillsMissing.length > 0 ? computeFieldEmbeddings(client, skillsMissing) : Promise.resolve([]),
+    ]);
+  } catch (err) {
+    console.warn('supply-demand: field embedding computation failed, continuing without candidate matches (non-fatal).', err);
+  }
+
+  try {
+    const rows = [
+      ...freshNeeds.map(e => ({
+        contact_id: e.contactId, field: 'need', space_id: contactById.get(e.contactId)?.space_id,
+        content_hash: hashByKey.get(`${e.contactId}:need`), embedding: e.vector, updated_at: new Date().toISOString()
+      })),
+      ...freshSkills.map(e => ({
+        contact_id: e.contactId, field: 'skill', space_id: contactById.get(e.contactId)?.space_id,
+        content_hash: hashByKey.get(`${e.contactId}:skill`), embedding: e.vector, updated_at: new Date().toISOString()
+      })),
+    ];
+    if (rows.length > 0) await userSupabase.from('contact_field_embeddings').upsert(rows, { onConflict: 'contact_id,field' });
+  } catch (err) {
+    console.warn('supply-demand: failed to persist contact_field_embeddings (non-fatal).', err);
+  }
+
+  const needVectorByContact = new Map<string, number[]>();
+  needEntries.forEach(e => { const v = cached.get(`${e.contactId}:need`); if (v) needVectorByContact.set(e.contactId, v); });
+  freshNeeds.forEach(e => needVectorByContact.set(e.contactId, e.vector));
+
+  const skillVectorByContact = new Map<string, number[]>();
+  skillEntries.forEach(e => { const v = cached.get(`${e.contactId}:skill`); if (v) skillVectorByContact.set(e.contactId, v); });
+  freshSkills.forEach(e => skillVectorByContact.set(e.contactId, e.vector));
+
+  const TOP_K = 4;
+  const THRESHOLD = 0.45;
+  const MAX_DEMANDERS = 100;
+
+  const matches: CandidateMatch[] = [];
+  for (const [demanderId, needVec] of needVectorByContact) {
+    const scored: { supplierId: string; score: number }[] = [];
+    for (const [supplierId, skillVec] of skillVectorByContact) {
+      if (supplierId === demanderId) continue;
+      const score = cosineSimilarity(needVec, skillVec);
+      if (score >= THRESHOLD) scored.push({ supplierId, score });
+    }
+    if (scored.length === 0) continue;
+    scored.sort((a, b) => b.score - a.score);
+    const demander = contactById.get(demanderId);
+    const candidates = scored.slice(0, TOP_K).map(s => {
+      const supplier = contactById.get(s.supplierId);
+      const skills = Array.isArray(supplier?.skills) ? supplier.skills.filter((v: any) => v && String(v).trim()).join(', ') : '';
+      return {
+        supplierId: s.supplierId,
+        supplierName: `${supplier?.first_name || ''} ${supplier?.last_name || ''}`.trim(),
+        skill: skills,
+        score: Math.round(s.score * 100) / 100
+      };
+    });
+    const needs = Array.isArray(demander?.inferred_needs) ? demander.inferred_needs.filter((v: any) => v && String(v).trim()).join(', ') : '';
+    matches.push({
+      demanderId,
+      demanderName: `${demander?.first_name || ''} ${demander?.last_name || ''}`.trim(),
+      need: needs,
+      candidates
+    });
+  }
+
+  matches.sort((a, b) => Math.max(...b.candidates.map(c => c.score), 0) - Math.max(...a.candidates.map(c => c.score), 0));
+  return matches.slice(0, MAX_DEMANDERS);
+}
+
+function buildCandidateContext(matches: CandidateMatch[]): string {
+  if (matches.length === 0) return '';
+  const lines = matches.map(m => {
+    const cands = m.candidates
+      .map(c => `${c.supplierName} (id ${c.supplierId}, compétences: ${c.skill || 'n/a'}, score ${c.score})`)
+      .join(' ; ');
+    return `- ${m.demanderName} (id ${m.demanderId}) — besoin: "${m.need}" → candidats : ${cands}`;
+  });
+  return `\n<candidate_matches>\nCes paires besoin→compétence ont été pré-sélectionnées par similarité vectorielle (embeddings séparés des besoins et des compétences de chaque contact, score de 0 à 1). C'est un signal statistique, pas une vérité absolue — utilise-le comme point de départ prioritaire pour repérer des correspondances non évidentes (notamment inter-secteurs, où le vocabulaire diffère mais le besoin sous-jacent est proche), mais VALIDE toujours avec les données réelles du catalogue avant d'intégrer une paire à une ligne. Ne te limite pas à cette liste : continue de parcourir tout le catalogue pour les besoins qui n'y figurent pas ou dont le meilleur match n'est pas ici.\n${lines.join('\n')}\n</candidate_matches>\n`;
 }
 
 const MAP_REDUCE_MODEL = 'mistral-large-latest';
@@ -265,8 +461,8 @@ function isAnalyzableContact(c: any, noteCountById: Map<string, number>): boolea
     || (noteCountById.get(c.id) || 0) > 0;
 }
 
-async function buildSupplyDemandMatrix(client: Mistral, contacts: any[], notes: any[], userContext: string, lockedContext: string, noteCountById: Map<string, number>): Promise<SupplyDemandEntry[]> {
-  if (!contacts || contacts.length === 0) return [];
+async function buildSupplyDemandMatrix(client: Mistral, catalogContacts: any[], notes: any[], userContext: string, lockedContext: string, candidateContext: string): Promise<SupplyDemandEntry[]> {
+  if (!catalogContacts || catalogContacts.length === 0) return [];
 
   // Key names spell out provenance explicitly: skillsEstimeesIA/besoinsEstimesIA
   // are an AI guess derived from job title/sector at enrichment time (see
@@ -274,17 +470,12 @@ async function buildSupplyDemandMatrix(client: Mistral, contacts: any[], notes: 
   // contact's actual notes. notesUtilisateur is what the user personally
   // wrote about this contact — the only genuinely verified signal.
   //
-  // This is the ONE call in the whole pipeline that puts many contacts in a
+  // catalogContacts is already ranked+capped by the caller (rankedCatalogContacts)
+  // — this is the ONE call in the whole pipeline that puts many contacts in a
   // single prompt, so it must be capped for maxDuration (60s, see vercel.json).
-  // But on a 1200-contact network an alphabetical slice threw away 90%+ of the
-  // graph and produced a near-empty matrix. Two fixes: (1) rank by real signal
-  // (contactRichness) so the cap keeps the most MATCHABLE contacts, not an
-  // arbitrary A-first slice; (2) raise the cap to 250 — Mistral Large handles
-  // that catalog size, and the client-side retry already rides out the rate
-  // limit, so the extra prompt length is an acceptable trade for real recall.
-  const CATALOG_CAP = 250;
-  const ranked = [...contacts].sort((a, b) => contactRichness(b, noteCountById) - contactRichness(a, noteCountById));
-  const catalog = ranked.slice(0, CATALOG_CAP).map(c => {
+  // Ranking by real signal (contactRichness) keeps the most MATCHABLE contacts
+  // rather than an arbitrary A-first slice on a large network.
+  const catalog = catalogContacts.map(c => {
     const contactNotes = notes.filter(n => n.contact_id === c.id).map(n => n.content).join(' | ').substring(0, 400);
     const skills: string[] = Array.isArray(c.skills) ? c.skills : [];
     const needs: string[] = Array.isArray(c.inferred_needs) ? c.inferred_needs : [];
@@ -300,7 +491,7 @@ async function buildSupplyDemandMatrix(client: Mistral, contacts: any[], notes: 
   const prompt = `<role>
 Tu es "Oracle MARKET", un analyste spécialisé dans la cartographie OFFRE / DEMANDE d'un réseau professionnel. Tu construis une matrice qui, pour chaque besoin identifié dans le réseau, liste QUI le demande et QUI peut le fournir.
 </role>
-${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${lockedContext}
+${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${lockedContext}${candidateContext}
 <instructions>
 1. Parcours le catalogue de contacts (chacun a des compétences = OFFRE, et des besoins = DEMANDE).
 2. Regroupe les besoins similaires en une même ligne "need" (ex : "trouver un développeur" et "besoin technique" → "Développement / compétence technique").
@@ -456,7 +647,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const userContext = userProfile ? buildUserContext(userProfile) : '';
     const lockedContext = buildLockedContext(lockedNames);
 
-    const supplyDemand = await buildSupplyDemandMatrix(client, contacts, notes || [], userContext, lockedContext, noteCountById);
+    const catalogContacts = rankedCatalogContacts(contacts, noteCountById);
+    const candidateMatches = await buildCandidateMatches(userSupabase, client, catalogContacts);
+    const candidateContext = buildCandidateContext(candidateMatches);
+
+    const supplyDemand = await buildSupplyDemandMatrix(client, catalogContacts, notes || [], userContext, lockedContext, candidateContext);
 
     try {
       await userSupabase.from('oracle_supply_demand_cache').upsert({

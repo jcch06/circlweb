@@ -89,29 +89,39 @@ function buildBatchRosters(
   const MAX_PER_BATCH = 15;
   // Hard global ceiling: the roster must stay bounded no matter how big the
   // network is, or REDUCE's single Mistral Large call exceeds maxDuration
-  // (60s, see vercel.json) and Vercel kills it with a 504. 120 richest
-  // contacts is plenty to ground cross-batch synergies.
-  const GLOBAL_CAP = 120;
+  // (60s, see vercel.json) and Vercel kills it with a 504.
+  const GLOBAL_CAP = 150;
 
-  // Flatten to (batchIndex, contact), rank globally by richness, keep the top N.
-  const all: { i: number; c: any }[] = [];
-  batches.forEach((ids, i) => ids.forEach(id => {
-    const c = contactById.get(id);
-    if (c) all.push({ i, c });
-  }));
-  all.sort((a, b) => rosterRichness(b.c) - rosterRichness(a.c));
-  const kept = all.slice(0, GLOBAL_CAP);
-
-  // Regroup by batch (preserve batch order), cap per batch, render.
-  const byBatch = new Map<number, any[]>();
-  kept.forEach(({ i, c }) => {
-    if (!byBatch.has(i)) byBatch.set(i, []);
-    byBatch.get(i)!.push(c);
-  });
+  // Fair coverage via round-robin (richest-first WITHIN each batch, but one
+  // slot per batch before any batch gets a second) instead of a single global
+  // richness ranking. A pure global top-N silently starved whole batches
+  // whose members happen to have fewer filled-in fields — even when that
+  // batch is a real, distinct pole (e.g. a media/luxury cluster sitting next
+  // to the user's own well-enriched niche) — so REDUCE could never nominate a
+  // value chain or a "porte à explorer" for people it never got to see.
+  // Guaranteeing at least one representative per batch keeps every pole
+  // visible regardless of how "rich" its fields look next to the others.
+  const perBatchRanked: any[][] = batches.map(ids =>
+    ids.map(id => contactById.get(id)).filter(Boolean).sort((a, b) => rosterRichness(b) - rosterRichness(a))
+  );
+  const byBatch: any[][] = perBatchRanked.map(() => []);
+  let kept = 0;
+  for (let round = 0; round < MAX_PER_BATCH && kept < GLOBAL_CAP; round++) {
+    let addedThisRound = false;
+    for (let i = 0; i < perBatchRanked.length && kept < GLOBAL_CAP; i++) {
+      const c = perBatchRanked[i][round];
+      if (!c) continue;
+      byBatch[i].push(c);
+      kept++;
+      addedThisRound = true;
+    }
+    if (!addedThisRound) break;
+  }
 
   const lines: string[] = [];
-  Array.from(byBatch.keys()).sort((a, b) => a - b).forEach(i => {
-    const members = byBatch.get(i)!.slice(0, MAX_PER_BATCH).map(c => {
+  byBatch.forEach((members, i) => {
+    if (members.length === 0) return;
+    const rendered = members.map(c => {
       const name = `${c.first_name} ${c.last_name || ''}`.trim();
       if (lockedNameSet.has(name)) return `  - ${name} (profil verrouillé — détails masqués)`;
       const skills = Array.isArray(c.skills) ? c.skills.filter((s: any) => s && String(s).trim()).slice(0, 6).join(', ') : '';
@@ -120,7 +130,7 @@ function buildBatchRosters(
       const company = c.company || 'Inconnue';
       return `  - ${name} — ${role} @ ${company}${skills ? ` | compétences estimées : ${skills}` : ''}${needs ? ` | besoins estimés : ${needs}` : ''}`;
     });
-    if (members.length > 0) lines.push(`Lot ${i + 1} :\n${members.join('\n')}`);
+    lines.push(`Lot ${i + 1} :\n${rendered.join('\n')}`);
   });
   return lines.join('\n\n');
 }
@@ -349,14 +359,14 @@ Tu es "Oracle REDUCE", un super-cerveau stratégique spécialisé dans la consol
 ${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${bridgeContext}${rosterContext}${lockedContext}
 <instructions>
 1. Fusionne les besoins similaires ou redondants détectés dans les différents lots en "Macro-Besoins" consolidés (ne liste pas les doublons séparément).
-2. Construis PLUSIEURS chaînes de valeur globales (value chains) — vise-en une par grand PÔLE du réseau (utilise <composition_des_lots> pour repérer les pôles : froid/logistique, politique/influence, médias, luxe/événementiel, tech, etc.), pas seulement celui aligné avec le profil de l'utilisateur. Chaque chaîne relie des contacts RÉELS de lots DIFFÉRENTS autour d'un objectif commun (ex : A a un besoin, B a la compétence, C a le réseau/financement). Vise 3 à 5 chaînes quand le réseau le permet (5 maximum), chacune couvrant une dynamique différente. Quand c'est pertinent, utilise les <bridge_contacts> comme maillons entre groupes.
+2. Construis PLUSIEURS chaînes de valeur globales (value chains) — vise-en une par grand PÔLE du réseau (utilise <composition_des_lots> pour repérer les pôles : froid/logistique, politique/influence, médias, luxe/événementiel, tech, etc.), pas seulement celui aligné avec le profil de l'utilisateur. Chaque chaîne relie des contacts RÉELS de lots DIFFÉRENTS autour d'un objectif commun (ex : A a un besoin, B a la compétence, C a le réseau/financement). Vise 4 à 8 chaînes quand le réseau le permet (8 maximum), chacune couvrant une dynamique différente — y compris des pôles hors-profil quand ils sont réels et étayés. Quand c'est pertinent, utilise les <bridge_contacts> comme maillons entre groupes.
 3. Identifie les thèmes dominants ET, surtout, les SYNERGIES TRANSVERSALES (crossBatchSynergies) : croise ACTIVEMENT les besoins récurrents d'un lot avec les compétences clés d'un AUTRE lot (ex : le lot A exprime un besoin de financement, le lot B regroupe des profils investissement → synergie transversale ; le lot C a besoin de tech, le lot D a des développeurs → synergie). C'est le CŒUR de la valeur d'un réseau diversifié : deux mondes qui ne se connaissent pas mais dont l'un a ce que l'autre cherche. Cherche systématiquement ces croisements besoin↔compétence entre lots différents.
 4. Repère les "Portes à Explorer" (emergingOpportunities) : les pôles DENSES mais HORS-PROFIL — un thème ou un besoin réellement partagé par au moins DEUX contacts, qui ne colle à aucun levier de l'utilisateur, et qui pourrait lui ouvrir une direction nouvelle. Vois la section OUVERTURE du user_context.
 5. Propose un plan d'action concret et priorisé.
 </instructions>
 
 <rules>
-- ANCRAGE STRICT sur "macroNeeds" et "valueChains" (qui NOMMENT des contacts précis) : chaque maillon doit être un contact RÉEL présent dans <composition_des_lots> ou <aggregated_batch_data>, avec un rôle réel — n'invente JAMAIS un contact ni un rôle. Mais dans cette limite, cherche la LARGEUR : un réseau diversifié contient plusieurs pôles, donc plusieurs chaînes de valeur (une par pôle) sont attendues, pas une seule. Ne te rabats sur peu de chaînes que si le roster ne contient réellement pas de quoi en construire davantage. En revanche "crossBatchSynergies" est THÉMATIQUE (un thème, une description, un impact — pas des contacts nommés fragiles) : sois GÉNÉREUX. Dès qu'un besoin réel d'un lot rencontre une compétence réelle d'un AUTRE lot, c'est une synergie transversale valide à remonter, même sans note qui la corrobore — c'est une piste, pas une certitude. Vise plusieurs synergies transversales couvrant différents croisements de pôles (6 maximum, les plus solides) ; ne renvoie "crossBatchSynergies" vide QUE si aucun croisement besoin↔compétence n'existe réellement entre les lots (rare sur un réseau diversifié). "globalThemes" est un simple résumé factuel de ce qui existe dans <aggregated_batch_data> : il ne dépend d'aucune synergie ni alignement, et ne doit être vide que si <aggregated_batch_data> est lui-même vide.
+- ANCRAGE STRICT sur "macroNeeds" et "valueChains" (qui NOMMENT des contacts précis) : chaque maillon doit être un contact RÉEL présent dans <composition_des_lots> ou <aggregated_batch_data>, avec un rôle réel — n'invente JAMAIS un contact ni un rôle. Mais dans cette limite, cherche la LARGEUR : un réseau diversifié contient plusieurs pôles, donc plusieurs chaînes de valeur (une par pôle) sont attendues, pas une seule. Ne te rabats sur peu de chaînes que si le roster ne contient réellement pas de quoi en construire davantage. En revanche "crossBatchSynergies" est THÉMATIQUE (un thème, une description, un impact — pas des contacts nommés fragiles) : sois GÉNÉREUX. Dès qu'un besoin réel d'un lot rencontre une compétence réelle d'un AUTRE lot, c'est une synergie transversale valide à remonter, même sans note qui la corrobore — c'est une piste, pas une certitude. Vise plusieurs synergies transversales couvrant différents croisements de pôles (10 maximum, les plus solides) ; ne renvoie "crossBatchSynergies" vide QUE si aucun croisement besoin↔compétence n'existe réellement entre les lots (rare sur un réseau diversifié). "globalThemes" est un simple résumé factuel de ce qui existe dans <aggregated_batch_data> : il ne dépend d'aucune synergie ni alignement, et ne doit être vide que si <aggregated_batch_data> est lui-même vide.
 - Un "Macro-Besoin" est par définition une CONSOLIDATION : il ne se justifie que s'il regroupe au moins DEUX contacts distincts OU au moins deux besoins bruts distincts dans "mergedFrom". Ne crée JAMAIS un macro-besoin qui ne concerne qu'un seul contact avec un seul besoin recopié — ce n'est pas un macro-besoin, c'est un besoin isolé, et il n'a pas sa place ici. Si le réseau ne présente aucun besoin réellement partagé par plusieurs contacts, renvoie un tableau "macroNeeds" vide : c'est une réponse valide et préférable à des besoins triviaux. "mergedFrom" et "affectedContactsCount" doivent refléter la réalité (jamais gonflés pour atteindre le seuil).
 - Une "valueChain" ne doit relier que des contacts RÉELLEMENT nommés dans les données agrégées, chacun avec un rôle concret tiré de ses données. N'ajoute JAMAIS un maillon générique du type "un profil pertinent dans le réseau" ni un rôle vague ("profil technique ou opérationnel", "client potentiel") : si tu n'as pas de rôle précis pour un contact, ne l'inclus pas dans la chaîne.
 - Chaque synergie agrégée porte un "confidence" ("high"/"medium"/"low") hérité du MAP — "high" y signifie qu'une note réelle de l'utilisateur corrobore le lien, "medium"/"low" signifient une pure estimation IA. Privilégie les synergies "high" pour bâtir les "valueChains" et macro-besoins les plus mis en avant ; une chaîne construite uniquement sur des synergies "low" doit rester marginale, pas headline.
@@ -450,8 +460,8 @@ ${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${loc
 <instructions>
 1. Consolide les "globalThemes" en dédupliquant les thèmes équivalents entre partielles.
 2. Fusionne les macro-besoins similaires (additionne le nombre de contacts concernés quand c'est le même besoin).
-3. Garde les chaînes de valeur les plus solides à travers TOUTES les partielles (5 maximum) — privilégie celles qui couvrent des pôles différents.
-4. Consolide les synergies transversales (6 maximum, les plus fortes), en repérant aussi les croisements ENTRE deux partielles différentes.
+3. Garde les chaînes de valeur les plus solides à travers TOUTES les partielles (8 maximum) — privilégie celles qui couvrent des pôles différents, y compris hors-profil quand elles sont réelles.
+4. Consolide les synergies transversales (10 maximum, les plus fortes), en repérant aussi les croisements ENTRE deux partielles différentes.
 5. Regroupe les "Portes à Explorer" (pôles hors-profil) en dédupliquant.
 6. Rédige une "networkStrength" globale et un "recommendedActionPlan" priorisé pour l'ensemble du réseau.
 </instructions>

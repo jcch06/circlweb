@@ -351,6 +351,34 @@ async function advance(req: VercelRequest, token: string, db: any, job: any): Pr
     const supplyDemand = await callInternal(req, token, '/api/oracle/supply-demand', {
       spaceId, userProfile: job.user_profile ?? null
     });
+
+    // Persist to history (network_analyses) — same table/shape the sync
+    // pipeline writes to, so an async run also shows up in Historique and can
+    // be reopened later. Done SERVER-SIDE (not left to the client after the
+    // job finishes) so a run completed by the cron — no tab watching — still
+    // lands in history, not just ones a live tab happened to observe.
+    try {
+      const { data: batchRows } = await db.from('analysis_job_batches').select('contact_ids').eq('job_id', jobId);
+      const contactIds = Array.from(new Set((batchRows || []).flatMap((b: any) => Array.isArray(b.contact_ids) ? b.contact_ids : [])));
+      const batches = await fetchBatchResults(db, jobId);
+      await db.from('network_analyses').insert({
+        owner_id: job.owner_id,
+        space_id: job.space_id,
+        contact_count: contactIds.length,
+        contact_ids: contactIds,
+        result: {
+          batches,
+          synthesis: job.synthesis,
+          supplyDemand,
+          bridgeContacts: job.bridge_contacts ?? [],
+          timestamp: Date.now(),
+          dataQuality: { analyzed: job.analyzed_count, excluded: job.excluded_count, capped: job.capped_count }
+        }
+      });
+    } catch (err) {
+      console.warn('job: failed to persist network_analyses history (non-fatal)', err);
+    }
+
     return save({ phase: 'done', status: 'done', progress: 100, supply_demand: supplyDemand });
   }
 

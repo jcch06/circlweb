@@ -56,6 +56,11 @@ export const OpportunitiesPage: React.FC = () => {
   const [plan, setPlan] = useState<Record<string, boolean>>({});
 
   const spaceId = data.selectedSpaceId ?? data.spaces.find((s) => s.type === 'personal')?.id ?? null;
+  // Reflects the REAL scope the analysis runs on (including the fallback to
+  // the personal space when no circle is picked in the sidebar) — not just
+  // the raw sidebar selection, which would read "Tous les cercles" even
+  // though the analysis itself never actually covers every circle at once.
+  const activeSpace = spaceId ? data.spaceById.get(spaceId) : null;
   const contacts = useMemo(
     () => (data.selectedSpaceId ? data.contacts.filter((c) => c.space_id === data.selectedSpaceId) : data.contacts),
     [data.contacts, data.selectedSpaceId]
@@ -285,9 +290,10 @@ export const OpportunitiesPage: React.FC = () => {
           <div style={{ flex: 1 }}>
             <h1 className="t-page">Opportunités</h1>
             <div className="t-sec tnum" style={{ color: 'var(--mut)', marginTop: 2 }}>
+              Périmètre : <b style={{ color: 'var(--ink-2)' }}>{activeSpace ? activeSpace.name : 'tous vos contacts'}</b>
               {lastAnalysis
-                ? `Analyse du ${dayFR(lastAnalysis.createdAt)} · ${lastAnalysis.contactCount} contacts`
-                : 'Aucune analyse pour l’instant'}
+                ? ` · Analyse du ${dayFR(lastAnalysis.createdAt)} · ${lastAnalysis.contactCount} contacts`
+                : ' · Aucune analyse pour l’instant'}
             </div>
           </div>
           <button className="btn btn-ghost" onClick={() => setShowProfile(true)}>

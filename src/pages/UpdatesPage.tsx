@@ -98,7 +98,9 @@ export const UpdatesPage: React.FC = () => {
       .from('contact_updates')
       .select('*')
       .neq('status', 'pending')
-      .order('created_at', { ascending: false })
+      // Real column is detected_at, not created_at — see
+      // supabase/migrations/20260720100000_add_redesign_tables.sql.
+      .order('detected_at', { ascending: false })
       .limit(100);
     setHistory(rows ?? []);
   };
@@ -157,7 +159,7 @@ export const UpdatesPage: React.FC = () => {
               à vérifier
             </span>
           )}
-          <span className="t-meta tnum" style={{ color: 'var(--faint)' }}>{relativeFR(u.created_at)}</span>
+          <span className="t-meta tnum" style={{ color: 'var(--faint)' }}>{relativeFR(u.detected_at)}</span>
           <span style={{ flex: 1 }} />
           <DecisionPair onNo={() => decide(u, false)} onYes={() => decide(u, true)} />
         </div>

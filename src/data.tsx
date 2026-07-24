@@ -93,7 +93,9 @@ export const DataProvider: React.FC<{ session: any; children: React.ReactNode }>
           fetchAll('tags', 'name'),
           fetchAll('contact_tags_visible', 'contact_id'),
           fetchAll('contact_links', 'created_at', false).catch(() => []),
-          fetchAll('contact_updates', 'created_at', false, ['status', 'pending']),
+          // contact_updates' real timestamp column is detected_at, not created_at
+          // (see supabase/migrations/20260720100000_add_redesign_tables.sql).
+          fetchAll('contact_updates', 'detected_at', false, ['status', 'pending']),
           fetchAll('follow_ups', 'due_date', true, ['status', 'pending']),
         ]);
         setContacts(contactsData);

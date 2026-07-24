@@ -40,15 +40,21 @@ export function useData(): DataApi {
   return ctx;
 }
 
-const fetchAll = async (table: string, orderBy: string, ascending = true) => {
+// Pagination systématique (plafond Supabase 1000 lignes/requête). Le filtre
+// d'égalité optionnel permet de paginer aussi les requêtes filtrées (ex.
+// status = 'pending') sans plafond dur à 500.
+const fetchAll = async (
+  table: string,
+  orderBy: string,
+  ascending = true,
+  eq?: [string, unknown],
+) => {
   const PAGE = 1000;
   const rows: any[] = [];
   for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from(table)
-      .select('*')
-      .order(orderBy, { ascending })
-      .range(from, from + PAGE - 1);
+    let q = supabase.from(table).select('*');
+    if (eq) q = q.eq(eq[0], eq[1]);
+    const { data, error } = await q.order(orderBy, { ascending }).range(from, from + PAGE - 1);
     if (error) throw error;
     rows.push(...(data || []));
     if (!data || data.length < PAGE) break;
@@ -87,12 +93,8 @@ export const DataProvider: React.FC<{ session: any; children: React.ReactNode }>
           fetchAll('tags', 'name'),
           fetchAll('contact_tags_visible', 'contact_id'),
           fetchAll('contact_links', 'created_at', false).catch(() => []),
-          supabase.from('contact_updates').select('*').eq('status', 'pending')
-            .order('created_at', { ascending: false }).limit(500)
-            .then((r) => r.data ?? []),
-          supabase.from('follow_ups').select('*').eq('status', 'pending')
-            .order('due_date', { ascending: true }).limit(500)
-            .then((r) => r.data ?? []),
+          fetchAll('contact_updates', 'created_at', false, ['status', 'pending']),
+          fetchAll('follow_ups', 'due_date', true, ['status', 'pending']),
         ]);
         setContacts(contactsData);
         setNotes(notesData);

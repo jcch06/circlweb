@@ -99,12 +99,20 @@ export const OpportunityCard: React.FC<{
     const ok = await persist('snoozed', due);
     if (!ok) return;
     // Une intro planifiée devient une vraie relance dans la boucle du matin.
+    // Re-planifier la même intro remplace la relance existante au lieu d'en
+    // empiler une seconde (follow_ups n'a pas de contrainte d'unicité ici).
+    const label = `Présenter ${fullName(to)} à ${from.first_name}`;
+    await supabase.from('follow_ups').delete()
+      .eq('user_id', data.user?.id)
+      .eq('contact_id', from.id)
+      .eq('label', label)
+      .eq('status', 'pending');
     await supabase.from('follow_ups').insert({
       space_id: from.space_id,
       contact_id: from.id,
       user_id: data.user?.id,
       due_date: due,
-      label: `Présenter ${fullName(to)} à ${from.first_name}`,
+      label,
     });
     setSnoozeOpen(false);
     toast(`Relance posée au ${new Date(due).toLocaleDateString('fr-FR')}.`);

@@ -148,7 +148,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (action === 'status') {
       const { data, error } = await db.from('analysis_jobs').select('*').eq('id', jobId).single();
       if (error) { res.status(404).json({ error: 'job not found' }); return; }
-      res.status(200).json(publicJob(data));
+      res.status(200).json(await publicJob(db, data));
       return;
     }
 
@@ -163,22 +163,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (action === 'advance') {
       const { data: job, error } = await db.from('analysis_jobs').select('*').eq('id', jobId).single();
       if (error || !job) { res.status(404).json({ error: 'job not found' }); return; }
-      if (job.status !== 'running') { res.status(200).json(publicJob(job)); return; }
+      if (job.status !== 'running') { res.status(200).json(await publicJob(db, job)); return; }
 
       await db.from('analysis_jobs').update({ heartbeat_at: new Date().toISOString() }).eq('id', jobId);
 
       try {
         const updated = await advance(req, auth.token, db, job);
-        res.status(200).json(publicJob(updated));
+        res.status(200).json(await publicJob(db, updated));
       } catch (err: any) {
         // A rate-limit is transient — leave the job running so the next advance
         // (or cron) retries the same phase. Anything else fails the job.
         if (err?.rateLimited) {
-          res.status(200).json({ ...publicJob(job), rateLimited: true });
+          res.status(200).json({ ...(await publicJob(db, job)), rateLimited: true });
           return;
         }
         await db.from('analysis_jobs').update({ status: 'error', error: String(err?.message || err), updated_at: new Date().toISOString() }).eq('id', jobId);
-        res.status(200).json({ ...publicJob(job), status: 'error', error: String(err?.message || err) });
+        res.status(200).json({ ...(await publicJob(db, job)), status: 'error', error: String(err?.message || err) });
       }
       return;
     }
@@ -190,7 +190,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-function publicJob(job: any) {
+// Only fetched once the job is actually done — every other call (many
+// advances per job) would otherwise pay for a query it doesn't need. Without
+// this, the client's final result carried synthesis/supplyDemand but an empty
+// `batches` array, which starves OpportunitiesPage's PRIMARY opportunity
+// source (per-batch immediateSynergies) and silently falls back to the much
+// narrower supply/demand cross-product — the same few names recombined.
+async function fetchBatchResults(db: any, jobId: string): Promise<any[]> {
+  const { data } = await db.from('analysis_job_batches')
+    .select('result').eq('job_id', jobId).eq('status', 'done').not('result', 'is', null);
+  return (data || []).map((r: any) => r.result);
+}
+
+async function publicJob(db: any, job: any) {
   return {
     jobId: job.id,
     status: job.status,
@@ -207,7 +219,8 @@ function publicJob(job: any) {
     synthesis: job.synthesis ?? null,
     supplyDemand: job.supply_demand ?? null,
     bridgeContacts: job.bridge_contacts ?? [],
-    userProfile: job.user_profile ?? null
+    userProfile: job.user_profile ?? null,
+    batches: job.status === 'done' ? await fetchBatchResults(db, job.id) : []
   };
 }
 

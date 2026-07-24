@@ -127,7 +127,11 @@ export const OpportunitiesPage: React.FC = () => {
         return;
       }
       setResult({
-        batches: [],
+        // Per-batch immediateSynergies — the PRIMARY source the intros list
+        // below reads first. Leaving this empty was the bug: only the
+        // narrower supply/demand cross-product surfaced, so the same few
+        // names kept recombining.
+        batches: final.batches ?? [],
         synthesis: final.synthesis,
         supplyDemand: final.supplyDemand ?? [],
         bridgeContacts: final.bridgeContacts ?? [],

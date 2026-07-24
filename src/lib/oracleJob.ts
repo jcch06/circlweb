@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { MistralGlobalSynthesis, SupplyDemandEntry, BridgeContact } from './mistral';
+import type { MistralGlobalSynthesis, SupplyDemandEntry, BridgeContact, MistralBatchResult } from './mistral';
 
 // Client driver for the async Oracle pipeline (api/oracle/job.ts). Creates a
 // resumable job, then repeatedly calls "advance" (each call does a bounded slice
@@ -25,6 +25,11 @@ export interface JobState {
   supplyDemand?: SupplyDemandEntry[] | null;
   bridgeContacts?: BridgeContact[];
   userProfile?: any;
+  // Per-batch MAP results (immediateSynergies etc.) — only populated once the
+  // job is done. This is the PRIMARY source OpportunitiesPage uses for
+  // opportunity cards; without it, only the narrower supply/demand
+  // cross-product surfaces.
+  batches?: MistralBatchResult[];
 }
 
 async function authHeader(): Promise<Record<string, string>> {

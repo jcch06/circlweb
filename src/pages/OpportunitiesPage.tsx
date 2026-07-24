@@ -18,6 +18,7 @@ import {
   deleteAnalysis,
   compareAnalyses,
 } from '../lib/mistral';
+import { createAndRunAnalysisJob, type JobState } from '../lib/oracleJob';
 
 // Opportunités (brief 4.8) : l'ancien Oracle converti en file d'action.
 // Le jargon d'implémentation disparaît : plus de Map/Reduce, de lots, de
@@ -41,6 +42,10 @@ export const OpportunitiesPage: React.FC = () => {
   const [result, setResult] = useState<MistralPipelineResult | null>(null);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
+  // Grand réseau : analyse résumable en tâche de fond (voir lib/oracleJob) au
+  // lieu du pipeline synchrone ci-dessous — nécessaire dès que le nombre de
+  // lots dépasse ce qu'une seule invocation de 60s peut traiter.
+  const [asyncJob, setAsyncJob] = useState<JobState | null>(null);
   const [decided, setDecided] = useState<Map<string, any>>(new Map());
   const [history, setHistory] = useState<AnalysisHistoryEntry[]>([]);
   const [delta, setDelta] = useState<AnalysisDelta | null>(null);
@@ -94,6 +99,52 @@ export const OpportunitiesPage: React.FC = () => {
       toast(`L'analyse est momentanément indisponible : ${err.message ?? 'erreur'}`);
     } finally {
       setRunning(false);
+    }
+  };
+
+  // Grand réseau : crée un job résumable côté serveur et l'avance par tranches
+  // bornées, pour que des centaines de lots ne bloquent jamais une seule
+  // invocation de 60s. Reprenable si l'onglet se ferme en cours de route.
+  // Aboutit au même MistralPipelineResult que le pipeline synchrone.
+  const runAsync = async () => {
+    setRunning(true);
+    setProgress(0);
+    setAsyncJob(null);
+    setArchive(null);
+    try {
+      const profile = localStorage.getItem(`circl_user_profile_${data.user?.id}`);
+      const final = await createAndRunAnalysisJob(
+        spaceId,
+        profile ? JSON.parse(profile) : undefined,
+        (s) => setAsyncJob(s)
+      );
+      if (final.status === 'error') {
+        toast(`Analyse en tâche de fond échouée : ${final.error || 'erreur inconnue'}`);
+        return;
+      }
+      if (!final.synthesis) {
+        toast("L'analyse est terminée mais n'a produit aucune synthèse (réseau trop peu enrichi ?).");
+        return;
+      }
+      setResult({
+        batches: [],
+        synthesis: final.synthesis,
+        supplyDemand: final.supplyDemand ?? [],
+        bridgeContacts: final.bridgeContacts ?? [],
+        timestamp: Date.now(),
+        dataQuality: {
+          analyzed: final.analyzedCount ?? 0,
+          excluded: final.excludedCount ?? 0,
+          capped: final.cappedCount ?? 0,
+        },
+      });
+      listAnalysisHistory(spaceId).then(setHistory).catch(() => {});
+      toast('Analyse à jour.');
+    } catch (err: any) {
+      toast(`Erreur analyse en tâche de fond : ${err?.message ?? 'inconnue'}`);
+    } finally {
+      setRunning(false);
+      setAsyncJob(null);
     }
   };
 
@@ -238,11 +289,38 @@ export const OpportunitiesPage: React.FC = () => {
           <button className="btn btn-ghost" onClick={() => setShowProfile(true)}>
             <User size={14} /> Profil
           </button>
+          <button
+            className="btn btn-ghost"
+            onClick={runAsync}
+            disabled={running}
+            title="Pour un très gros réseau : analyse résumable en tâche de fond, survit à un rafraîchissement."
+          >
+            Gros réseau
+          </button>
           <button className="btn btn-primary" onClick={run} disabled={running}>
             <RefreshCw size={14} style={running ? { animation: 'spin 1.2s linear infinite' } : undefined} />
             {running ? `Analyse… ${progress}%` : lastAnalysis ? 'Actualiser l’analyse' : 'Lancer l’analyse'}
           </button>
         </div>
+
+        {asyncJob && (asyncJob.status === 'running' || asyncJob.status === 'pending') && (
+          <div className="card card-pad" style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="t-sec tnum" style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--ink-2)' }}>
+              <span>
+                Analyse en tâche de fond — {(
+                  { init: 'initialisation', embed: 'vectorisation', plan: 'clustering', map: 'analyse des lots', reduce: 'synthèse', supply: 'offre/demande', done: 'terminé' } as Record<string, string>
+                )[asyncJob.phase] ?? asyncJob.phase}
+                {asyncJob.phase === 'embed' && asyncJob.totalToEmbed ? ` (${asyncJob.embedded}/${asyncJob.totalToEmbed})` : ''}
+                {asyncJob.phase === 'map' && asyncJob.totalBatches ? ` (${asyncJob.completedBatches}/${asyncJob.totalBatches} lots)` : ''}
+                {asyncJob.rateLimited ? ' · limite Mistral, patiente…' : ''}
+              </span>
+              <span>{asyncJob.progress}%</span>
+            </div>
+            <div style={{ height: 6, borderRadius: 999, background: 'var(--hover)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${asyncJob.progress}%`, background: 'var(--accent)', transition: 'width 0.3s ease' }} />
+            </div>
+          </div>
+        )}
 
         {archive && (
           <div

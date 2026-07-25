@@ -55,11 +55,15 @@ export const OpportunitiesPage: React.FC = () => {
   const [synthesisOpen, setSynthesisOpen] = useState(false);
   const [plan, setPlan] = useState<Record<string, boolean>>({});
 
-  const spaceId = data.selectedSpaceId ?? data.spaces.find((s) => s.type === 'personal')?.id ?? null;
-  // Reflects the REAL scope the analysis runs on (including the fallback to
-  // the personal space when no circle is picked in the sidebar) — not just
-  // the raw sidebar selection, which would read "Tous les cercles" even
-  // though the analysis itself never actually covers every circle at once.
+  // null here means a REAL merge across every space the user belongs to, not
+  // a silent fallback to one — the topology/supply-demand/map-batch endpoints
+  // already treat spaceId=null as "no space filter" (scopeKey defaults to
+  // `user:${userId}`), and the sync pipeline's own `contacts` below already
+  // merges the same way when no circle is selected. This used to fall back
+  // to the personal space here, so "Tous les cercles" silently only ever
+  // analyzed the personal space — fixed so the label and the actual scope
+  // finally agree.
+  const spaceId = data.selectedSpaceId ?? null;
   const activeSpace = spaceId ? data.spaceById.get(spaceId) : null;
   const contacts = useMemo(
     () => (data.selectedSpaceId ? data.contacts.filter((c) => c.space_id === data.selectedSpaceId) : data.contacts),

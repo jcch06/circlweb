@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   Home, Users, Bell, BookOpen, Lightbulb, Layers,
-  Plus, Search, LogOut, ChevronDown, Check, Copy,
+  Plus, Search, LogOut, ChevronDown, Check, Copy, Share2,
 } from 'lucide-react';
 import { useData } from './data';
 import { CommandPalette } from './ui/CommandPalette';
@@ -14,6 +14,9 @@ import { circleColor } from './ui/format';
 const NAV = [
   { to: '/accueil', label: 'Accueil', icon: Home },
   { to: '/contacts', label: 'Contacts', icon: Users },
+  // La page Réseau (graphe des liens réels + « me présenter à… ») était routée
+  // sur /reseau mais absente d'ici : inatteignable sans taper l'URL à la main.
+  { to: '/reseau', label: 'Réseau', icon: Share2 },
   { to: '/mises-a-jour', label: 'Mises à jour', icon: Bell, badge: 'updates' as const },
   { to: '/journal', label: 'Journal', icon: BookOpen },
   { to: '/opportunites', label: 'Opportunités', icon: Lightbulb },

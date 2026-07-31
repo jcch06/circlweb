@@ -1491,6 +1491,86 @@ export async function listAnalysisHistory(spaceId: string | null): Promise<Analy
 }
 
 /** Fetches the full pipeline result of a single archived analysis. */
+export interface DerivedIntro {
+  from_contact_id: string;
+  to_contact_id: string;
+  rationale: string;
+  confidence: number;
+}
+
+/**
+ * Turns a pipeline result into the ranked intro list the UI proposes.
+ *
+ * Shared by OpportunitiesPage and HomePage on purpose: the app used to run
+ * TWO different intro engines (this pipeline, and a separate `suggest-intros`
+ * Edge Function on the Accueil) that never agreed and didn't share decisions —
+ * a pair dismissed in Opportunités came straight back on the Accueil, because
+ * suggest-intros never read intro_suggestions. One derivation, one source of
+ * truth.
+ *
+ * Primary source: per-batch immediateSynergies, where the model names the pair,
+ * its reason and its evidence. The supply/demand cross-product only fills in
+ * pairs those didn't already cover.
+ */
+export function deriveIntros(
+  result: MistralPipelineResult | null,
+  contactExists: (id: string) => boolean
+): DerivedIntro[] {
+  if (!result) return [];
+  const out: DerivedIntro[] = [];
+  const seen = new Set<string>();
+  const CONF: Record<string, number> = { high: 0.9, medium: 0.72, low: 0.55 };
+
+  const add = (fromId: string, toId: string, rationale: string, confidence: number) => {
+    if (!fromId || !toId || fromId === toId) return;
+    const key = `${fromId}|${toId}`;
+    const mirror = `${toId}|${fromId}`;
+    if (seen.has(key) || seen.has(mirror)) return;
+    if (!contactExists(fromId) || !contactExists(toId)) return;
+    seen.add(key);
+    out.push({ from_contact_id: fromId, to_contact_id: toId, rationale, confidence });
+  };
+
+  for (const batch of result.batches ?? []) {
+    for (const syn of batch.immediateSynergies ?? []) {
+      const reason = [syn.reason, syn.evidence && `Ce qui le laisse penser : ${syn.evidence}`]
+        .filter(Boolean)
+        .join(' ');
+      add(syn.contactId1, syn.contactId2, reason, CONF[syn.confidence as string] ?? 0.7);
+    }
+  }
+
+  for (const sd of result.supplyDemand ?? []) {
+    for (const d of sd.demanders ?? []) {
+      for (const s of sd.suppliers ?? []) {
+        add(
+          d.id,
+          s.id,
+          sd.rationale?.trim()
+            || `${d.name} cherche « ${sd.need} », et ${s.name} sait le faire. Une intro directe vaut mieux qu'un cold outreach.`,
+          sd.gapLevel === 'covered' ? 0.9 : sd.gapLevel === 'partial' ? 0.72 : 0.6
+        );
+      }
+    }
+  }
+
+  return out.sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
+}
+
+/** Most recent stored analysis for a scope, or null if none was ever run. */
+export async function getLatestAnalysis(spaceId: string | null): Promise<MistralPipelineResult | null> {
+  let query = supabase
+    .from('network_analyses')
+    .select('result')
+    .order('created_at', { ascending: false })
+    .limit(1);
+  query = spaceId ? query.eq('space_id', spaceId) : query.is('space_id', null);
+
+  const { data, error } = await query.maybeSingle();
+  if (error || !data) return null;
+  return normalizePipelineResult(data.result as MistralPipelineResult);
+}
+
 export async function getAnalysisById(id: string): Promise<(MistralPipelineResult & { id: string; label: string | null }) | null> {
   const { data, error } = await supabase
     .from('network_analyses')

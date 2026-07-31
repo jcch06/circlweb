@@ -17,6 +17,7 @@ import {
   getAnalysisById,
   deleteAnalysis,
   compareAnalyses,
+  deriveIntros,
 } from '../lib/mistral';
 import { createAndRunAnalysisJob, type JobState } from '../lib/oracleJob';
 
@@ -26,6 +27,12 @@ import { createAndRunAnalysisJob, type JobState } from '../lib/oracleJob';
 // Historique. Les décisions survivent aux régénérations (intro_suggestions).
 
 type Tab = 'intros' | 'map' | 'history';
+
+// Combien d'éléments on montre avant de proposer « voir plus ». Ces listes
+// étaient tronquées en silence, ce qui faisait passer une analyse riche pour
+// une analyse pauvre.
+const PENDING_PAGE = 12;
+const SUPPLY_PAGE = 10;
 
 const PRIORITY_LABEL: Record<string, { label: string; color: string; bg: string }> = {
   high: { label: 'Prioritaire', color: 'var(--orange)', bg: 'var(--orange-soft)' },
@@ -53,6 +60,8 @@ export const OpportunitiesPage: React.FC = () => {
   const [showProfile, setShowProfile] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [synthesisOpen, setSynthesisOpen] = useState(false);
+  const [showAllPending, setShowAllPending] = useState(false);
+  const [showAllSupply, setShowAllSupply] = useState(false);
   const [plan, setPlan] = useState<Record<string, boolean>>({});
 
   // null here means a REAL merge across every space the user belongs to, not
@@ -205,46 +214,10 @@ export const OpportunitiesPage: React.FC = () => {
      directement la paire, sa raison et sa preuve. Le croisement
      offre/demande ne sert que de complément pour les paires qu'elles
      n'ont pas vues. */
-  const intros: Intro[] = useMemo(() => {
-    if (!result) return [];
-    const out: Intro[] = [];
-    const seen = new Set<string>();
-    const CONF: Record<string, number> = { high: 0.9, medium: 0.72, low: 0.55 };
-
-    const add = (fromId: string, toId: string, rationale: string, confidence: number) => {
-      if (fromId === toId) return;
-      const key = `${fromId}|${toId}`;
-      const mirror = `${toId}|${fromId}`;
-      if (seen.has(key) || seen.has(mirror)) return;
-      if (!data.contactById.get(fromId) || !data.contactById.get(toId)) return;
-      seen.add(key);
-      out.push({ from_contact_id: fromId, to_contact_id: toId, rationale, confidence });
-    };
-
-    for (const batch of result.batches ?? []) {
-      for (const syn of batch.immediateSynergies ?? []) {
-        const reason = [syn.reason, syn.evidence && `Ce qui le laisse penser : ${syn.evidence}`]
-          .filter(Boolean)
-          .join(' ');
-        add(syn.contactId1, syn.contactId2, reason, CONF[syn.confidence] ?? 0.7);
-      }
-    }
-
-    for (const sd of result.supplyDemand ?? []) {
-      for (const d of sd.demanders ?? []) {
-        for (const s of sd.suppliers ?? []) {
-          add(
-            d.id,
-            s.id,
-            sd.rationale?.trim()
-              || `${d.name} cherche « ${sd.need} », et ${s.name} sait le faire. Une intro directe vaut mieux qu'un cold outreach.`,
-            sd.gapLevel === 'covered' ? 0.9 : sd.gapLevel === 'partial' ? 0.72 : 0.6
-          );
-        }
-      }
-    }
-    return out.sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
-  }, [result, data.contactById]);
+  const intros: Intro[] = useMemo(
+    () => deriveIntros(result, (id) => Boolean(data.contactById.get(id))),
+    [result, data.contactById]
+  );
 
   const pending = intros.filter((i) => !decided.has(`${i.from_contact_id}|${i.to_contact_id}`));
   const planned = [...decided.values()].filter((d) => d.status === 'snoozed');
@@ -371,9 +344,13 @@ export const OpportunitiesPage: React.FC = () => {
           ))}
         </div>
 
-        {/* ---------------- Onglet Opportunités ---------------- */}
+        {/* ---------------- Onglet Opportunités ----------------
+            Pas de gridTemplateColumns inline sur la grille ci-dessous : un
+            style inline l'emporte sur la media query de .home-grid, donc le
+            rail droit ne se repliait jamais sous 980 px et écrasait les
+            cartes sur mobile. */}
         {tab === 'intros' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 20, alignItems: 'start' }} className="home-grid">
+          <div className="home-grid">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {!result ? (
                 <AICard>
@@ -399,7 +376,7 @@ export const OpportunitiesPage: React.FC = () => {
                     <div>
                       <SectionLabel>À traiter · {pending.length}</SectionLabel>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        {pending.slice(0, 12).map((i) => (
+                        {(showAllPending ? pending : pending.slice(0, PENDING_PAGE)).map((i) => (
                           <OpportunityCard
                             key={`${i.from_contact_id}|${i.to_contact_id}`}
                             intro={i}
@@ -407,6 +384,19 @@ export const OpportunitiesPage: React.FC = () => {
                           />
                         ))}
                       </div>
+                      {/* Le plafond d'affichage était muet : on croyait que
+                          l'analyse trouvait peu, alors qu'elle était tronquée. */}
+                      {pending.length > PENDING_PAGE && (
+                        <button
+                          className="btn btn-ghost"
+                          style={{ marginTop: 12, width: '100%', justifyContent: 'center' }}
+                          onClick={() => setShowAllPending((v) => !v)}
+                        >
+                          {showAllPending
+                            ? 'Réduire la liste'
+                            : `Voir les ${pending.length - PENDING_PAGE} autres opportunités`}
+                        </button>
+                      )}
                     </div>
                   )}
 
@@ -594,7 +584,7 @@ export const OpportunitiesPage: React.FC = () => {
                 <div>
                   <SectionLabel>Offre et demande</SectionLabel>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {result.supplyDemand.slice(0, 10).map((sd, i) => (
+                    {(showAllSupply ? result.supplyDemand : result.supplyDemand.slice(0, SUPPLY_PAGE)).map((sd, i) => (
                       <div key={i} className="card card-pad" style={{ padding: '12px 16px' }}>
                         <div className="t-name" style={{ fontSize: 14, marginBottom: 8 }}>{sd.need}</div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -622,6 +612,17 @@ export const OpportunitiesPage: React.FC = () => {
                       </div>
                     ))}
                   </div>
+                  {result.supplyDemand.length > SUPPLY_PAGE && (
+                    <button
+                      className="btn btn-ghost"
+                      style={{ marginTop: 10, width: '100%', justifyContent: 'center' }}
+                      onClick={() => setShowAllSupply((v) => !v)}
+                    >
+                      {showAllSupply
+                        ? 'Réduire la liste'
+                        : `Voir les ${result.supplyDemand.length - SUPPLY_PAGE} autres besoins`}
+                    </button>
+                  )}
                 </div>
               )}
 

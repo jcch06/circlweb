@@ -1,11 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Bell, Check, Lightbulb, PenLine } from 'lucide-react';
+import { ArrowRight, Bell, Check, PenLine } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useData } from '../data';
 import { useToast } from '../ui/Toast';
-import { Avatar, DecisionPair, DiffLine, AICard, SectionLabel } from '../ui/Bits';
+import { Avatar, DecisionPair, DiffLine, SectionLabel } from '../ui/Bits';
 import { NoteComposer } from '../ui/NoteComposer';
+import { OpportunityCard } from '../ui/OpportunityCard';
+import { deriveIntros, getLatestAnalysis, type MistralPipelineResult } from '../lib/mistral';
 import { fullName, lastTouch, relStatus, relativeFR, dayFR } from '../ui/format';
 
 // Accueil (brief 4.1) : la boîte de réception du matin. En moins de 60 s :
@@ -22,8 +24,14 @@ export const HomePage: React.FC = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [noteFor, setNoteFor] = useState<string | null>(null);
-  const [intros, setIntros] = useState<any[] | null>(null);
-  const [introsBusy, setIntrosBusy] = useState(false);
+  // Opportunités de l'Accueil : dérivées de la DERNIÈRE analyse Oracle
+  // enregistrée, exactement comme la page Opportunités (deriveIntros partagé).
+  // Avant, l'Accueil appelait une Edge Function `suggest-intros` distincte
+  // (autre modèle, autre périmètre, aucune persistance) : une paire écartée
+  // dans Opportunités revenait ici, et les cartes n'étaient pas actionnables.
+  const [analysis, setAnalysis] = useState<MistralPipelineResult | null>(null);
+  const [decided, setDecided] = useState<Set<string>>(new Set());
+  const [introsLoaded, setIntrosLoaded] = useState(false);
 
   const prenom = data.user?.user_metadata?.full_name?.split(' ')[0]
     || data.user?.email?.split('@')[0] || '';
@@ -123,21 +131,33 @@ export const HomePage: React.FC = () => {
     await data.refresh();
   };
 
-  const discoverIntros = async () => {
-    setIntrosBusy(true);
-    try {
-      const res: any = await supabase.functions.invoke('suggest-intros', {
-        body: { space_id: data.selectedSpaceId ?? data.spaces.find((s) => s.type === 'personal')?.id },
-      });
-      if (res.error) throw res.error;
-      setIntros((res.data?.intros ?? []).slice(0, 3));
-    } catch (err: any) {
-      toast(`Analyse indisponible : ${err.message ?? 'erreur'}`);
-      setIntros([]);
-    } finally {
-      setIntrosBusy(false);
-    }
+  const loadDecisions = async () => {
+    const { data: rows } = await supabase.from('intro_suggestions').select('from_contact_id, to_contact_id');
+    setDecided(new Set((rows ?? []).map((r: any) => `${r.from_contact_id}|${r.to_contact_id}`)));
   };
+
+  // Même périmètre que la page Opportunités : null = fusion de tous les cercles.
+  useEffect(() => {
+    let cancelled = false;
+    setIntrosLoaded(false);
+    (async () => {
+      const [latest] = await Promise.all([
+        getLatestAnalysis(data.selectedSpaceId ?? null).catch(() => null),
+        loadDecisions().catch(() => {}),
+      ]);
+      if (cancelled) return;
+      setAnalysis(latest);
+      setIntrosLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, [data.selectedSpaceId]);
+
+  const intros = useMemo(
+    () => deriveIntros(analysis, (id) => Boolean(data.contactById.get(id)))
+      .filter((i) => !decided.has(`${i.from_contact_id}|${i.to_contact_id}`))
+      .slice(0, 3),
+    [analysis, decided, data.contactById]
+  );
 
   const calm = toProcess.length === 0 && dueFollowUps.length === 0 && dormants.length === 0;
   const nextFollowUp = data.followUps[0];
@@ -288,48 +308,29 @@ export const HomePage: React.FC = () => {
 
             {/* Opportunités : chargées à la demande (coût API) */}
             <div className="card card-pad">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: intros && intros.length > 0 ? 12 : 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: intros.length > 0 ? 12 : 0 }}>
                 <SectionLabel style={{ marginBottom: 0 }}>Opportunités</SectionLabel>
                 <span style={{ flex: 1 }} />
-                {intros === null ? (
-                  <button className="btn btn-ghost" style={{ padding: '5px 11px', fontSize: 12.5 }} onClick={discoverIntros} disabled={introsBusy}>
-                    <Lightbulb size={13} /> {introsBusy ? 'Analyse…' : 'Découvrir'}
-                  </button>
-                ) : (
-                  <button className="btn btn-quiet" style={{ padding: '3px 8px', fontSize: 12.5 }} onClick={() => navigate('/opportunites')}>
-                    Tout voir <ArrowRight size={12} />
-                  </button>
-                )}
+                <button className="btn btn-quiet" style={{ padding: '3px 8px', fontSize: 12.5 }} onClick={() => navigate('/opportunites')}>
+                  Tout voir <ArrowRight size={12} />
+                </button>
               </div>
-              {intros !== null && intros.length === 0 && (
+              {introsLoaded && intros.length === 0 && (
                 <div className="t-sec" style={{ color: 'var(--mut)', marginTop: 8 }}>
-                  Rien à suggérer pour l'instant. Plus vos notes sont riches, plus l'analyse trouve de mises en relation.
+                  {analysis
+                    ? 'Toutes les mises en relation proposées ont été traitées.'
+                    : 'Aucune analyse pour ce périmètre. Lancez-en une depuis Opportunités pour voir qui présenter à qui.'}
                 </div>
               )}
-              {intros && intros.length > 0 && (
+              {intros.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {intros.map((it) => {
-                    const from = data.contactById.get(it.from_id);
-                    const to = data.contactById.get(it.to_id);
-                    return (
-                      <AICard key={`${it.from_id}-${it.to_id}`}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                          {from && <Avatar name={fullName(from)} firstName={from.first_name} lastName={from.last_name} photoUrl={from.photo_url} size={24} />}
-                          <button className="t-name" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink)' }} onClick={() => from && navigate(`/contacts/${from.id}`)}>
-                            {it.from_name}
-                          </button>
-                          <ArrowRight size={13} color="var(--mut)" />
-                          {to && <Avatar name={fullName(to)} firstName={to.first_name} lastName={to.last_name} photoUrl={to.photo_url} size={24} />}
-                          <button className="t-name" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink)' }} onClick={() => to && navigate(`/contacts/${to.id}`)}>
-                            {it.to_name}
-                          </button>
-                        </div>
-                        <div className="t-sec" style={{ color: 'var(--ink-2)' }}>
-                          {it.rationale?.length > 140 ? `${it.rationale.slice(0, 140)}…` : it.rationale}
-                        </div>
-                      </AICard>
-                    );
-                  })}
+                  {intros.map((i) => (
+                    <OpportunityCard
+                      key={`${i.from_contact_id}|${i.to_contact_id}`}
+                      intro={i}
+                      onResolved={loadDecisions}
+                    />
+                  ))}
                 </div>
               )}
             </div>

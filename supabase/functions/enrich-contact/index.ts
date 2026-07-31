@@ -90,33 +90,14 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni explication.`;
     const enrichedText = claudeData.content?.[0]?.text || "{}";
     const enriched = JSON.parse(enrichedText);
 
-    // Generate embedding for vector search
-    const embeddingText = [
-      contact.first_name, contact.last_name,
-      contact.company, contact.job_title,
-      enriched.industry, contact.location,
-      enriched.bio, enriched.ai_context,
-    ].filter(Boolean).join(" ");
-
-    const embeddingResponse = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 64,
-        messages: [{
-          role: "user",
-          content: `Generate a semantic search representation for this professional contact. Respond with only the key concepts separated by commas: ${embeddingText}`,
-        }],
-      }),
-    });
-
-    // For MVP: use Supabase's built-in embedding or a dedicated embedding API
-    // For now, we skip embedding generation and update the enriched fields
+    // NB: there used to be a second Claude call here asking for a "semantic
+    // search representation", whose response was never read — the code below
+    // went straight to the DB update, as its own comment admitted ("for now,
+    // we skip embedding generation"). It cost an API call and its latency on
+    // every single enrichment for nothing, so it's gone. Contact embeddings
+    // are computed by the Oracle pipeline (api/oracle/topology.ts, via
+    // mistral-embed) which is the only embedding space the app actually
+    // queries against.
     const updateData: Record<string, unknown> = {
       enriched_at: new Date().toISOString(),
       source: "enrichment",

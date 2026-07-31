@@ -599,6 +599,74 @@ Retourne UNIQUEMENT un objet JSON valide avec cette structure exacte, sans markd
 }
 
 /**
+ * 6b. Enrich a contact AND persist the result — including skills/inferred_needs.
+ *
+ * This is the wire that was missing. `skills` and `inferred_needs` are read by
+ * the entire synergy engine (supply-demand's offer/demand catalog, the
+ * needs↔skills embedding pre-filter in buildCandidateMatches, the
+ * isAnalyzableContact gate, contactRichness ranking), but nothing in the app
+ * ever wrote them: the "Enrichir" button called the enrich-contact Edge
+ * Function, which only produces industry/company_size/bio/ai_context.
+ * autoEnrichContact above (Perplexity, real web search, returns skills +
+ * inferredNeeds + citations) existed but was never called from anywhere.
+ * See migration 20260714120000_add_contact_skills_needs.sql — "Sprint 1,
+ * réparer le tuyau": the columns landed, the pipe was never reconnected.
+ *
+ * Never regresses a field: an empty/absent value from the model leaves the
+ * stored value untouched, so re-enriching can only ever add. Writes go
+ * through the caller's own RLS + the contacts_write_lock trigger, so a
+ * locked contact raises 42501 rather than being silently overwritten.
+ */
+export async function enrichAndPersistContact(contact: {
+  id: string;
+  first_name: string;
+  last_name: string;
+  company?: string;
+  job_title?: string;
+  industry?: string;
+  bio?: string;
+  ai_context?: string;
+  location?: string;
+}): Promise<{ skillsAdded: number; needsAdded: number }> {
+  const enriched = await autoEnrichContact(contact);
+
+  const cleanArray = (v: any): string[] =>
+    Array.isArray(v)
+      ? [...new Set(v.map((x) => String(x ?? '').trim()).filter((x) => x && x.toLowerCase() !== 'null'))]
+      : [];
+  const cleanText = (v: any): string | null => {
+    const s = typeof v === 'string' ? v.trim() : '';
+    return s && s.toLowerCase() !== 'null' ? s : null;
+  };
+
+  const skills = cleanArray(enriched.skills);
+  const needs = cleanArray(enriched.inferredNeeds);
+
+  const update: Record<string, unknown> = {
+    enriched_at: new Date().toISOString(),
+  };
+  // Only ever add — an empty result must not wipe a field the user filled in.
+  if (skills.length > 0) update.skills = skills;
+  if (needs.length > 0) update.inferred_needs = needs;
+  const industry = cleanText(enriched.industry);
+  if (industry) update.industry = industry;
+  const companySize = cleanText(enriched.companySize);
+  if (companySize) update.company_size = companySize;
+  const bio = cleanText(enriched.bio);
+  if (bio) update.bio = bio;
+  const aiContext = cleanText(enriched.aiContext);
+  if (aiContext) update.ai_context = aiContext;
+  if (Array.isArray(enriched.citations) && enriched.citations.length > 0) {
+    update.enrichment_sources = enriched.citations;
+  }
+
+  const { error } = await supabase.from('contacts').update(update).eq('id', contact.id);
+  if (error) throw new Error(error.message);
+
+  return { skillsAdded: skills.length, needsAdded: needs.length };
+}
+
+/**
  * 7. Advanced Group Synergies
  * Analyzes the entire network to find clusters of people with common needs/interests.
  */

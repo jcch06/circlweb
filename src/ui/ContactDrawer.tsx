@@ -4,6 +4,7 @@ import {
   Trash2, Sparkles, ArrowLeft, Lock,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { enrichAndPersistContact } from '../lib/mistral';
 import { useData } from '../data';
 import { useToast } from './Toast';
 import { Avatar, StatusPill, DecisionPair, DiffLine, AICard, ConfirmModal, SectionLabel, EditableField } from './Bits';
@@ -141,14 +142,29 @@ export const ContactDrawer: React.FC<{
     toast('Demande envoyée au propriétaire du contact.');
   };
 
+  // Passe par enrichAndPersistContact (Perplexity) et non plus par l'Edge
+  // Function enrich-contact : elle ne produisait ni skills ni inferred_needs,
+  // les deux champs dont dépend tout le moteur de synergie. Voir le commentaire
+  // de enrichAndPersistContact dans lib/mistral.ts.
   const enrich = async () => {
     setEnriching(true);
     try {
-      const res: any = await supabase.functions.invoke('enrich-contact', {
-        body: { contact_id: contactId },
+      const { skillsAdded, needsAdded } = await enrichAndPersistContact({
+        id: contactId,
+        first_name: contact.first_name,
+        last_name: contact.last_name,
+        company: contact.company,
+        job_title: contact.job_title,
+        industry: contact.industry,
+        bio: contact.bio,
+        ai_context: contact.ai_context,
+        location: contact.location,
       });
-      if (res.error) throw res.error;
-      toast('Fiche enrichie.');
+      toast(
+        skillsAdded + needsAdded > 0
+          ? `Fiche enrichie : ${skillsAdded} compétence${skillsAdded > 1 ? 's' : ''}, ${needsAdded} besoin${needsAdded > 1 ? 's' : ''}.`
+          : 'Fiche enrichie.'
+      );
       await data.refresh();
     } catch (err: any) {
       toast(`Enrichissement impossible : ${err.message ?? 'erreur'}`);

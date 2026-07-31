@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Plus, Sparkles, Trash2, Layers, Tag as TagIcon, Search, Rows3, Share2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { enrichAndPersistContact } from '../lib/mistral';
 import { useData } from '../data';
 import { useToast } from '../ui/Toast';
 import { Avatar, StatusPill, ConfirmModal, Segmented } from '../ui/Bits';
@@ -167,8 +168,23 @@ export const ContactsPageV2: React.FC = () => {
     for (const id of ids) {
       if (cancelEnrich.current) break;
       try {
-        const res: any = await supabase.functions.invoke('enrich-contact', { body: { contact_id: id } });
-        if (!res.error) ok++;
+        // Même chemin que la fiche individuelle : Perplexity + persistance des
+        // skills/inferred_needs, que l'ancienne Edge Function ne produisait pas.
+        const c = data.contactById.get(id);
+        if (c) {
+          await enrichAndPersistContact({
+            id,
+            first_name: c.first_name,
+            last_name: c.last_name,
+            company: c.company,
+            job_title: c.job_title,
+            industry: c.industry,
+            bio: c.bio,
+            ai_context: c.ai_context,
+            location: c.location,
+          });
+          ok++;
+        }
       } catch { /* on continue : un échec ne doit pas arrêter le lot */ }
       setEnrichProgress((p) => (p ? { ...p, done: p.done + 1 } : null));
     }

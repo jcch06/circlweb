@@ -9,7 +9,7 @@
     }
   },
   "crons": [
-    { "path": "/api/cron/advance-jobs", "schedule": "* * * * *" }
+    { "path": "/api/cron/advance-jobs", "schedule": "0 3 * * *" }
   ],
   "rewrites": [
     {

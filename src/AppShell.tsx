@@ -60,8 +60,6 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const activeSpace = data.selectedSpaceId ? data.spaceById.get(data.selectedSpaceId) : null;
   const userName = data.user?.user_metadata?.full_name || data.user?.email?.split('@')[0] || '';
   const prenom = userName.split(/[\s@.]+/)[0] || '';
-  const initialsUser = userName
-    .split(/[\s@.]+/).slice(0, 2).map((p: string) => p.charAt(0).toUpperCase()).join('') || 'U';
   const pendingCount = data.pendingUpdates.length;
 
   const inSpace = (c: any) => !data.selectedSpaceId || c.space_id === data.selectedSpaceId;

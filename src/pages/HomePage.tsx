@@ -33,8 +33,6 @@ export const HomePage: React.FC = () => {
   const [decided, setDecided] = useState<Set<string>>(new Set());
   const [introsLoaded, setIntrosLoaded] = useState(false);
 
-  const prenom = data.user?.user_metadata?.full_name?.split(' ')[0]
-    || data.user?.email?.split('@')[0] || '';
   const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   const activeSpace = data.selectedSpaceId ? data.spaceById.get(data.selectedSpaceId) : null;
 

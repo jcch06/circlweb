@@ -35,11 +35,11 @@ export function fullName(c: { first_name?: string | null; last_name?: string | n
 
 export type RelStatus = 'fresh' | 'due' | 'dormant' | 'never';
 
-export const STATUS_META: Record<RelStatus, { label: string; color: string }> = {
-  fresh:   { label: 'À jour',           color: 'var(--status-fresh)' },
-  due:     { label: 'À relancer',       color: 'var(--status-due)' },
-  dormant: { label: 'Dormant',          color: 'var(--status-dormant)' },
-  never:   { label: 'Jamais contacté',  color: 'var(--status-never)' },
+export const STATUS_META: Record<RelStatus, { label: string; color: string; soft: string }> = {
+  fresh:   { label: 'Actif',            color: 'var(--status-fresh)',   soft: 'var(--status-fresh-soft)' },
+  due:     { label: 'À relancer',       color: 'var(--status-due)',     soft: 'var(--status-due-soft)' },
+  dormant: { label: 'En froid',         color: 'var(--status-dormant)', soft: 'var(--status-dormant-soft)' },
+  never:   { label: 'Jamais contacté',  color: 'var(--status-never)',   soft: 'var(--status-never-soft)' },
 };
 
 const DAY = 86400000;

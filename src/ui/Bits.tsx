@@ -80,9 +80,10 @@ export const StatusPill: React.FC<{
     <span ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
       <button
         className="status-pill"
-        style={{ background: meta.color }}
+        style={{ background: meta.soft, color: meta.color }}
         onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
       >
+        <span className="pd" style={{ background: meta.color }} />
         {meta.label}
       </button>
       {open && (

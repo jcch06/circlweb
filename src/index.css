@@ -1,75 +1,76 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap');
 
 /* ============================================================
    CIRCL WEB — DESIGN SYSTEM
-   Source de vérité : ~/Desktop/circl-design-brief.md (§2)
-   Un seul fichier de tokens. Les composants du redesign vivent
-   dans src/ui/ et n'utilisent que ces variables.
-   Le bloc COMPAT en fin de fichier maintient les écrans pas
-   encore refondus (lots 2 à 5) ; il rétrécit à chaque lot.
+   Langage visuel : kit « CRM UI Kit For SaaS Dashboards ».
+   Coquille à deux niveaux, fond lavande, cartes blanches
+   arrondies à ombre douce, bleu périwinkle + accents pastel,
+   pastilles de statut en capsule teintée. Typo Lato.
+   Un seul fichier de tokens ; les composants (src/ui/) et les
+   pages n'utilisent que ces variables et ces classes.
    ============================================================ */
 :root {
-  /* --- Surfaces et traits (2.2.1) --- */
-  --wash: #F5F7F6;
+  /* --- Surfaces et traits --- */
+  --wash: #F5F5FA;          /* fond de l'app, lavande-gris */
   --card: #FFFFFF;
-  --hover: #EFF3F1;
-  --line: #E6EAE8;
-  --line-strong: #D5DBD8;
+  --hover: #F0F0F3;
+  --line: #ECECF2;
+  --line-strong: #DDDDEA;
 
-  /* --- Encres (2.2.2) : hiérarchie par l'encre, pas par le gras --- */
-  --ink: #171B1A;
-  --ink-2: #4A5350;
-  --mut: #6C7673;
-  --faint: #9AA4A0;
+  /* --- Encres --- */
+  --ink: #1C1D21;
+  --ink-2: #4A4A5C;
+  --mut: #8181A5;
+  --faint: #A6A6C0;
 
-  /* --- Action (2.2.3) : le teal est une couleur d'action, jamais décorative --- */
-  --accent: #0F6F5C;
-  --accent-hover: #0B5B4B;
-  --accent-press: #084B3E;
-  --accent-soft: #E4F0EC;
+  /* --- Action : bleu périwinkle, aligné sur le logo Circl --- */
+  --accent: #5E81F4;
+  --accent-hover: #4E72EE;
+  --accent-press: #3F63E0;
+  --accent-soft: #EEF1FD;
 
   /* --- Sémantique --- */
-  --orange: #C2540A;        /* urgence, restriction */
-  --orange-soft: #FBEEE2;
-  --amber: #8A6116;         /* badge « à vérifier » (confiance 0,60-0,84) */
-  --amber-soft: #F8F0DC;
-  --danger: #B3372E;        /* suppressions uniquement */
+  --orange: #B9821A;        /* urgence, relance échue */
+  --orange-soft: #FDF4E4;
+  --amber: #B9821A;         /* badge « à vérifier » */
+  --amber-soft: #FDF4E4;
+  --danger: #D9455A;        /* suppressions */
 
-  /* --- Statut relationnel (pastilles pleines, dérivé, jamais saisi) --- */
-  --status-fresh: #2F7D51;    /* à jour : dernière trace < 30 j */
-  --status-due: #C2540A;      /* à relancer : 30-90 j */
-  --status-dormant: #5B6B8C;  /* dormant : > 90 j */
-  --status-never: #6C7673;    /* jamais contacté */
+  /* --- Statut relationnel (capsule teintée, dérivé, jamais saisi) --- */
+  --status-fresh: #1E9E63;    --status-fresh-soft: #E7FAF0;   /* actif : < 30 j */
+  --status-due: #B9821A;      --status-due-soft: #FDF4E4;     /* à relancer : 30-90 j */
+  --status-dormant: #D9455A;  --status-dormant-soft: #FFECEE; /* en froid : > 90 j */
+  --status-never: #8181A5;    --status-never-soft: #F0F0F3;   /* jamais contacté */
 
-  /* --- Palette des cercles (2.2.4) : la teinte d'un cercle est stable partout --- */
-  --circle-1: #3B6FB5;
-  --circle-2: #7A5CC5;
-  --circle-3: #A64D79;
-  --circle-4: #C25B4A;
-  --circle-5: #B07C1F;
-  --circle-6: #6E8B3D;
-  --circle-7: #2D7E93;  /* cercle personnel par défaut */
-  --circle-8: #8A7357;
+  /* --- Palette des cercles : teinte stable partout --- */
+  --circle-1: #5E81F4;  /* bleu */
+  --circle-2: #4D4CAC;  /* indigo */
+  --circle-3: #9698D6;  /* violet */
+  --circle-4: #D9455A;  /* corail */
+  --circle-5: #B9821A;  /* ambre */
+  --circle-6: #1E9E63;  /* menthe */
+  --circle-7: #2D9CB0;  /* pétrole (cercle personnel par défaut) */
+  --circle-8: #8A7357;  /* terre */
 
-  /* --- Signature IA (2.2.6) : réservée à 4 usages, interdite ailleurs --- */
-  --ai-bg: linear-gradient(135deg, rgba(15, 111, 92, 0.12), rgba(15, 111, 92, 0.04));
-  --ai-border: rgba(15, 111, 92, 0.20);
+  /* --- Signature IA : carte bleu doux --- */
+  --ai-bg: linear-gradient(160deg, #F3F5FE, #FFFFFF);
+  --ai-border: #E1E7FD;
 
-  /* --- Typo (2.3) --- */
-  --sans: 'Inter', -apple-system, system-ui, sans-serif;
+  /* --- Typo --- */
+  --sans: 'Lato', -apple-system, system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, 'SF Mono', Menlo, monospace;
 
-  /* --- Rayons (2.4) --- */
-  --r-card: 16px;
+  /* --- Rayons --- */
+  --r-card: 18px;
   --r-el: 12px;
-  --r-pill: 6px;    /* pastilles de statut : rectangle arrondi, pas capsule */
+  --r-pill: 999px;    /* capsule */
   --r-full: 999px;
 
-  /* --- Ombres : une carte porte une bordure OU une ombre, jamais les deux --- */
-  --shadow-1: 0 1px 2px rgba(23, 27, 26, 0.04), 0 1px 3px rgba(23, 27, 26, 0.05);
-  --shadow-2: 0 8px 30px rgba(23, 27, 26, 0.12);
+  /* --- Ombres douces (le kit pose une ombre, pas une bordure) --- */
+  --shadow-1: 0 2px 8px -4px rgba(28, 29, 33, 0.12);
+  --shadow-2: 0 8px 24px -12px rgba(28, 29, 33, 0.18), 0 2px 6px -2px rgba(28, 29, 33, 0.05);
 
-  /* --- Mouvement (2.7) : courbe unique, trois durées --- */
+  /* --- Mouvement : courbe unique, trois durées --- */
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --t-fast: 140ms;
   --t-med: 220ms;
@@ -84,9 +85,8 @@ body {
   background: var(--wash);
   color: var(--ink);
   font-family: var(--sans);
-  font-size: 15px;
-  line-height: 22px;
-  font-feature-settings: 'cv01', 'ss03';
+  font-size: 14px;
+  line-height: 21px;
   overflow: hidden;
   height: 100vh;
   width: 100vw;
@@ -95,127 +95,131 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Le 700 est interdit : l'emphase vient de l'encre et de la taille. */
-h1, h2, h3, h4, h5, h6 { font-weight: 600; color: var(--ink); }
+/* L'emphase vient du gras (le kit assume le 700/900) et de la taille. */
+h1, h2, h3, h4, h5, h6 { font-weight: 700; color: var(--ink); }
 button, input, textarea, select { font-family: inherit; font-size: inherit; }
 a { color: var(--accent); text-decoration: none; }
 
 .tnum { font-variant-numeric: tabular-nums; }
 
 /* ============================================================
-   PRIMITIFS DU REDESIGN (classes utilisées par src/ui/)
+   PRIMITIFS (classes utilisées par src/ui/ et les pages)
    ============================================================ */
 
-/* Échelle typographique (2.3) */
-.t-meta  { font-size: 11px; line-height: 16px; font-weight: 500; }
+/* Échelle typographique */
+.t-meta  { font-size: 11.5px; line-height: 16px; font-weight: 400; }
 .t-sec   { font-size: 13px; line-height: 20px; }
-.t-label { font-size: 13px; line-height: 20px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--mut); }
-.t-body  { font-size: 15px; line-height: 22px; }
-.t-name  { font-size: 15px; line-height: 22px; font-weight: 500; }
-.t-block { font-size: 18px; line-height: 24px; font-weight: 600; }
-.t-page  { font-size: 22px; line-height: 28px; font-weight: 600; letter-spacing: -0.01em; }
-.t-count { font-size: 28px; line-height: 34px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.t-label { font-size: 12px; line-height: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--mut); }
+.t-body  { font-size: 14px; line-height: 21px; }
+.t-name  { font-size: 14px; line-height: 21px; font-weight: 700; }
+.t-block { font-size: 18px; line-height: 26px; font-weight: 700; }
+.t-page  { font-size: 22px; line-height: 30px; font-weight: 700; letter-spacing: -0.01em; }
+.t-count { font-size: 28px; line-height: 34px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 
 /* Boutons */
 .btn {
   display: inline-flex; align-items: center; gap: 7px;
-  border-radius: var(--r-el); padding: 9px 14px;
-  font-size: 13.5px; font-weight: 500; cursor: pointer;
+  border-radius: 11px; padding: 9px 15px;
+  font-size: 13.5px; font-weight: 700; cursor: pointer;
   border: 1px solid transparent;
   transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
   white-space: nowrap;
 }
 .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.btn-primary { background: var(--accent); color: #fff; font-weight: 600; }
+.btn-primary { background: var(--accent); color: #fff; }
 .btn-primary:hover { background: var(--accent-hover); }
 .btn-primary:active { background: var(--accent-press); }
 .btn-primary:disabled { background: var(--faint); cursor: not-allowed; }
-.btn-ghost { background: var(--card); color: var(--ink); border-color: var(--line-strong); }
-.btn-ghost:hover { background: var(--hover); }
+.btn-ghost { background: var(--card); color: var(--ink-2); border-color: var(--line-strong); }
+.btn-ghost:hover { background: var(--card); border-color: #C9C9DE; color: var(--ink); }
 .btn-danger { background: var(--card); color: var(--danger); border-color: var(--line-strong); }
-.btn-danger:hover { background: #FBEDEC; border-color: var(--danger); }
-.btn-quiet { background: none; color: var(--ink-2); }
-.btn-quiet:hover { background: var(--hover); }
+.btn-danger:hover { background: #FFF1F3; border-color: var(--danger); }
+.btn-quiet { background: none; color: var(--mut); }
+.btn-quiet:hover { background: var(--hover); color: var(--ink-2); }
 
 /* Inputs */
 .input {
   width: 100%; background: var(--card);
-  border: 1px solid var(--line-strong); border-radius: var(--r-el);
+  border: 1px solid var(--line-strong); border-radius: 11px;
   padding: 9px 12px; font-size: 14px; color: var(--ink); outline: none;
-  transition: border-color var(--t-fast) var(--ease);
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
 }
 .input::placeholder { color: var(--faint); }
-.input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(15, 111, 92, 0.12); }
+.input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(94, 129, 244, 0.15); }
 
-/* Cartes */
-.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card); }
-.card-pad { padding: 16px 20px; }
+/* Cartes : blanches, arrondies, ombre douce, sans bordure */
+.card { background: var(--card); border-radius: var(--r-card); box-shadow: var(--shadow-1); }
+.card-pad { padding: 20px 22px; }
 
-/* Carte IA (composant 6) : le marqueur unique du contenu généré */
+/* Carte IA : le marqueur du contenu généré */
 .ai-card {
   background: var(--ai-bg);
   border: 1px solid var(--ai-border);
   border-radius: var(--r-card);
-  padding: 14px 16px;
+  padding: 16px 18px;
 }
 
-/* Pastille de statut relationnel (composant 2) */
+/* Pastille de statut relationnel : capsule teintée (bg + couleur posés
+   par le composant StatusPill), petit point de tête. */
 .status-pill {
-  display: inline-flex; align-items: center;
-  border-radius: var(--r-pill); padding: 2px 8px;
-  font-size: 12px; font-weight: 600; color: #fff;
-  cursor: pointer; border: none; line-height: 18px;
+  display: inline-flex; align-items: center; gap: 6px;
+  border-radius: var(--r-pill); padding: 5px 12px;
+  font-size: 12.5px; font-weight: 700;
+  cursor: pointer; border: none; line-height: 16px;
   white-space: nowrap;
 }
+.status-pill .pd { width: 7px; height: 7px; border-radius: 999px; flex: none; }
 
-/* Chips (composant 3) : jamais de chip pleine saturée */
+/* Chips : capsules douces */
 .chip {
-  display: inline-flex; align-items: center; gap: 5px;
-  height: 24px; padding: 0 10px;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 26px; padding: 0 11px;
   border-radius: var(--r-full);
-  font-size: 12.5px; font-weight: 500;
+  font-size: 12.5px; font-weight: 700;
   border: 1px solid var(--line-strong);
   background: var(--card); color: var(--ink-2);
   white-space: nowrap; cursor: default;
 }
 .chip.clickable { cursor: pointer; }
 .chip.clickable:hover { background: var(--hover); }
-.chip-filter.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
-.chip-need { border-color: var(--orange); color: var(--orange); background: var(--card); }
+.chip-filter.on { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+.chip-need { border-color: var(--orange); color: var(--orange); background: var(--orange-soft); }
 .chip-skill { border-color: transparent; background: var(--accent-soft); color: var(--accent); }
 
-/* Paire de décision (composant 7) : croix grise puis coche teal, toujours */
+/* Paire de décision : croix grise puis coche bleue */
 .decision-pair { display: inline-flex; gap: 8px; flex: none; }
 .decision-btn {
-  width: 32px; height: 32px; border-radius: var(--r-full);
+  width: 34px; height: 34px; border-radius: var(--r-full);
   display: grid; place-items: center; cursor: pointer; border: none;
   transition: transform var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
 }
 .decision-btn:active { transform: scale(0.92); }
 .decision-no { background: var(--hover); color: var(--ink-2); }
-.decision-no:hover { background: var(--line); }
+.decision-no:hover { background: var(--line-strong); }
 .decision-yes { background: var(--accent); color: #fff; }
 .decision-yes:hover { background: var(--accent-hover); }
 
-/* Ligne de diff (composant 8) */
+/* Ligne de diff */
 .diff-old { color: var(--mut); text-decoration: line-through; }
-.diff-new { color: var(--ink); font-weight: 500; }
+.diff-new { color: var(--ink); font-weight: 700; }
 
-/* Table de travail (composant 1) */
+/* Table de travail : très aérée */
 .wtable { width: 100%; border-collapse: collapse; }
 .wtable th {
-  text-align: left; font-size: 13px; font-weight: 500; color: var(--mut);
-  padding: 10px 12px; border-bottom: 1px solid var(--line);
+  text-align: left; font-size: 12px; font-weight: 700; color: var(--mut);
+  letter-spacing: 0.02em;
+  padding: 14px 18px; border-bottom: 1px solid var(--line);
   white-space: nowrap; user-select: none;
 }
 .wtable th.sortable { cursor: pointer; }
 .wtable th.sortable:hover { color: var(--ink-2); }
 .wtable td {
-  height: 40px; padding: 0 12px; font-size: 14px;
+  height: 60px; padding: 10px 18px; font-size: 14px;
   border-bottom: 1px solid var(--line); vertical-align: middle;
 }
+.wtable tbody tr:last-child td { border-bottom: none; }
 .wtable tbody tr { cursor: pointer; transition: background var(--t-fast) var(--ease); }
-.wtable tbody tr:hover { background: var(--hover); }
+.wtable tbody tr:hover { background: #FBFBFE; }
 .wtable tbody tr.selected { background: var(--accent-soft); }
 
 /* Barre de sélection flottante */
@@ -227,20 +231,20 @@ a { color: var(--accent); text-decoration: none; }
 }
 .bulkbar button {
   background: none; border: none; color: #fff; cursor: pointer;
-  font-size: 13.5px; font-weight: 500; padding: 4px 8px; border-radius: 8px;
+  font-size: 13.5px; font-weight: 700; padding: 4px 8px; border-radius: 8px;
   display: inline-flex; align-items: center; gap: 6px;
 }
 .bulkbar button:hover { background: rgba(255, 255, 255, 0.14); }
 .bulkbar .sep { width: 1px; height: 18px; background: rgba(255, 255, 255, 0.25); }
 
-/* Drawer / fiche (composant 5) */
+/* Drawer / fiche */
 .drawer-scrim {
-  position: fixed; inset: 0; background: rgba(23, 27, 26, 0.25);
+  position: fixed; inset: 0; background: rgba(28, 29, 33, 0.28);
   z-index: 50; animation: fadeIn var(--t-med) var(--ease);
 }
 .drawer {
   position: fixed; top: 0; right: 0; bottom: 0; width: 640px; max-width: 92vw;
-  background: var(--card); z-index: 51;
+  background: var(--wash); z-index: 51;
   box-shadow: var(--shadow-2);
   display: flex; flex-direction: column;
   animation: slideIn var(--t-med) var(--ease);
@@ -248,7 +252,7 @@ a { color: var(--accent); text-decoration: none; }
 @keyframes fadeIn { from { opacity: 0; } }
 @keyframes slideIn { from { transform: translateX(24px); opacity: 0; } }
 
-/* Panneau latéral générique (tags, cercle) */
+/* Panneau latéral générique */
 .side-panel {
   position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 90vw;
   background: var(--card); z-index: 52; box-shadow: var(--shadow-2);
@@ -256,7 +260,7 @@ a { color: var(--accent); text-decoration: none; }
   animation: slideIn var(--t-med) var(--ease);
 }
 
-/* Toast (composant 12) */
+/* Toast */
 .toast-stack {
   position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
   display: flex; flex-direction: column; gap: 8px; z-index: 100;
@@ -270,7 +274,7 @@ a { color: var(--accent); text-decoration: none; }
   max-width: 560px;
 }
 .toast button {
-  background: none; border: none; color: #7BD9C3; font-weight: 600;
+  background: none; border: none; color: #A6BBFF; font-weight: 700;
   cursor: pointer; font-size: 13.5px; white-space: nowrap;
 }
 .toast button:hover { text-decoration: underline; }
@@ -278,14 +282,14 @@ a { color: var(--accent); text-decoration: none; }
 
 /* Modale */
 .modal-scrim {
-  position: fixed; inset: 0; background: rgba(23, 27, 26, 0.35);
+  position: fixed; inset: 0; background: rgba(28, 29, 33, 0.38);
   z-index: 90; display: grid; place-items: center;
   animation: fadeIn var(--t-fast) var(--ease);
 }
 .modal {
   background: var(--card); border-radius: var(--r-card);
   box-shadow: var(--shadow-2); width: 440px; max-width: 92vw;
-  padding: 22px;
+  padding: 24px;
 }
 
 /* Popover */
@@ -296,49 +300,67 @@ a { color: var(--accent); text-decoration: none; }
   animation: fadeIn var(--t-fast) var(--ease);
 }
 
-/* Sidebar v2 */
+/* Élément de navigation (sidebar contexte, listes de popover) */
 .nav-item {
   display: flex; align-items: center; gap: 11px;
-  padding: 8px 10px; border-radius: 10px;
-  color: var(--ink-2); font-size: 14px; font-weight: 500;
+  padding: 9px 11px; border-radius: 11px;
+  color: var(--ink-2); font-size: 14px; font-weight: 600;
   cursor: pointer; border: none; background: none; width: 100%; text-align: left;
   transition: background var(--t-fast) var(--ease);
   text-decoration: none;
 }
 .nav-item:hover { background: var(--hover); }
-.nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
 .nav-item .badge {
   margin-left: auto; background: var(--accent); color: #fff;
-  font-size: 11px; font-weight: 600; border-radius: 8px; padding: 1px 7px;
+  font-size: 11px; font-weight: 700; border-radius: 8px; padding: 1px 7px;
   font-variant-numeric: tabular-nums;
 }
 
-/* Sous cette largeur, un rail fixe de 240 px laisse trop peu de place au
-   contenu (les panneaux et la fiche se retrouvent compressés) : on réduit
-   la sidebar à un rail d'icônes. Règle de jcch06, portée sur la coquille
-   refondue (classes .side-rail / .nav-i / .side-foot). */
-@media (max-width: 760px) {
-  .side-rail { width: 64px !important; padding: 16px 8px !important; }
-  .side-rail .brand-name,
-  .side-rail .nav-label,
-  .side-rail .search-label,
-  .side-rail .t-meta,
-  .side-rail .side-foot .nm,
-  .side-rail .capture-label { display: none; }
-  .side-rail .nav-item { justify-content: center; padding: 10px; }
-  .side-rail .side-foot { justify-content: center; }
-  .side-rail .btn { justify-content: center; padding: 8px; }
-  /* Le sélecteur de cercle garde sa pastille de couleur, seul repère du
-     cercle actif quand les libellés disparaissent. */
-  .side-rail .btn-ghost > span:not([style*="border-radius: 999"]) { display: none; }
+/* ============================================================
+   COQUILLE À DEUX NIVEAUX : rail d'icônes + sidebar contexte
+   ============================================================ */
+.rail {
+  width: 72px; flex: none; background: var(--card);
+  border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 16px 0;
+}
+.rail-logo { width: 40px; height: 40px; border-radius: 12px; overflow: hidden; margin-bottom: 12px; box-shadow: var(--shadow-1); }
+.rail-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rail-ico {
+  width: 42px; height: 42px; border-radius: 12px;
+  display: grid; place-items: center; color: var(--mut); position: relative;
+  cursor: pointer; border: none; background: none;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.rail-ico:hover { background: var(--wash); color: var(--ink-2); }
+.rail-ico.active { background: var(--accent-soft); color: var(--accent); }
+.rail-ico .badge {
+  position: absolute; top: 7px; right: 7px; min-width: 7px; height: 7px;
+  border-radius: 999px; background: var(--danger); border: 1.5px solid var(--card);
+}
+.rail-sep { flex: 1; }
+
+.ctx {
+  width: 300px; flex: none; background: var(--card);
+  border-right: 1px solid var(--line);
+  padding: 24px 20px; overflow-y: auto;
+  display: flex; flex-direction: column;
+}
+.ctx-logo { width: 60px; height: 60px; border-radius: 18px; overflow: hidden; box-shadow: var(--shadow-1); }
+.ctx-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Sous 900 px la sidebar contexte disparaît : le rail suffit. */
+@media (max-width: 900px) {
+  .ctx { display: none; }
 }
 
-/* Sélecteur de vue segmenté (Table | Réseau, À traiter | Historique…).
-   Un changement de vue est structurant : il se voit. */
-.seg { display: inline-flex; background: var(--hover); border-radius: 10px; padding: 3px; gap: 2px; flex: none; }
+/* Sélecteur de vue segmenté (Table | Réseau…) */
+.seg { display: inline-flex; background: var(--wash); border-radius: 10px; padding: 3px; gap: 2px; flex: none; }
 .seg-btn {
-  border: none; cursor: pointer; border-radius: 8px; padding: 6px 13px;
-  font-family: inherit; font-size: 13px; font-weight: 600;
+  border: none; cursor: pointer; border-radius: 8px; padding: 7px 15px;
+  font-family: inherit; font-size: 13px; font-weight: 700;
   background: transparent; color: var(--mut);
   display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
   transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
@@ -347,6 +369,12 @@ a { color: var(--accent); text-decoration: none; }
 .seg-btn.on { background: var(--card); color: var(--ink); box-shadow: var(--shadow-1); }
 .seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+/* Carte KPI (Accueil) */
+.kpi { background: var(--card); border-radius: var(--r-card); box-shadow: var(--shadow-1); padding: 20px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.kpi-lbl { color: var(--mut); font-size: 13px; }
+.kpi-val { font-size: 28px; font-weight: 800; margin-top: 8px; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.kpi-tile { width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center; flex: none; }
+
 /* Grille de l'Accueil : colonne principale + rail droit */
 .home-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
 @media (max-width: 980px) { .home-grid { grid-template-columns: 1fr; } }
@@ -354,17 +382,15 @@ a { color: var(--accent); text-decoration: none; }
 /* Scrollbar */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(23, 27, 26, 0.14); border-radius: 9px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(23, 27, 26, 0.28); }
+::-webkit-scrollbar-thumb { background: rgba(129, 129, 165, 0.28); border-radius: 9px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(129, 129, 165, 0.5); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
 /* ============================================================
-   COMPAT — dernier vestige : AuthScreen et UserProfilePopup,
-   les deux seuls composants pas encore réécrits sur src/ui.
-   Tous les autres écrans utilisent directement les tokens.
+   COMPAT — AuthScreen et UserProfilePopup (pas encore réécrits).
    ============================================================ */
 :root {
   --bg-primary: var(--wash);
@@ -381,10 +407,10 @@ a { color: var(--accent); text-decoration: none; }
   --transition-smooth: all var(--t-med) var(--ease);
 }
 
-.glass-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card); }
-.hover-glow:hover { filter: brightness(0.97); }
+.glass-card { background: var(--card); border-radius: var(--r-card); box-shadow: var(--shadow-1); }
+.hover-glow:hover { filter: brightness(0.98); }
 .orbit-spinner {
-  width: 40px; height: 40px; border: 2px solid var(--line-strong);
+  width: 40px; height: 40px; border: 3px solid var(--line-strong);
   border-top-color: var(--accent); border-radius: 50%;
   animation: spin 1.2s infinite linear;
 }

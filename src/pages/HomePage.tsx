@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Bell, Check, PenLine } from 'lucide-react';
+import { ArrowRight, Bell, Check, PenLine, Users, Clock, Snowflake } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useData } from '../data';
 import { useToast } from '../ui/Toast';
@@ -77,6 +77,11 @@ export const HomePage: React.FC = () => {
       const s = relStatus(lastTouch(c, data.lastNoteByContact.get(c.id)));
       return s === 'due' || s === 'dormant';
     }).length,
+    [data.contacts, data.lastNoteByContact, data.selectedSpaceId]
+  );
+  const contactsCount = useMemo(() => data.contacts.filter(inSpace).length, [data.contacts, data.selectedSpaceId]);
+  const enFroid = useMemo(
+    () => data.contacts.filter(inSpace).filter((c) => relStatus(lastTouch(c, data.lastNoteByContact.get(c.id))) === 'dormant').length,
     [data.contacts, data.lastNoteByContact, data.selectedSpaceId]
   );
 
@@ -202,12 +207,32 @@ export const HomePage: React.FC = () => {
     <div style={{ height: '100%', overflowY: 'auto' }}>
       <div style={{ maxWidth: 1060, margin: '0 auto', padding: '24px 24px 60px' }}>
         {/* En-tête d'une ligne */}
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 22 }}>
-          <h1 className="t-page">{prenom ? `Bonjour, ${prenom}` : 'Bonjour'}</h1>
-          <span className="t-sec" style={{ color: 'var(--mut)' }}>{today}</span>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 20 }}>
+          <h1 className="t-page">Accueil</h1>
+          <span className="t-sec" style={{ color: 'var(--mut)', textTransform: 'capitalize' }}>{today}</span>
           {activeSpace && (
             <span className="t-sec" style={{ color: 'var(--mut)' }}>· {activeSpace.name}</span>
           )}
+        </div>
+
+        {/* Rangée d'indicateurs */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 20 }}>
+          <div className="kpi" style={{ cursor: 'pointer' }} onClick={() => navigate('/contacts')}>
+            <div><div className="kpi-lbl">Contacts</div><div className="kpi-val">{contactsCount}</div></div>
+            <div className="kpi-tile" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}><Users size={22} /></div>
+          </div>
+          <div className="kpi" style={{ cursor: 'pointer' }} onClick={() => navigate('/contacts?vue=due')}>
+            <div><div className="kpi-lbl">À relancer</div><div className="kpi-val">{totalDue}</div></div>
+            <div className="kpi-tile" style={{ background: 'var(--status-due-soft)', color: 'var(--status-due)' }}><Clock size={22} /></div>
+          </div>
+          <div className="kpi" style={{ cursor: 'pointer' }} onClick={() => navigate('/mises-a-jour')}>
+            <div><div className="kpi-lbl">À traiter</div><div className="kpi-val">{totalPending}</div></div>
+            <div className="kpi-tile" style={{ background: '#ECECFA', color: 'var(--circle-2)' }}><Bell size={22} /></div>
+          </div>
+          <div className="kpi" style={{ cursor: 'pointer' }} onClick={() => navigate('/contacts?statut=dormant')}>
+            <div><div className="kpi-lbl">En froid · +90j</div><div className="kpi-val">{enFroid}</div></div>
+            <div className="kpi-tile" style={{ background: 'var(--status-dormant-soft)', color: 'var(--status-dormant)' }}><Snowflake size={22} /></div>
+          </div>
         </div>
 
         <div className="home-grid">

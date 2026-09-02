@@ -1,4 +1,25 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { createClient } from '@supabase/supabase-js';
+
+// Auth inlined so this api/ file stays self-contained for Vercel's bundler,
+// matching the api/ai/* pattern.
+async function authenticateRequest(req: VercelRequest): Promise<string | null> {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) return null;
+  const supabaseUrl = process.env.VITE_SUPABASE_URL;
+  const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) return null;
+  try {
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data.user) return null;
+    return data.user.id;
+  } catch (err) {
+    console.error('authenticateRequest: token verification failed', err);
+    return null;
+  }
+}
 
 export default async function handler(
   req: VercelRequest,
@@ -8,7 +29,7 @@ export default async function handler(
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -17,6 +38,14 @@ export default async function handler(
 
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  // A LinkedIn PII lookup (personal email/phone) that burns a paid quota must
+  // never be an open proxy: require a valid Supabase session.
+  const userId = await authenticateRequest(req);
+  if (!userId) {
+    res.status(401).json({ error: 'Unauthorized' });
     return;
   }
 

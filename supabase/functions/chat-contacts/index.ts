@@ -41,6 +41,19 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const { message, space_id, conversation_id, history = [] } = (await req.json()) as ChatRequest;
 
+    // Authorize: the caller must be a member of space_id. RLS on `spaces`
+    // (user_space_ids) returns the row only for members, so a non-member gets
+    // null here. Without this, any authenticated user could read any space's
+    // contacts+notes by passing an arbitrary space_id (IDOR).
+    const { data: memberSpace, error: memberError } = await userClient
+      .from("spaces")
+      .select("id")
+      .eq("id", space_id)
+      .maybeSingle();
+    if (memberError || !memberSpace) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
+    }
+
     // Fetch all contacts in the user's space for context
     const { data: contacts, error: contactsError } = await supabase
       .from("contacts")

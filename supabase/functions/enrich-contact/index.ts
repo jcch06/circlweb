@@ -39,6 +39,18 @@ serve(async (req) => {
 
     const { contact_id } = (await req.json()) as EnrichRequest;
 
+    // Authorize: the caller must be able to see this contact under RLS. Without
+    // this, any authenticated user could read (company/title sent to Anthropic)
+    // and overwrite (ai_context/bio/industry) any contact by UUID (IDOR).
+    const { data: allowed, error: authzError } = await userClient
+      .from("contacts")
+      .select("id")
+      .eq("id", contact_id)
+      .maybeSingle();
+    if (authzError || !allowed) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
+    }
+
     // Fetch the contact
     const { data: contact, error: fetchError } = await supabase
       .from("contacts")

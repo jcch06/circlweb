@@ -27,8 +27,31 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Missing authorization" }), { status: 401 });
     }
 
+    // Validate the token (presence alone let any string through), then scope
+    // reads/writes to contacts the caller can see under RLS (IDOR otherwise).
+    const userClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: authError } = await userClient.auth.getUser();
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+    }
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const { contact_id, text } = (await req.json()) as EmbeddingRequest;
+
+    // Any contact_id path (read below and the embedding write) must belong to
+    // the caller. Guard once, up front, covering both branches.
+    if (contact_id) {
+      const { data: allowed } = await userClient
+        .from("contacts")
+        .select("id")
+        .eq("id", contact_id)
+        .maybeSingle();
+      if (!allowed) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
+      }
+    }
 
     let inputText = text;
 

@@ -22,15 +22,19 @@ const MODES: { key: ColorMode; label: string; shortcut: string }[] = [
   { key: 'degree', label: 'Force', shortcut: '3' },
 ];
 
+// Miroir littéral des tokens (le canvas ne lit pas les var()). À garder
+// aligné sur --status-* et --circle-* de index.css.
 const RECENCY_COLORS: Record<string, string> = {
-  fresh: '#2F7D51', due: '#C2540A', dormant: '#5B6B8C', never: '#C3C7C6',
+  fresh: '#1E9E63', due: '#B9821A', dormant: '#D9455A', never: '#A6A6C0',
 };
 
 const CIRCLE_HEX: Record<string, string> = {
-  'var(--circle-1)': '#3B6FB5', 'var(--circle-2)': '#7A5CC5', 'var(--circle-3)': '#A64D79',
-  'var(--circle-4)': '#C25B4A', 'var(--circle-5)': '#B07C1F', 'var(--circle-6)': '#6E8B3D',
-  'var(--circle-7)': '#2D7E93', 'var(--circle-8)': '#8A7357',
+  'var(--circle-1)': '#5E81F4', 'var(--circle-2)': '#4D4CAC', 'var(--circle-3)': '#9698D6',
+  'var(--circle-4)': '#D9455A', 'var(--circle-5)': '#B9821A', 'var(--circle-6)': '#1E9E63',
+  'var(--circle-7)': '#2D9CB0', 'var(--circle-8)': '#8A7357',
 };
+
+const ACCENT_HEX = '#5E81F4';
 
 export const NetworkPage: React.FC = () => {
   const data = useData();
@@ -107,9 +111,9 @@ export const NetworkPage: React.FC = () => {
     }
     const d = degree.get(c.id) ?? 0;
     const t = Math.min(1, d / maxDegree);
-    // Force : du gris clair au teal profond
+    // Force : du gris clair au bleu périwinkle (accent #5E81F4)
     const mix = (a: number, b: number) => Math.round(a + (b - a) * t);
-    return `rgb(${mix(195, 15)}, ${mix(199, 111)}, ${mix(198, 92)})`;
+    return `rgb(${mix(220, 94)}, ${mix(220, 129)}, ${mix(230, 244)})`;
   }, [mode, data.spaceById, data.lastNoteByContact, degree, maxDegree]);
 
   /* ---- Raccourcis clavier 1/2/3 ---- */
@@ -215,14 +219,14 @@ export const NetworkPage: React.FC = () => {
     if (bridges.has(c.id)) {
       ctx.beginPath();
       ctx.arc(node.x, node.y, r + 1.8, 0, 2 * Math.PI);
-      ctx.strokeStyle = '#0F6F5C';
+      ctx.strokeStyle = ACCENT_HEX;
       ctx.lineWidth = 1.2 / scale;
       ctx.stroke();
     }
     if (selectedId === c.id || onPath) {
       ctx.beginPath();
       ctx.arc(node.x, node.y, r + 2.6, 0, 2 * Math.PI);
-      ctx.strokeStyle = '#0F6F5C';
+      ctx.strokeStyle = ACCENT_HEX;
       ctx.lineWidth = 2 / scale;
       ctx.stroke();
     }
@@ -232,7 +236,7 @@ export const NetworkPage: React.FC = () => {
     if (showLabel && !dimmed) {
       const label = fullName(c);
       const fontSize = Math.max(10 / scale, 2.4);
-      ctx.font = `500 ${fontSize}px Inter, sans-serif`;
+      ctx.font = `700 ${fontSize}px Lato, -apple-system, sans-serif`;
       ctx.textAlign = 'center';
       ctx.fillStyle = '#4A5350';
       ctx.fillText(label, node.x, node.y + r + fontSize + 1);
@@ -325,7 +329,7 @@ export const NetworkPage: React.FC = () => {
               width={dims.w}
               height={dims.h}
               graphData={{ nodes, links }}
-              backgroundColor="#F5F7F6"
+              backgroundColor="#F5F5FA"
               nodeCanvasObject={paintNode}
               nodePointerAreaPaint={(node: any, color, ctx) => {
                 ctx.fillStyle = color;
@@ -335,7 +339,7 @@ export const NetworkPage: React.FC = () => {
               }}
               linkColor={(l: any) => {
                 const key = [typeof l.source === 'object' ? l.source.id : l.source, typeof l.target === 'object' ? l.target.id : l.target].sort().join('|');
-                if (path) return pathEdges.has(key) ? '#0F6F5C' : 'rgba(23,27,26,0.05)';
+                if (path) return pathEdges.has(key) ? ACCENT_HEX : 'rgba(23,27,26,0.05)';
                 return 'rgba(23,27,26,0.16)';
               }}
               linkWidth={(l: any) => {
@@ -445,7 +449,7 @@ export const NetworkPage: React.FC = () => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {data.spaces.map((s) => (
                     <div key={s.id} className="t-sec" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ width: 10, height: 10, borderRadius: 3, background: CIRCLE_HEX[circleColor(s)] }} />
+                      <span style={{ width: 10, height: 10, borderRadius: 999, background: CIRCLE_HEX[circleColor(s)] }} />
                       {s.name}
                     </div>
                   ))}
@@ -455,7 +459,7 @@ export const NetworkPage: React.FC = () => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {(['fresh', 'due', 'dormant', 'never'] as const).map((k) => (
                     <div key={k} className="t-sec" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ width: 10, height: 10, borderRadius: 3, background: RECENCY_COLORS[k] }} />
+                      <span style={{ width: 10, height: 10, borderRadius: 999, background: RECENCY_COLORS[k] }} />
                       {STATUS_META[k].label}
                       <span className="t-meta" style={{ color: 'var(--faint)' }}>(dernière trace dans Circl)</span>
                     </div>
@@ -464,7 +468,7 @@ export const NetworkPage: React.FC = () => {
               )}
               {mode === 'degree' && (
                 <div className="t-sec" style={{ color: 'var(--ink-2)' }}>
-                  Plus un contact est foncé, plus il est relié. L'anneau teal marque vos 5 contacts-ponts.
+                  Plus un contact est foncé, plus il est relié. L'anneau bleu marque vos 5 contacts-ponts.
                 </div>
               )}
               <div className="t-sec" style={{ color: 'var(--mut)', lineHeight: '20px' }}>

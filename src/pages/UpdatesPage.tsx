@@ -293,7 +293,7 @@ export const UpdatesPage: React.FC = () => {
                     className="chip"
                     style={{
                       height: 20, fontSize: 11, padding: '0 8px', borderColor: 'transparent',
-                      background: u.status === 'confirmed' ? 'var(--green-soft)' : 'var(--hover)',
+                      background: u.status === 'confirmed' ? 'var(--status-fresh-soft)' : 'var(--hover)',
                       color: u.status === 'confirmed' ? 'var(--status-fresh)' : 'var(--mut)',
                     }}
                   >

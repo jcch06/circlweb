@@ -177,7 +177,7 @@ export const DuplicatesPage: React.FC<DuplicatesPageProps> = ({ contacts, notes,
 
       {groups.length === 0 ? (
         <div className="glass-card" style={{ padding: 40, textAlign: 'center', color: 'var(--text-secondary)' }}>
-          <Check size={36} style={{ color: 'var(--teal, #2dd4bf)', marginBottom: 12 }} />
+          <Check size={36} style={{ color: 'var(--status-fresh)', marginBottom: 12 }} />
           <h3 style={{ color: 'var(--text-primary)', marginBottom: 6 }}>Aucun doublon détecté</h3>
           <p>Chaque personne n'apparaît qu'une fois dans votre réseau. 🎉</p>
         </div>

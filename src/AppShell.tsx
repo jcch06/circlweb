@@ -33,6 +33,7 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const data = useData();
   const navigate = useNavigate();
   const [circleOpen, setCircleOpen] = useState(false);
+  const [railCircleOpen, setRailCircleOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const circleRef = useRef<HTMLDivElement>(null);
 
@@ -119,6 +120,26 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     return { line, area };
   }, [spark]);
 
+  // Liste des cercles, partagée par le sélecteur de la sidebar et celui du
+  // rail (repli tactile sous 900px, où la sidebar contexte est masquée).
+  const pickCircle = (id: string | null) => { data.setSelectedSpaceId(id); setCircleOpen(false); setRailCircleOpen(false); };
+  const circleList = (
+    <>
+      <button className="nav-item" onClick={() => pickCircle(null)}>
+        <span style={{ width: 9, height: 9, borderRadius: 999, background: 'var(--mut)', flex: 'none' }} />
+        <span style={{ flex: 1 }}>Tous les cercles</span>
+        {data.selectedSpaceId === null && <Check size={14} color="var(--accent)" />}
+      </button>
+      {data.spaces.map((s) => (
+        <button key={s.id} className="nav-item" onClick={() => pickCircle(s.id)}>
+          <span style={{ width: 9, height: 9, borderRadius: 999, background: circleColor(s), flex: 'none' }} />
+          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+          {data.selectedSpaceId === s.id && <Check size={14} color="var(--accent)" />}
+        </button>
+      ))}
+    </>
+  );
+
   const circleDropdown = (
     <div ref={circleRef} style={{ position: 'relative', marginBottom: 12 }}>
       <button className="btn btn-ghost" style={{ width: '100%', justifyContent: 'flex-start', gap: 9 }} onClick={() => setCircleOpen((o) => !o)}>
@@ -130,18 +151,7 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       </button>
       {circleOpen && (
         <div className="popover" style={{ top: 'calc(100% + 6px)', left: 0, right: 0, padding: 6 }}>
-          <button className="nav-item" onClick={() => { data.setSelectedSpaceId(null); setCircleOpen(false); }}>
-            <span style={{ width: 9, height: 9, borderRadius: 999, background: 'var(--mut)', flex: 'none' }} />
-            <span style={{ flex: 1 }}>Tous les cercles</span>
-            {data.selectedSpaceId === null && <Check size={14} color="var(--accent)" />}
-          </button>
-          {data.spaces.map((s) => (
-            <button key={s.id} className="nav-item" onClick={() => { data.setSelectedSpaceId(s.id); setCircleOpen(false); }}>
-              <span style={{ width: 9, height: 9, borderRadius: 999, background: circleColor(s), flex: 'none' }} />
-              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
-              {data.selectedSpaceId === s.id && <Check size={14} color="var(--accent)" />}
-            </button>
-          ))}
+          {circleList}
         </div>
       )}
     </div>
@@ -158,6 +168,12 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
             {badge === 'updates' && pendingCount > 0 && <span className="badge" />}
           </NavLink>
         ))}
+        <button className="rail-ico" title="Rechercher (⌘K)" onClick={() => setPaletteOpen(true)}>
+          <Search size={20} />
+        </button>
+        <button className="rail-ico" title={activeSpace ? activeSpace.name : 'Tous les cercles'} onClick={() => setRailCircleOpen((o) => !o)}>
+          <span style={{ width: 16, height: 16, borderRadius: 999, background: activeSpace ? circleColor(activeSpace) : 'var(--mut)' }} />
+        </button>
         <div className="rail-sep" />
         <button className="rail-ico" title="Capturer (C)" style={{ background: 'var(--accent)', color: '#fff' }} onClick={() => navigate('/capture')}>
           <Plus size={20} />
@@ -242,6 +258,15 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       </aside>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+
+      {railCircleOpen && (
+        <>
+          <div onClick={() => setRailCircleOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 59 }} />
+          <div className="popover" style={{ position: 'fixed', left: 80, bottom: 72, minWidth: 220, padding: 6, zIndex: 60 }}>
+            {circleList}
+          </div>
+        </>
+      )}
 
       <main style={{ flex: 1, minWidth: 0, overflow: 'hidden', position: 'relative' }}>
         {data.errorMsg ? (

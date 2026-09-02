@@ -35,8 +35,14 @@ export const CirclesPage: React.FC = () => {
     setAccessRequests(ar);
     const userIds = [...new Set([...m.map((x: any) => x.user_id), ...ar.map((x: any) => x.requester_id)])];
     if (userIds.length > 0) {
-      const { data: profs } = await supabase.from('profiles').select('id, full_name, avatar_url').in('id', userIds);
-      setProfiles(new Map((profs ?? []).map((p: any) => [p.id, p])));
+      // La table profiles est masquée par RLS (id = auth.uid()) : les autres
+      // membres ressortaient sans nom. On passe par le helper SECURITY DEFINER
+      // get_user_display_name, prévu pour ça.
+      const entries = await Promise.all(userIds.map(async (id: string) => {
+        const { data: name } = await supabase.rpc('get_user_display_name', { p_user_id: id });
+        return [id, { id, full_name: (name as string | null) ?? null, avatar_url: null }] as const;
+      }));
+      setProfiles(new Map(entries));
     }
   };
 

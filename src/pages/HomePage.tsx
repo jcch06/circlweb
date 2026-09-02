@@ -9,6 +9,7 @@ import { NoteComposer } from '../ui/NoteComposer';
 import { OpportunityCard } from '../ui/OpportunityCard';
 import { deriveIntros, getLatestAnalysis, type MistralPipelineResult } from '../lib/mistral';
 import { fullName, lastTouch, relStatus, relativeFR, dayFR } from '../ui/format';
+import { enablePush, pushSupported } from '../lib/push';
 
 // Accueil (brief 4.1) : la boîte de réception du matin. En moins de 60 s :
 // ce qui attend une décision, qui relancer et pourquoi, ce qui a bougé.
@@ -24,6 +25,16 @@ export const HomePage: React.FC = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [noteFor, setNoteFor] = useState<string | null>(null);
+  const [canPromptPush, setCanPromptPush] = useState(false);
+  useEffect(() => {
+    setCanPromptPush(pushSupported() && Notification.permission === 'default');
+  }, []);
+  const askPush = async () => {
+    setCanPromptPush(false);
+    if (!data.user?.id) return;
+    const r = await enablePush(data.user.id);
+    toast(r === 'ok' ? 'Rappels activés.' : r === 'denied' ? 'Notifications refusées par le navigateur.' : "Activation impossible sur cet appareil.");
+  };
   // Opportunités de l'Accueil : dérivées de la DERNIÈRE analyse Oracle
   // enregistrée, exactement comme la page Opportunités (deriveIntros partagé).
   // Avant, l'Accueil appelait une Edge Function `suggest-intros` distincte
@@ -232,6 +243,18 @@ export const HomePage: React.FC = () => {
             <div className="kpi-tile" style={{ background: 'var(--status-dormant-soft)', color: 'var(--status-dormant)' }}><Snowflake size={22} /></div>
           </div>
         </div>
+
+        {canPromptPush && (
+          <div className="card card-pad" style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20, padding: '14px 18px' }}>
+            <Bell size={18} color="var(--accent)" />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>Activez les rappels</div>
+              <div className="t-sec" style={{ color: 'var(--mut)' }}>Un rappel chaque matin quand des relances vous attendent.</div>
+            </div>
+            <button className="btn btn-quiet" onClick={() => setCanPromptPush(false)}>Plus tard</button>
+            <button className="btn btn-primary" onClick={askPush}>Activer</button>
+          </div>
+        )}
 
         <div className="home-grid">
           {/* Colonne principale */}

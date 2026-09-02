@@ -238,14 +238,24 @@ export const HomePage: React.FC = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
             {calm ? (
-              <div className="card card-pad" style={{ textAlign: 'center', padding: '40px 20px' }}>
-                <div className="t-block" style={{ marginBottom: 6 }}>Rien à traiter ce matin</div>
-                <div className="t-sec" style={{ color: 'var(--mut)' }}>
-                  {nextFollowUp
-                    ? `Prochaine relance planifiée le ${dayFR(nextFollowUp.due_date)}.`
-                    : 'Aucune relance planifiée. Votre réseau est à jour.'}
+              contactsCount === 0 ? (
+                <div className="card card-pad" style={{ textAlign: 'center', padding: '44px 24px' }}>
+                  <div className="t-block" style={{ marginBottom: 6 }}>Bienvenue sur Circl</div>
+                  <div className="t-sec" style={{ color: 'var(--mut)', marginBottom: 18 }}>
+                    Votre réseau est vide. Importez vos contacts pour que Circl vous dise qui relancer et qui présenter à qui.
+                  </div>
+                  <button className="btn btn-primary" onClick={() => navigate('/contacts')}>Importer mes contacts</button>
                 </div>
-              </div>
+              ) : (
+                <div className="card card-pad" style={{ textAlign: 'center', padding: '40px 20px' }}>
+                  <div className="t-block" style={{ marginBottom: 6 }}>Rien à traiter ce matin</div>
+                  <div className="t-sec" style={{ color: 'var(--mut)' }}>
+                    {nextFollowUp
+                      ? `Prochaine relance planifiée le ${dayFR(nextFollowUp.due_date)}.`
+                      : 'Aucune relance planifiée. Votre réseau est à jour.'}
+                  </div>
+                </div>
+              )
             ) : (
               <>
                 {/* À traiter */}

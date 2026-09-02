@@ -41,6 +41,7 @@ export const ContactsPageV2: React.FC = () => {
   const [circlePicker, setCirclePicker] = useState(false);
   const [tagPicker, setTagPicker] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [showTags, setShowTags] = useState(false);
   const [confirmEnrich, setConfirmEnrich] = useState(false);
   const [enrichProgress, setEnrichProgress] = useState<{ done: number; total: number } | null>(null);
@@ -231,6 +232,9 @@ export const ContactsPageV2: React.FC = () => {
               onChange={(e) => setParam('q', e.target.value)}
             />
           </div>
+          <button className="btn btn-ghost" onClick={() => setShowImport(true)}>
+            Importer
+          </button>
           <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
             <Plus size={15} /> Nouveau contact
           </button>
@@ -270,7 +274,7 @@ export const ContactsPageV2: React.FC = () => {
       {/* Table */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 28px 80px' }}>
         {rows.length === 0 ? (
-          <EmptyContacts hasQuery={!!query || view !== 'all' || !!statusFilter} onCreate={() => setShowCreate(true)} />
+          <EmptyContacts hasQuery={!!query || view !== 'all' || !!statusFilter} onCreate={() => setShowCreate(true)} onImport={() => setShowImport(true)} />
         ) : (
           <div className="card" style={{ overflow: 'hidden' }}>
             <table className="wtable">
@@ -461,6 +465,8 @@ export const ContactsPageV2: React.FC = () => {
 
       {showCreate && <CreateContactModal onClose={() => setShowCreate(false)} />}
 
+      {showImport && <ImportContactsModal onClose={() => setShowImport(false)} />}
+
       {showTags && (
         <TagsPanel
           onClose={() => setShowTags(false)}
@@ -471,9 +477,139 @@ export const ContactsPageV2: React.FC = () => {
   );
 };
 
+/* Import en masse : coller un texte (signatures d'email, listing, notes…),
+   parse-contacts-from-text en extrait les fiches, l'utilisateur confirme,
+   insertion groupée. Seule voie d'entrée en volume sur le web. */
+const ImportContactsModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const data = useData();
+  const { toast } = useToast();
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [parsed, setParsed] = useState<any[] | null>(null);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const personal = data.spaces.find((s) => s.type === 'personal');
+  const [spaceId, setSpaceId] = useState<string>(data.selectedSpaceId ?? personal?.id ?? data.spaces[0]?.id ?? '');
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const parse = async () => {
+    if (text.trim().length < 10) return;
+    setBusy(true);
+    const res: any = await supabase.functions.invoke('parse-contacts-from-text', { body: { text } });
+    setBusy(false);
+    if (res.error) { toast(`Analyse impossible : ${res.error.message}`); return; }
+    const list = (res.data?.contacts ?? []).filter((c: any) => c.first_name || c.last_name);
+    if (list.length === 0) { toast('Aucun contact détecté dans ce texte.'); return; }
+    setParsed(list);
+    setSelected(new Set(list.map((_: any, i: number) => i)));
+  };
+
+  const importSelected = async () => {
+    if (!spaceId || !parsed) return;
+    const rows = parsed
+      .filter((_, i) => selected.has(i))
+      .map((c: any) => ({
+        space_id: spaceId,
+        owner_id: data.user?.id,
+        first_name: (c.first_name || c.last_name || '').trim(),
+        last_name: (c.first_name ? (c.last_name || '') : '').trim() || null,
+        company: c.company?.trim() || null,
+        job_title: c.job_title?.trim() || null,
+        email: c.email?.trim() || null,
+        phone: c.phone?.trim() || null,
+        linkedin: c.linkedin?.trim() || null,
+        location: c.location?.trim() || null,
+        industry: c.industry?.trim() || null,
+        source: 'import',
+      }))
+      .filter((r) => r.first_name);
+    if (rows.length === 0) return;
+    setBusy(true);
+    const { error } = await supabase.from('contacts').insert(rows);
+    setBusy(false);
+    if (error) { toast(`Import impossible : ${error.message}`); return; }
+    onClose();
+    toast(`${rows.length} contact${rows.length > 1 ? 's' : ''} importé${rows.length > 1 ? 's' : ''}.`);
+    await data.refresh();
+  };
+
+  const toggle = (i: number) => setSelected((s) => {
+    const n = new Set(s);
+    n.has(i) ? n.delete(i) : n.add(i);
+    return n;
+  });
+
+  return (
+    <div className="modal-scrim" onClick={onClose}>
+      <div className="modal" style={{ width: 560, maxHeight: '86vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
+        <div className="t-block" style={{ marginBottom: 6 }}>Importer des contacts</div>
+
+        {!parsed ? (
+          <>
+            <div className="t-sec" style={{ color: 'var(--mut)', marginBottom: 12 }}>
+              Collez n'importe quel texte contenant des contacts : signatures d'email, liste de participants, notes de réunion. L'IA en extrait les fiches, vous validez avant l'ajout.
+            </div>
+            <textarea
+              className="input"
+              autoFocus
+              style={{ minHeight: 200, resize: 'vertical' }}
+              placeholder={"Jean Dupont, Directeur commercial chez Acme\njean.dupont@acme.com — +33 6 12 34 56 78\n\nMarie Martin, CTO, Lumen — marie@lumen.co"}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
+              <button className="btn btn-ghost" onClick={onClose}>Annuler</button>
+              <button className="btn btn-primary" disabled={text.trim().length < 10 || busy} onClick={parse}>
+                {busy ? 'Analyse…' : 'Analyser le texte'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="t-sec" style={{ color: 'var(--mut)', marginBottom: 10 }}>
+              {parsed.length} contact{parsed.length > 1 ? 's' : ''} détecté{parsed.length > 1 ? 's' : ''}. Décochez ceux à écarter.
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', margin: '0 -4px', paddingRight: 4 }}>
+              {parsed.map((c: any, i: number) => (
+                <label key={i} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 6px', borderBottom: '1px solid var(--line-2)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={selected.has(i)} onChange={() => toggle(i)} style={{ accentColor: 'var(--accent)' }} />
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>{[c.first_name, c.last_name].filter(Boolean).join(' ') || '—'}</span>
+                    <span style={{ display: 'block', color: 'var(--mut)', fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {[[c.job_title, c.company].filter(Boolean).join(' · '), c.email].filter(Boolean).join(' — ') || 'aucun détail'}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0', flexWrap: 'wrap' }}>
+              <span className="t-label">Cercle</span>
+              {data.spaces.map((s) => (
+                <button key={s.id} className={`chip clickable chip-filter${spaceId === s.id ? ' on' : ''}`} onClick={() => setSpaceId(s.id)}>
+                  <span style={{ width: 8, height: 8, borderRadius: 999, background: circleColor(s), flex: 'none' }} />
+                  {s.name}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+              <button className="btn btn-ghost" onClick={() => setParsed(null)}>Retour</button>
+              <button className="btn btn-primary" disabled={selected.size === 0 || !spaceId || busy} onClick={importSelected}>
+                {busy ? 'Import…' : `Importer ${selected.size}`}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
 /* État vide pédagogique (composant 15). */
-const EmptyContacts: React.FC<{ hasQuery: boolean; onCreate: () => void }> = ({ hasQuery, onCreate }) => {
-  const navigate = useNavigate();
+const EmptyContacts: React.FC<{ hasQuery: boolean; onCreate: () => void; onImport: () => void }> = ({ hasQuery, onCreate, onImport }) => {
   if (hasQuery) {
     return (
       <div className="card card-pad" style={{ textAlign: 'center', padding: '48px 20px' }}>
@@ -489,8 +625,8 @@ const EmptyContacts: React.FC<{ hasQuery: boolean; onCreate: () => void }> = ({ 
         Ajoutez une première fiche, collez un texte qui contient des contacts, ou importez depuis l'app iPhone.
       </div>
       <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-        <button className="btn btn-primary" onClick={onCreate}><Plus size={15} /> Nouveau contact</button>
-        <button className="btn btn-ghost" onClick={() => navigate('/capture')}>Coller un texte</button>
+        <button className="btn btn-primary" onClick={onImport}>Importer des contacts</button>
+        <button className="btn btn-ghost" onClick={onCreate}><Plus size={15} /> Nouveau contact</button>
       </div>
     </div>
   );

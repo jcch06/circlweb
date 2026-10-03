@@ -11,6 +11,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")!;
+const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 const MAX_CONTACTS = 4000; // ponytail: au-delà, présélection par mots-clés ; recherche sémantique (embeddings) quand le volume l'exigera
 
 const cors = {
@@ -85,15 +86,34 @@ serve(async (req) => {
       (linksBy.get(b) ?? linksBy.set(b, new Set()).get(b)!).add(a);
     }
 
-    // Au-delà du plafond, on garde les fiches qui partagent des mots avec la question.
+    // Au-delà du plafond : d'abord les fiches proches par le sens (embeddings,
+    // si calculés), puis celles qui partagent des mots avec la question.
     let pool = people;
     if (people.length > MAX_CONTACTS) {
+      const picked = new Set<string>();
+      if (OPENAI_API_KEY) {
+        try {
+          const e = await fetch("https://api.openai.com/v1/embeddings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
+            body: JSON.stringify({ model: "text-embedding-3-small", input: String(question).slice(0, 2000) }),
+          });
+          const vec = (await e.json())?.data?.[0]?.embedding;
+          if (vec) {
+            const { data: hits } = await db.rpc("search_contacts", {
+              query_embedding: JSON.stringify(vec), match_threshold: 0.2, match_count: Math.floor(MAX_CONTACTS * 0.6), target_space_id: null,
+            });
+            for (const h of hits ?? []) { const pid = personOf.get(h.id); if (pid) picked.add(pid); }
+          }
+        } catch { /* recherche par le sens indisponible : mots-clés seuls */ }
+      }
       const terms = norm(question).split(/\W+/).filter((t) => t.length > 3);
       const score = (c: any) => {
         const hay = norm([c.job_title, c.company, c.industry, c.location, c.ai_context, (c.skills ?? []).join(" "), ...(notesBy.get(c.id) ?? [])].filter(Boolean).join(" "));
         return terms.reduce((n, t) => n + (hay.includes(t) ? 1 : 0), 0);
       };
-      pool = people.map((c) => ({ c, s: score(c) })).sort((a, b) => b.s - a.s).slice(0, MAX_CONTACTS).map((x) => x.c);
+      const lexical = people.filter((c) => !picked.has(c.id)).map((c) => ({ c, s: score(c) })).sort((a, b) => b.s - a.s).map((x) => x.c);
+      pool = [...people.filter((c) => picked.has(c.id)), ...lexical].slice(0, MAX_CONTACTS);
     }
 
     // Les champs sont saisis par des utilisateurs : ni retour à la ligne ni

@@ -3,6 +3,7 @@ import { FileUp } from 'lucide-react';
 import { useData } from '../data';
 import { supabase } from '../lib/supabase';
 import { IS_MOCK } from '../lib/mode';
+import { embedInBackground } from '../lib/embed';
 import { cn } from '../lib/utils';
 import { circleColor } from './format';
 import { Button } from '@/components/ui/button';
@@ -75,6 +76,7 @@ export const ImportFile: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         }
       }
       await data.refresh();
+      void embedInBackground(true);
     } else {
       created = payload.length;
     }

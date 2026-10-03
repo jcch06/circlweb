@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ContactDrawer } from '../ui/ContactDrawer';
 import { Avatar } from '../ui/Bits';
-import { fullName, lastTouch, relStatus, relativeFR, type RelStatus } from '../ui/format';
+import { fullName, lastTouch, relStatus, relativeFR, type RelStatus, inCircle } from '../ui/format';
 import { computeMilieux, suggestLinks, hasInfo, linkKey, norm, type Suggestion } from '../lib/networkRules';
 
 // Réseau : le carnet rangé par milieux (où l'on a connu les gens), et des
@@ -82,7 +82,7 @@ export const NetworkPage: React.FC = () => {
   const people = useMemo(() => {
     const seen = new Set<string>();
     return data.contacts
-      .filter((c) => !data.selectedSpaceId || c.space_id === data.selectedSpaceId)
+      .filter((c) => inCircle(c, data.selectedSpaceId))
       .filter((c) => { const k = c.shared_contact_id ?? c.id; if (seen.has(k)) return false; seen.add(k); return true; });
   }, [data.contacts, data.selectedSpaceId]);
 

@@ -58,6 +58,8 @@ export const PushNetworkPanel: React.FC<{
         const existingPhones = new Set(existing.map((ec: any) => normalize(ec.phone)).filter((v): v is string => v !== null));
         const existingEmails = new Set(existing.map((ec: any) => normalize(ec.email)).filter((v): v is string => v !== null));
 
+        const { data: shares } = await supabase.from('contact_shares').select('contact_id').eq('space_id', targetSpaceId).limit(50000);
+        const sharedIds = new Set((shares ?? []).map((x: any) => x.contact_id));
         const existingNames = new Set(existing.map((ec: any) => `${ec.first_name ?? ''}|${ec.last_name ?? ''}`.toLowerCase()));
         const dupes: any[] = [];
         const fresh: any[] = [];
@@ -65,7 +67,7 @@ export const PushNetworkPanel: React.FC<{
           const phone = normalize(pc.phone);
           const email = normalize(pc.email);
           const sameName = existingNames.has(`${pc.first_name ?? ''}|${pc.last_name ?? ''}`.toLowerCase());
-          if (sameName || (phone && existingPhones.has(phone)) || (email && existingEmails.has(email))) {
+          if (sharedIds.has(pc.id) || sameName || (phone && existingPhones.has(phone)) || (email && existingEmails.has(email))) {
             dupes.push(pc);
           } else {
             fresh.push(pc);
@@ -96,64 +98,18 @@ export const PushNetworkPanel: React.FC<{
   const push = async () => {
     setBusy(true);
     try {
-      // Auto-dédoublonnage du lot : le carnet perso peut contenir deux fiches
-      // avec le même téléphone, elles se percuteraient à l'insertion.
-      const seenPhones = new Set<string>();
-      const seenEmails = new Set<string>();
-      const payload = selected
-        .map((c) => ({ ...c, phone: normalize(c.phone), email: normalize(c.email) }))
-        .filter((c) => {
-          if (c.phone) { if (seenPhones.has(c.phone)) return false; seenPhones.add(c.phone); }
-          if (c.email) { if (seenEmails.has(c.email)) return false; seenEmails.add(c.email); }
-          return true;
-        })
-        .map((c) => ({
-          space_id: targetSpaceId,
-          owner_id: data.user.id,
-          first_name: c.first_name,
-          last_name: c.last_name,
-          company: c.company,
-          job_title: c.job_title,
-          industry: c.industry,
-          location: c.location,
-          bio: c.bio,
-          email: c.email,
-          phone: c.phone,
-          linkedin: c.linkedin,
-          ai_context: c.ai_context,
-          // Relie la copie à la fiche d'origine : une seule personne partout.
-          shared_contact_id: c.shared_contact_id ?? c.id,
-          source: 'manual',
-        }));
-
-      // Chemin rapide : un seul lot. Sur collision réelle (un autre membre
-      // pousse au même moment, ou une ligne invisible à ce client), on repasse
-      // ligne par ligne pour que les contacts sans conflit passent quand même.
-      const { error } = await supabase.from('contacts').insert(payload);
-
-      if (!error) {
-        toast(`${payload.length} contact${payload.length > 1 ? 's' : ''} ajouté${payload.length > 1 ? 's' : ''} à ${targetSpace?.name}.`);
-        await data.refresh();
-        onClose();
-        return;
-      }
-      if (error.code !== '23505') throw error;
-
+      // Partage par référence : la fiche reste unique, le cercle y accède.
+      // Lots de 500 ; un partage déjà existant est ignoré.
+      const rows = selected.map((c) => ({ contact_id: c.id, space_id: targetSpaceId, shared_by: data.user.id }));
       let ok = 0;
-      let skipped = 0;
-      for (const row of payload) {
-        const { error: rowError } = await supabase.from('contacts').insert(row);
-        if (rowError) {
-          if (rowError.code === '23505') { skipped++; continue; }
-          throw rowError;
-        }
-        ok++;
+      for (let i = 0; i < rows.length; i += 500) {
+        const { data: ins, error } = await supabase.from('contact_shares')
+          .upsert(rows.slice(i, i + 500), { onConflict: 'contact_id,space_id', ignoreDuplicates: true }).select('contact_id');
+        if (error) throw error;
+        ok += ins?.length ?? 0;
       }
-      toast(
-        `${ok} contact${ok > 1 ? 's' : ''} ajouté${ok > 1 ? 's' : ''}.` +
-        (skipped > 0 ? ` ${skipped} ignoré${skipped > 1 ? 's' : ''} : déjà présent${skipped > 1 ? 's' : ''} dans le cercle.` : '')
-      );
-      await data.refresh();
+      toast(`${ok} contact${ok > 1 ? 's' : ''} partagé${ok > 1 ? 's' : ''} avec ${targetSpace?.name}.`);
+      await data.refresh(['contacts']);
       onClose();
     } catch (err: any) {
       toast(`Envoi impossible : ${err.message}`);
@@ -181,8 +137,9 @@ export const PushNetworkPanel: React.FC<{
           ) : (
             <>
               <p className="t-sec" style={{ color: 'var(--ink-2)', marginBottom: 16 }}>
-                Cochez les contacts personnels à copier dans ce cercle : ils deviendront
-                visibles par ses membres. Rien n'est partagé sans être coché.
+                Cochez les contacts personnels à partager avec ce cercle. Ses membres verront
+                leur fiche et vos notes non privées ; les fiches restent les vôtres, sans copie.
+                Rien n'est partagé sans être coché.
               </p>
 
               {candidates.length === 0 ? (
@@ -191,7 +148,7 @@ export const PushNetworkPanel: React.FC<{
                 </div>
               ) : (
                 <>
-                  <SectionLabel>À copier · {selected.length} sur {candidates.length}</SectionLabel>
+                  <SectionLabel>À partager · {selected.length} sur {candidates.length}</SectionLabel>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 18 }}>
                     {candidates.map((c) => (
                       <label

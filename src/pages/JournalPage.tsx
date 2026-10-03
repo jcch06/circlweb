@@ -6,7 +6,7 @@ import { useData } from '../data';
 import { useToast } from '../ui/Toast';
 import { Avatar, SectionLabel } from '../ui/Bits';
 import { NoteComposer } from '../ui/NoteComposer';
-import { fullName, relativeFR, circleColor } from '../ui/format';
+import { fullName, relativeFR, circleColor, inCircle } from '../ui/format';
 
 // Journal (brief 4.6) : le flux transverse des notes, groupé par période.
 // La lecture par personne vit dans la timeline de la fiche.
@@ -49,7 +49,7 @@ export const JournalPage: React.FC = () => {
     let notes = data.notes.filter((n) => {
       const c = data.contactById.get(n.contact_id);
       if (!c) return false;
-      if (data.selectedSpaceId && c.space_id !== data.selectedSpaceId) return false;
+      if (!inCircle(c, data.selectedSpaceId)) return false;
       if (filter === 'private') return n.is_private;
       if (filter !== 'all' && n.context !== filter) return false;
       return true;

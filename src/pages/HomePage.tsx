@@ -8,7 +8,7 @@ import { Avatar, DiffLine } from '../ui/Bits';
 import { NoteComposer } from '../ui/NoteComposer';
 import { OpportunityCard } from '../ui/OpportunityCard';
 import { deriveIntros, getLatestAnalysis, type MistralPipelineResult } from '../lib/mistral';
-import { fullName, lastTouch, relStatus, relativeFR, dayFR } from '../ui/format';
+import { fullName, lastTouch, relStatus, relativeFR, dayFR, inCircle } from '../ui/format';
 import { enablePush, pushSupported } from '../lib/push';
 import { cn } from '../lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -51,7 +51,7 @@ export const HomePage: React.FC = () => {
 
   const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   const activeSpace = data.selectedSpaceId ? data.spaceById.get(data.selectedSpaceId) : null;
-  const inSpace = (c: any) => !data.selectedSpaceId || c.space_id === data.selectedSpaceId;
+  const inSpace = (c: any) => inCircle(c, data.selectedSpaceId);
 
   const toProcess = useMemo(
     () => data.pendingUpdates.filter((u) => !data.selectedSpaceId || u.space_id === data.selectedSpaceId).filter((u) => data.contactById.get(u.contact_id)).slice(0, 5),

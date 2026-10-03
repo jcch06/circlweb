@@ -1,4 +1,4 @@
-import { fullName, lastTouch, relStatus, type RelStatus } from '../ui/format';
+import { fullName, lastTouch, relStatus, inCircle, type RelStatus } from '../ui/format';
 import { supabase } from './supabase';
 import { IS_MOCK } from './mode';
 
@@ -43,7 +43,7 @@ export async function queryContacts(query: ContactQuery, ctx: {
     return { rows, total: Number(data?.total ?? 0), counts };
   }
 
-  let base = query.spaceId ? ctx.contacts.filter((c) => c.space_id === query.spaceId) : ctx.contacts;
+  let base = query.spaceId ? ctx.contacts.filter((c) => inCircle(c, query.spaceId)) : ctx.contacts;
   if (!query.spaceId) {
     // Un même contact partagé dans plusieurs cercles n'apparaît qu'une fois.
     const seen = new Set<string>();

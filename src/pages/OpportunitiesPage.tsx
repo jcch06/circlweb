@@ -7,7 +7,7 @@ import { useToast } from '../ui/Toast';
 import { Avatar, AICard, SectionLabel, ConfirmModal } from '../ui/Bits';
 import { OpportunityCard, type Intro } from '../ui/OpportunityCard';
 import { UserProfilePopup } from '../components/UserProfilePopup';
-import { fullName, dayFR, relativeFR, timeFR } from '../ui/format';
+import { fullName, dayFR, relativeFR, timeFR, inCircle } from '../ui/format';
 import type { MistralPipelineResult, AnalysisHistoryEntry, AnalysisDelta } from '../lib/mistral';
 import {
   isMistralConfigured,
@@ -75,7 +75,7 @@ export const OpportunitiesPage: React.FC = () => {
   const spaceId = data.selectedSpaceId ?? null;
   const activeSpace = spaceId ? data.spaceById.get(spaceId) : null;
   const contacts = useMemo(
-    () => (data.selectedSpaceId ? data.contacts.filter((c) => c.space_id === data.selectedSpaceId) : data.contacts),
+    () => (data.selectedSpaceId ? data.contacts.filter((c) => inCircle(c, data.selectedSpaceId)) : data.contacts),
     [data.contacts, data.selectedSpaceId]
   );
   const eligible = useMemo(() => contacts.filter((c) => c.company || c.job_title || c.ai_context), [contacts]);

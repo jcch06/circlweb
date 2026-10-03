@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  X, Mail, Phone, Link2, ArrowLeft, Lock, Sparkles, MoreHorizontal, Trash2, Search, Columns3, Check,
+  X, Mail, Phone, Link2, ArrowLeft, Lock, Sparkles, MoreHorizontal, Trash2, Search, Columns3, Check, Share2,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { enrichAndPersistContact } from '../lib/mistral';
@@ -157,6 +157,28 @@ export const ContactDrawer: React.FC<{
     if (error) { toast(`Échec : ${error.message}`); return; }
     toast(confirm ? 'Mise à jour appliquée.' : 'Mise à jour écartée.');
     await data.refresh(confirm ? ['updates', 'contacts'] : ['updates']);
+  };
+
+  // Partage par référence : la fiche reste dans son cercle d'origine.
+  const sharedWith = (contact.space_ids ?? []).filter((id: string) => id !== contact.space_id).map((id: string) => data.spaceById.get(id)).filter(Boolean);
+  const shareTargets = data.spaces.filter((sp) => sp.type !== 'personal' && sp.id !== contact.space_id && !(contact.space_ids ?? []).includes(sp.id));
+  const share = async (spaceId: string) => {
+    const next = [...new Set([...(contact.space_ids ?? [contact.space_id]), spaceId])];
+    patchLocal({ space_ids: next });
+    if (IS_MOCK) return;
+    const { error } = await supabase.from('contact_shares').insert({ contact_id: contactId, space_id: spaceId, shared_by: data.user?.id });
+    if (error && error.code !== '23505') { patchLocal({ space_ids: contact.space_ids }); toast(`Partage impossible : ${error.message}`); return; }
+    data.patchContact(contactId, { space_ids: next });
+    toast(`Partagé avec ${data.spaceById.get(spaceId)?.name ?? 'ce cercle'}.`);
+  };
+  const unshare = async (spaceId: string) => {
+    const next = (contact.space_ids ?? []).filter((id: string) => id !== spaceId);
+    patchLocal({ space_ids: next });
+    if (IS_MOCK) return;
+    const { error } = await supabase.from('contact_shares').delete().eq('contact_id', contactId).eq('space_id', spaceId);
+    if (error) { patchLocal({ space_ids: contact.space_ids }); toast(`Retrait impossible : ${error.message}`); return; }
+    data.patchContact(contactId, { space_ids: next });
+    toast(`Partage avec ${data.spaceById.get(spaceId)?.name ?? 'ce cercle'} retiré.`);
   };
 
   const moveCircle = async (spaceId: string) => {
@@ -377,6 +399,34 @@ export const ContactDrawer: React.FC<{
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
+            </Prop>
+            <Prop label="Partagé avec">
+              <div className="flex flex-wrap items-center gap-1 py-0.5">
+                {sharedWith.map((sp: any) => (
+                  <span key={sp.id} className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-2 py-0.5 text-xs">
+                    <span className="size-1.5 rounded-full" style={{ background: circleColor(sp) }} />{sp.name}
+                    {!locked && <button aria-label={`Retirer le partage avec ${sp.name}`} onClick={() => unshare(sp.id)} className="text-muted-foreground hover:text-foreground"><X size={11} /></button>}
+                  </span>
+                ))}
+                {shareTargets.length > 0 && !locked && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="-ml-1 inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[13px] text-muted-foreground hover:bg-muted hover:text-foreground">
+                        <Share2 size={12} /> {sharedWith.length ? 'Ajouter' : 'Partager avec un cercle'}
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-60">
+                      {shareTargets.map((sp) => (
+                        <DropdownMenuItem key={sp.id} onClick={() => share(sp.id)}>
+                          <span className="size-2 rounded-full" style={{ background: circleColor(sp) }} /><span className="flex-1 truncate">{sp.name}</span>
+                        </DropdownMenuItem>
+                      ))}
+                      <p className="px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">Ses membres verront la fiche et les notes non privées. Aucune copie n'est créée.</p>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+                {sharedWith.length === 0 && shareTargets.length === 0 && <span className="text-[13px] text-muted-foreground">Aucun cercle</span>}
+              </div>
             </Prop>
             <Prop label="Pipeline">
               <div className="flex flex-col items-start gap-1 py-0.5">

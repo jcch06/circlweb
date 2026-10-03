@@ -40,7 +40,7 @@ serve(async (req) => {
       let q = db.from("contacts_visible")
         .select("id, shared_contact_id, first_name, last_name, job_title, company, industry, location, ai_context, skills, last_contacted_at")
         .range(from, from + 999);
-      if (space_id) q = q.eq("space_id", space_id);
+      if (space_id) q = q.contains("space_ids", [space_id]); // cercle d'origine ou partage
       const { data, error } = await q;
       if (error) return json({ error: error.message }, 500);
       rows.push(...(data ?? []));

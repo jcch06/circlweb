@@ -128,3 +128,10 @@ export function circleColor(space: { id: string; type?: string | null }): string
   for (let i = 0; i < space.id.length; i++) h = (h * 31 + space.id.charCodeAt(i)) >>> 0;
   return CIRCLE_COLORS[h % CIRCLE_COLORS.length];
 }
+
+/* ---- Cercles d'une fiche : son cercle d'origine et ceux avec qui elle est
+   partagée (contacts_visible.space_ids). ---- */
+export function inCircle(c: { space_id?: string | null; space_ids?: string[] | null }, spaceId: string | null | undefined): boolean {
+  if (!spaceId) return true;
+  return c.space_id === spaceId || (c.space_ids ?? []).includes(spaceId);
+}

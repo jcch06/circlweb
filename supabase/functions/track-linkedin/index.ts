@@ -123,6 +123,15 @@ function changed(oldVal: string | null, newVal: string | null): boolean {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
 
+  // Réservé au cron (clé service-role) : sans cette garde, n'importe quel
+  // compte pouvait lire le profil brut d'un contact et consommer les crédits.
+  const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+  const secretKeys = (() => { try { return Object.values(JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}")) as string[]; } catch { return []; } })();
+  const role = (() => { try { return JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).role; } catch { return null; } })();
+  if (!token || !(token === SUPABASE_SERVICE_ROLE_KEY || secretKeys.includes(token) || role === "service_role")) {
+    return json({ error: "Réservé au suivi automatique" }, 403);
+  }
+
   try {
     if (!CORESIGNAL_API_KEY) {
       return json({ error: "CORESIGNAL_API_KEY manquante. Pose le secret puis redéploie." }, 500);

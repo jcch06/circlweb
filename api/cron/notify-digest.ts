@@ -59,6 +59,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  // Suivi LinkedIn d'abord (contacts suivis, Coresignal) : les changements de
+  // poste trouvés entrent dans le digest du jour. Le plan Hobby limite le
+  // nombre de crons, d'où cet appel ici. Échec silencieux : le digest part quand même.
+  try {
+    await fetch(`${SUPABASE_URL}/functions/v1/track-linkedin`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ limit: 20 }),
+      signal: AbortSignal.timeout(35000),
+    });
+  } catch (err) {
+    console.warn('[notify-digest] track-linkedin', (err as Error).message);
+  }
+
   const admin = createClient(SUPABASE_URL, SERVICE_KEY);
   const today = new Date().toISOString().slice(0, 10);
 

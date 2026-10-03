@@ -124,6 +124,21 @@ export const ContactDrawer: React.FC<{
     item: i, pipeline: data.pipelines.find((p) => p.id === i.pipeline_id), stage: data.pipelineStages.find((s) => s.id === i.stage_id),
   })), [data.pipelineItems, data.pipelines, data.pipelineStages, contactId]);
 
+  // Suivi LinkedIn (cron quotidien) : lu sur la fiche brute, absent de la vue masquée.
+  const [followLinkedin, setFollowLinkedin] = useState(false);
+  useEffect(() => {
+    if (IS_MOCK) return;
+    supabase.from('contacts').select('follow_linkedin').eq('id', contactId).maybeSingle()
+      .then(({ data: row }) => setFollowLinkedin(Boolean(row?.follow_linkedin)));
+  }, [contactId]);
+  const toggleFollow = async (on: boolean) => {
+    setFollowLinkedin(on);
+    if (IS_MOCK) return;
+    const { error } = await supabase.from('contacts').update({ follow_linkedin: on }).eq('id', contactId);
+    if (error) { setFollowLinkedin(!on); toast(`Réglage impossible : ${error.message}`); return; }
+    toast(on ? 'Circl vérifiera son poste chaque semaine et vous préviendra en cas de changement.' : 'Suivi LinkedIn arrêté.');
+  };
+
   // Reprise d'une recherche FullEnrich lancée plus tôt (page rechargée, fiche refermée).
   const findRef = useRef<(kind: 'email' | 'phone', resume?: boolean) => void>(undefined);
   useEffect(() => {
@@ -372,11 +387,21 @@ export const ContactDrawer: React.FC<{
             <Prop label="Téléphone">
               {contact.phone ? <a href={`tel:${contact.phone}`} className="inline-flex items-center gap-1.5 py-1 text-[13px] tabular-nums hover:underline"><Phone size={12} className="text-muted-foreground" />{contact.phone}</a> : findBtn('phone')}
             </Prop>
-            <Prop label="LinkedIn">
-              {contact.linkedin
-                ? <a href={contact.linkedin.startsWith('http') ? contact.linkedin : `https://${contact.linkedin}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 py-1 text-[13px] hover:underline"><Link2 size={12} className="text-muted-foreground" />Profil</a>
-                : <span className="py-1 text-[13px] text-muted-foreground/70">Non renseigné</span>}
-            </Prop>
+            {contact.linkedin ? (
+              <Prop label="LinkedIn">
+                <span className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1">
+                  <a href={contact.linkedin.startsWith('http') ? contact.linkedin : `https://${contact.linkedin}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[13px] hover:underline"><Link2 size={12} className="text-muted-foreground" />Profil</a>
+                  {!locked && (
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
+                      <input type="checkbox" checked={followLinkedin} onChange={(e) => toggleFollow(e.target.checked)} className="size-3.5 accent-foreground" />
+                      Suivre ses changements de poste
+                    </label>
+                  )}
+                </span>
+              </Prop>
+            ) : (
+              <Prop label="LinkedIn" value={contact.linkedin} disabled={locked} onSave={(v) => saveField('linkedin', v)} />
+            )}
 
             <h3 className="mb-1 mt-5 text-xs font-semibold">Profil</h3>
             <Prop label="Poste" value={contact.job_title} disabled={locked} onSave={(v) => saveField('job_title', v)} />

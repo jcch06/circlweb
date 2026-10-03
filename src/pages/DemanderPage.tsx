@@ -19,7 +19,7 @@ const SUGGESTIONS = [
   'Qui est dans la tech à Paris ?',
 ];
 
-type Msg = { role: 'user' | 'assistant'; text: string; ids?: string[]; why?: Record<string, string>; coverage?: string };
+type Msg = { role: 'user' | 'assistant'; text: string; ids?: string[]; why?: Record<string, string>; group?: Record<string, string>; coverage?: string };
 
 export const DemanderPage: React.FC = () => {
   const data = useData();
@@ -55,6 +55,7 @@ export const DemanderPage: React.FC = () => {
     let text: string;
     let ids: string[] = [];
     const why: Record<string, string> = {};
+    const group: Record<string, string> = {};
     let coverage: string | undefined;
     if (res.error) {
       let msg = res.error.message ?? 'erreur';
@@ -62,10 +63,10 @@ export const DemanderPage: React.FC = () => {
       text = `Je n'ai pas pu interroger votre réseau : ${msg}`;
     } else {
       text = res.data?.response || 'Aucune réponse.';
-      for (const c of res.data?.contacts ?? []) { ids.push(c.id); why[c.id] = c.why; }
+      for (const c of res.data?.contacts ?? []) { ids.push(c.id); why[c.id] = c.why; if (c.group) group[c.id] = c.group; }
       if (res.data?.searched < res.data?.total) coverage = `Recherche faite sur les ${res.data.searched.toLocaleString('fr-FR')} fiches les plus proches de votre question, sur ${res.data.total.toLocaleString('fr-FR')}.`;
     }
-    setMsgs((m) => [...m, { role: 'assistant', text, ids, why, coverage }]);
+    setMsgs((m) => [...m, { role: 'assistant', text, ids, why, group, coverage }]);
     setBusy(false);
   };
 
@@ -116,25 +117,37 @@ export const DemanderPage: React.FC = () => {
             <div key={i}>
               <p className="whitespace-pre-wrap text-[14px] leading-relaxed">{m.text}</p>
               {m.coverage && <p className="mt-1 text-xs text-muted-foreground">{m.coverage}</p>}
-              {m.ids && m.ids.length > 0 && (
-                <div className="mt-3 overflow-hidden rounded-xl border">
-                  {m.ids.map((id) => {
-                    const c = data.contactById.get(id);
-                    if (!c) return null;
-                    return (
-                      <button key={id} onClick={() => setDrawerId(id)}
-                        className="flex w-full items-center gap-3 border-b px-3.5 py-2.5 text-left last:border-0 hover:bg-muted">
-                        <Avatar name={fullName(c)} firstName={c.first_name} lastName={c.last_name} photoUrl={c.photo_url} size={32} />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[13px] font-medium">{fullName(c)}</span>
-                          <span className="block truncate text-xs text-muted-foreground">{[c.job_title, c.company].filter(Boolean).join(' · ')}</span>
-                          {m.why?.[id] && <span className="mt-0.5 block text-xs leading-snug text-foreground/80">{m.why[id]}</span>}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+              {m.ids && m.ids.length > 0 && (() => {
+                // Fiches regroupées dans l'ordre où l'IA les a citées (« Parlementaires », « Conseil »…).
+                const sections: { title: string; ids: string[] }[] = [];
+                for (const id of m.ids) {
+                  const title = m.group?.[id] ?? '';
+                  const sec = sections.find((x) => x.title === title) ?? (sections.push({ title, ids: [] }), sections[sections.length - 1]);
+                  sec.ids.push(id);
+                }
+                return sections.map((sec) => (
+                  <div key={sec.title || 'contacts'} className="mt-3">
+                    {sec.title && <h3 className="mb-1.5 text-xs font-medium text-muted-foreground">{sec.title} · {sec.ids.length}</h3>}
+                    <div className="overflow-hidden rounded-xl border">
+                      {sec.ids.map((id) => {
+                        const c = data.contactById.get(id);
+                        if (!c) return null;
+                        return (
+                          <button key={id} onClick={() => setDrawerId(id)}
+                            className="flex w-full items-center gap-3 border-b px-3.5 py-2.5 text-left last:border-0 hover:bg-muted">
+                            <Avatar name={fullName(c)} firstName={c.first_name} lastName={c.last_name} photoUrl={c.photo_url} size={32} />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-[13px] font-medium">{fullName(c)}</span>
+                              <span className="block truncate text-xs text-muted-foreground">{[c.job_title, c.company].filter(Boolean).join(' · ')}</span>
+                              {m.why?.[id] && <span className="mt-0.5 block text-xs leading-snug text-foreground/80">{m.why[id]}</span>}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ));
+              })()}
             </div>
           ))}
           {busy && <div className="text-[13px] text-muted-foreground">Recherche dans votre réseau…</div>}

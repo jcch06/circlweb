@@ -93,13 +93,17 @@ export const OpportunityCard: React.FC<{
     const ok = await persist('sent');
     if (!ok) return;
     setDraftOpen(false);
-    // Relance à J+7 : vérifier que l'intro a pris.
+    // Relance à J+7, liée à l'intro : elle se ferme dès que l'intro avance.
     const due = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-    await supabase.from('follow_ups').insert({
+    const { data: fu, error: fuErr } = await supabase.from('follow_ups').insert({
       space_id: from.space_id, contact_id: from.id, user_id: data.user?.id, due_date: due,
       label: `Vérifier l'intro avec ${fullName(to)}`,
-    });
-    toast('Intro enregistrée comme envoyée. Relance prévue dans 7 jours.');
+    }).select('id').single();
+    if (!fuErr && fu) {
+      await supabase.from('intro_suggestions').update({ follow_up_id: fu.id })
+        .eq('user_id', data.user?.id).eq('from_contact_id', intro.from_contact_id).eq('to_contact_id', intro.to_contact_id);
+    }
+    toast(fuErr ? 'Intro enregistrée comme envoyée. La relance n’a pas pu être créée.' : 'Intro enregistrée comme envoyée. Relance prévue dans 7 jours.');
     await data.refresh(['followUps']);
     onResolved();
   };

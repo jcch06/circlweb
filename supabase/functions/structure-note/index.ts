@@ -121,19 +121,11 @@ serve(async (req) => {
       .single();
     if (contactError || !contact) return json({ error: "Contact not found" }, 404);
 
-    // Caller must be an accepted member of the contact's space.
-    const { data: membership } = await admin
-      .from("space_members")
-      .select("role")
-      .eq("space_id", contact.space_id)
-      .eq("user_id", user.id)
-      .not("accepted_at", "is", null)
-      .maybeSingle();
-    if (!membership) return json({ error: "Forbidden" }, 403);
-    // Fiche verrouillée (cercle request_only sans accès accordé) : ni lecture
-    // de ses champs ni écriture dérivée.
-    const { data: canView } = await userClient.rpc("can_view_contact_full", { p_contact_id: contact.id });
-    if (canView !== true) return json({ error: "Fiche verrouillée : demandez l'accès au propriétaire." }, 403);
+    // L'appelant doit voir la fiche déverrouillée, par son cercle d'origine ou
+    // par un partage : même règle que l'insertion d'une note en base.
+    const { data: canSee } = await userClient.rpc("can_see_contact", { p_contact: contact.id });
+    if (canSee !== true) return json({ error: "Fiche introuvable ou verrouillée." }, 403);
+    const { data: canEdit } = await userClient.rpc("can_edit_contact", { p_contact: contact.id });
 
     const today = todayParis();
 
@@ -270,7 +262,7 @@ Règles :
     // (by chat-contacts, the Oracle, and the contact detail). Private notes are
     // NEVER folded into ai_context, which is shared with the team.
     const updatedMemory = (structured.updated_memory ?? "").trim();
-    if (updatedMemory && !isPrivate) {
+    if (updatedMemory && !isPrivate && canEdit === true) {
       await admin.from("contacts").update({ ai_context: updatedMemory }).eq("id", contact.id);
     }
 

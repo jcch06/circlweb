@@ -38,9 +38,18 @@ export const BuyCredits: React.FC<{ balance: number; onClose: () => void }> = ({
         <p className="text-sm text-muted-foreground">
           Solde actuel : <span className="tabular-nums text-foreground">{balance}</span> crédits. Un email coûte 1 crédit, un téléphone 10, et rien n'est débité si la recherche ne trouve pas.
         </p>
-        <div role="radiogroup" aria-label="Pack de crédits" className="flex flex-col gap-1.5">
+        <div role="radiogroup" aria-label="Pack de crédits" className="flex flex-col gap-1.5"
+          onKeyDown={(e) => {
+            // Groupe radio : les flèches changent de pack, la fiche derrière ne bouge pas.
+            const dir = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : 0;
+            if (!dir) return;
+            e.preventDefault(); e.stopPropagation();
+            const i = (PACKS.findIndex((p) => p.id === pack) + dir + PACKS.length) % PACKS.length;
+            setPack(PACKS[i].id);
+            (e.currentTarget.querySelectorAll('[role="radio"]')[i] as HTMLElement | undefined)?.focus();
+          }}>
           {PACKS.map((p) => (
-            <button key={p.id} role="radio" aria-checked={pack === p.id} onClick={() => setPack(p.id)}
+            <button key={p.id} role="radio" aria-checked={pack === p.id} tabIndex={pack === p.id ? 0 : -1} onClick={() => setPack(p.id)}
               className={cn('flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors',
                 pack === p.id ? 'border-foreground/40 bg-secondary' : 'hover:bg-muted')}>
               <span className={cn('grid size-4 place-items-center rounded-full border', pack === p.id && 'border-foreground')}>

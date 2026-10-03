@@ -53,6 +53,14 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [dark, setDark] = useState(isDark());
   // Sous md, la barre latérale devient un panneau ouvert par le bouton menu.
   const [navOpen, setNavOpen] = useState(false);
+  // Sous md, le panneau fermé est hors écran : on le rend inerte (clavier, lecteurs d'écran).
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const on = () => setIsMobile(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
   useEffect(() => setNavOpen(false), [location.pathname]);
   // Retour de Stripe (achat de crédits) ou de Google (connexion Gmail et Agenda).
   const [googleOpen, setGoogleOpen] = useState(false);
@@ -66,9 +74,37 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       refuse: 'Connexion Google annulée.', expire: 'La connexion Google a expiré. Recommencez.',
       non_configure: "La connexion Google n'est pas encore activée.", erreur: 'La connexion Google a échoué. Réessayez.',
     };
-    if (g === 'ok') { setGoogleOpen(true); supabase.functions.invoke('google-sync', { body: {} }).then(() => data.refresh(['contacts'])); }
-    setCreditsNotice(g ? (GOOGLE[g] ?? GOOGLE.erreur) : q === 'ok' ? 'Paiement reçu. Vos crédits sont ajoutés à votre solde.' : 'Paiement annulé. Aucun montant n’a été débité.');
     window.history.replaceState(null, '', window.location.pathname);
+    if (g === 'finish') {
+      // Retour de Google : la session connectée finalise (le code n'est valable qu'une fois).
+      setCreditsNotice('Connexion de Google en cours…');
+      supabase.functions.invoke('google-oauth', { body: { action: 'finish', code: params.get('code'), state: params.get('state') } })
+        .then(async (res: any) => {
+          if (res.error) {
+            let msg = GOOGLE.erreur;
+            try { const b = await res.error.context?.json?.(); if (b?.error) msg = b.error; } catch { /* corps illisible */ }
+            setCreditsNotice(msg); return;
+          }
+          setCreditsNotice(GOOGLE.ok); setGoogleOpen(true);
+          await supabase.functions.invoke('google-sync', { body: {} }); await data.refresh(['contacts']);
+        });
+      return;
+    }
+    if (q === 'ok') {
+      // Le retour de Stripe ne prouve pas la livraison : on attend que le webhook crédite le solde.
+      setCreditsNotice('Paiement en cours de validation…');
+      (async () => {
+        const since = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+        for (let i = 0; i < 10; i++) {
+          const { count } = await supabase.from('credit_ledger').select('id', { count: 'exact', head: true }).gt('delta', 0).like('reason', 'achat_%').gte('created_at', since);
+          if ((count ?? 0) > 0) { setCreditsNotice('Crédits ajoutés à votre solde.'); window.setTimeout(() => setCreditsNotice(null), 6000); return; }
+          await new Promise((r) => setTimeout(r, 3000));
+        }
+        setCreditsNotice('Paiement reçu. Les crédits apparaîtront dans quelques minutes.');
+      })();
+      return;
+    }
+    setCreditsNotice(g ? (GOOGLE[g] ?? GOOGLE.erreur) : 'Paiement annulé. Aucun montant n’a été débité.');
     const t = window.setTimeout(() => setCreditsNotice(null), 6000);
     return () => window.clearTimeout(t);
   }, []);
@@ -95,7 +131,8 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     <div className="flex h-screen overflow-hidden text-foreground">
       {/* Sidebar — modèle CRM Atlas, 192px, blanche, nav en sections */}
       {navOpen && <div className="fixed inset-0 z-30 bg-black/30 md:hidden" onClick={() => setNavOpen(false)} />}
-      <aside className={cn('fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col overflow-y-auto border-r transition-transform md:static md:w-48 md:translate-x-0',
+      <aside inert={!navOpen && isMobile ? true : undefined}
+        className={cn('fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col overflow-y-auto border-r transition-transform md:static md:w-48 md:translate-x-0',
           navOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full')}
         style={{ background: 'hsl(var(--sidebar-background))', borderColor: 'hsl(var(--sidebar-border))' }}>
         <div className="flex items-center gap-2 px-3.5 pb-2 pt-3.5">

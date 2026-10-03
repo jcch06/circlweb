@@ -39,7 +39,7 @@ serve(async (req) => {
     const rows: any[] = [];
     for (let from = 0; ; from += 1000) {
       let q = db.from("contacts_visible")
-        .select("id, shared_contact_id, first_name, last_name, job_title, company, industry, location, ai_context, skills, last_contacted_at")
+        .select("id, shared_contact_id, first_name, last_name, job_title, company, industry, location, ai_context, skills, last_contacted_at, touched_at")
         .range(from, from + 999);
       if (space_id) q = q.contains("space_ids", [space_id]); // cercle d'origine ou partage
       const { data, error } = await q;
@@ -125,7 +125,7 @@ serve(async (req) => {
       clean(nameById.get(c.id), 80),
       clean(c.job_title, 80), clean(c.company, 80), clean(c.industry, 60), clean(c.location, 60),
       clean((c.skills ?? []).slice(0, 4).join(", "), 120),
-      c.last_contacted_at ? String(c.last_contacted_at).slice(0, 10) : "jamais",
+      (c.touched_at ?? c.last_contacted_at) ? String(c.touched_at ?? c.last_contacted_at).slice(0, 10) : "jamais",
       clean(c.ai_context, 200),
       clean((notesBy.get(c.id) ?? []).join(" / "), 400),
       clean([...(linksBy.get(c.id) ?? [])].slice(0, 5).map((id) => nameById.get(id)).join(", "), 160),
@@ -149,9 +149,7 @@ Règles :
 - « contacts » : les personnes citées, les plus pertinentes d'abord, 40 au maximum. Pour chacune, « why » est une raison courte et factuelle tirée de sa fiche (« Sénateur LR », « chargé d'affaires publiques chez AmCham »), et « group » un intitulé court si tu regroupes (« Parlementaires », « Conseil et lobbying »). Liste vide si la question ne porte pas sur des personnes.
 - Ton sobre, en français, phrases complètes. Pas de tiret cadratin.
 
-<contacts>
-${lines}
-</contacts>`;
+Le carnet de contacts est fourni dans le premier message, entre balises <contacts>.`;
 
     // Historique : les derniers échanges, avec les contacts cités par leur id.
     const nameOf = nameById;
@@ -161,9 +159,19 @@ ${lines}
         ? `${String(m.text ?? "")}${(m.ids ?? []).length ? `\n\nContacts cités : ${(m.ids ?? []).map((id: string, i: number) => `${nameOf.get(id) || clean(m.names?.[i], 80)} (${id})`).join(", ")}` : ""}`
         : String(m.text ?? ""),
     })).filter((m: any) => m.content);
-    const messages = [...past, { role: "user", content: String(question) }];
+    const convo = [...past, { role: "user", content: String(question) }];
     // L'API exige une alternance qui commence par l'utilisateur.
-    while (messages.length && messages[0].role !== "user") messages.shift();
+    while (convo.length && convo[0].role !== "user") convo.shift();
+    // Les fiches sont des données non fiables : elles vont dans un message
+    // utilisateur (mis en cache), jamais dans les consignes système.
+    const first = convo.shift() ?? { role: "user", content: String(question) };
+    const messages: any[] = [
+      { role: "user", content: [
+        { type: "text", text: `<contacts>\n${lines}\n</contacts>`, cache_control: { type: "ephemeral" } },
+        { type: "text", text: String(first.content) },
+      ] },
+      ...convo,
+    ];
 
     const ai = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -172,7 +180,7 @@ ${lines}
         model: "claude-sonnet-5-5",
         max_tokens: 8000,
         // Le carnet est mis en cache : les questions suivantes coûtent et attendent moins.
-        system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+        system,
         messages,
         // Sortie structurée imposée : plus de JSON à extraire d'un texte libre.
         tools: [{

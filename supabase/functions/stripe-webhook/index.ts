@@ -44,7 +44,8 @@ serve(async (req) => {
   try {
     switch (event.type) {
       // Achat de crédits (buy-credits) : crédit idempotent, une fois par session.
-      case "checkout.session.completed": {
+      case "checkout.session.completed":
+      case "checkout.session.async_payment_succeeded": {
         const s = event.data.object as Stripe.Checkout.Session;
         if (s.metadata?.kind !== "credits" || s.payment_status !== "paid") break;
         const credits = Number(s.metadata.credits);

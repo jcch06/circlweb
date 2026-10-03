@@ -175,7 +175,10 @@ export const DataProvider: React.FC<{ session: any; children: React.ReactNode }>
 
   const lastNoteByContact = useMemo(() => {
     const m = new Map<string, string>();
+    // Dernier échange = même définition qu'en base (contacts.touched_at) :
+    // last_contacted_at et dernière note NON privée.
     for (const n of notes) {
+      if (n.is_private) continue;
       const prev = m.get(n.contact_id);
       if (!prev || n.created_at > prev) m.set(n.contact_id, n.created_at);
     }

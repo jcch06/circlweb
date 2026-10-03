@@ -3,7 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Connexion Google (Gmail en lecture des métadonnées, Agenda en lecture).
 //   POST { action: 'start' } avec la session de l'utilisateur -> { url } de consentement Google
-//   GET  ?code&state (retour de Google, sans session)      -> jeton chiffré dans Vault, retour vers Circl
+//   GET  ?code&state (retour de Google, sans session)      -> renvoi vers Circl, sans rien stocker
+//   POST { action: 'finish', code, state } avec la session -> jeton chiffré dans Vault
 // Le paramètre state est signé (HMAC) : il porte l'utilisateur, l'origine et
 // une expiration de 10 minutes. Déployée sans vérification JWT (retour Google).
 // Secrets requis : GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET. URI de redirection
@@ -38,6 +39,7 @@ async function hmac(data: string) {
   return b64url(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data)));
 }
 const back = (origin: string, status: string) => Response.redirect(`${origin}/?google=${status}`, 302);
+// Les tentatives (oauth_attempts) sont à usage unique et valables 10 minutes.
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
@@ -45,35 +47,17 @@ serve(async (req) => {
     return req.method === "GET" ? back(ORIGINS[0], "non_configure") : json({ error: "Connexion Google non configurée" }, 503);
   }
 
-  // ---- Retour de Google ----
+  // ---- Retour de Google : rien n'est stocké ici. Le code repart vers Circl,
+  // où la session de l'utilisateur finalise (action 'finish') : le compte
+  // Google n'est rattaché qu'au navigateur connecté qui a lancé la tentative.
   if (req.method === "GET") {
     const url = new URL(req.url);
     const state = url.searchParams.get("state") ?? "";
-    const [payload, sig] = state.split(".");
     let origin = ORIGINS[0];
-    try {
-      if (!payload || !sig || (await hmac(payload)) !== sig) return back(origin, "erreur");
-      const st = JSON.parse(fromB64url(payload));
-      origin = ORIGINS.includes(st.o) ? st.o : ORIGINS[0];
-      if (Date.now() > st.exp) return back(origin, "expire");
-      const code = url.searchParams.get("code");
-      if (!code) return back(origin, "refuse");
-
-      const tok = await fetch("https://oauth2.googleapis.com/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ code, client_id: CLIENT_ID, client_secret: CLIENT_SECRET, redirect_uri: REDIRECT_URI, grant_type: "authorization_code" }),
-      });
-      const t = await tok.json();
-      if (!tok.ok || !t.refresh_token) return back(origin, "erreur");
-      const email = (() => { try { return JSON.parse(fromB64url(t.id_token.split(".")[1])).email ?? null; } catch { return null; } })();
-      const admin = createClient(SUPABASE_URL, SERVICE_KEY);
-      const { error } = await admin.rpc("google_store_token", { p_user: st.u, p_token: t.refresh_token, p_email: email, p_scopes: t.scope ?? SCOPES });
-      if (error) return back(origin, "erreur");
-      return back(origin, "ok");
-    } catch {
-      return back(origin, "erreur");
-    }
+    try { origin = ORIGINS.find((o) => o === JSON.parse(fromB64url(state.split(".")[0])).o) ?? ORIGINS[0]; } catch { /* state illisible */ }
+    const code = url.searchParams.get("code");
+    if (!code) return back(origin, "refuse");
+    return Response.redirect(`${origin}/?google=finish&code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`, 302);
   }
 
   // ---- Démarrage, depuis Circl ----
@@ -82,8 +66,37 @@ serve(async (req) => {
   const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } });
   const { data: { user } } = await db.auth.getUser();
   if (!user) return json({ error: "Unauthorized" }, 401);
+  const admin = createClient(SUPABASE_URL, SERVICE_KEY);
+  const body = await req.json().catch(() => ({}));
+
+  // ---- Finalisation, avec la session : vérifie signature, expiration,
+  // utilisateur et usage unique de la tentative, puis stocke le jeton.
+  if (body.action === "finish") {
+    const [payload, sig] = String(body.state ?? "").split(".");
+    if (!payload || !sig || (await hmac(payload)) !== sig) return json({ error: "Tentative de connexion invalide." }, 400);
+    const st = JSON.parse(fromB64url(payload));
+    if (Date.now() > st.exp) return json({ error: "La connexion a expiré. Recommencez." }, 400);
+    if (st.u !== user.id) return json({ error: "Cette connexion a été lancée par un autre compte." }, 403);
+    const { data: used } = await admin.from("oauth_attempts").update({ used_at: new Date().toISOString() })
+      .eq("nonce", st.n).eq("user_id", user.id).is("used_at", null).gte("created_at", new Date(Date.now() - 10 * 60 * 1000).toISOString()).select("nonce");
+    if (!used?.length) return json({ error: "Tentative déjà utilisée ou inconnue. Recommencez." }, 400);
+    const tok = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ code: String(body.code ?? ""), client_id: CLIENT_ID, client_secret: CLIENT_SECRET, redirect_uri: REDIRECT_URI, grant_type: "authorization_code" }),
+    });
+    const t = await tok.json();
+    if (!tok.ok || !t.refresh_token) return json({ error: "Google n'a pas confirmé l'autorisation. Recommencez." }, 502);
+    const email = (() => { try { return JSON.parse(fromB64url(t.id_token.split(".")[1])).email ?? null; } catch { return null; } })();
+    const { error } = await admin.rpc("google_store_token", { p_user: user.id, p_token: t.refresh_token, p_email: email, p_scopes: t.scope ?? SCOPES });
+    if (error) return json({ error: "Le jeton n'a pas pu être enregistré." }, 500);
+    return json({ ok: true, email });
+  }
+
   const origin = ORIGINS.find((o) => o === req.headers.get("origin")) ?? ORIGINS[0];
-  const payload = b64url(new TextEncoder().encode(JSON.stringify({ u: user.id, o: origin, exp: Date.now() + 10 * 60 * 1000, n: crypto.randomUUID() })));
+  const { data: attempt, error: attErr } = await admin.from("oauth_attempts").insert({ user_id: user.id }).select("nonce").single();
+  if (attErr) return json({ error: attErr.message }, 500);
+  const payload = b64url(new TextEncoder().encode(JSON.stringify({ u: user.id, o: origin, exp: Date.now() + 10 * 60 * 1000, n: attempt.nonce })));
   const state = `${payload}.${await hmac(payload)}`;
   const params = new URLSearchParams({
     client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, response_type: "code", scope: SCOPES,

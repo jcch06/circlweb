@@ -94,6 +94,8 @@ export const ContactDrawer: React.FC<{
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
       if (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT') return;
+      // Une fenêtre ouverte par-dessus la fiche (crédits, suppression…) garde ses touches.
+      if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) return;
       if (e.key === 'Escape') {
         if (stack.length > 0) { const prev = stack[stack.length - 1]; setStack((s) => s.slice(0, -1)); onNavigate(prev); }
         else onClose();
@@ -125,18 +127,27 @@ export const ContactDrawer: React.FC<{
   })), [data.pipelineItems, data.pipelines, data.pipelineStages, contactId]);
 
   // Suivi LinkedIn (cron quotidien) : lu sur la fiche brute, absent de la vue masquée.
-  const [followLinkedin, setFollowLinkedin] = useState(false);
+  // null = selon les tags VIP / À suivre ; true / false = choix explicite, prioritaire.
+  const [followLinkedin, setFollowLinkedin] = useState<boolean | null>(null);
+  // Droit de modifier la fiche (propriétaire ou admin de son cercle) et partages connus.
+  const [canEdit, setCanEdit] = useState(IS_MOCK);
+  const [shares, setShares] = useState<{ space_id: string; shared_by: string }[] | null>(null);
   useEffect(() => {
     if (IS_MOCK) return;
     supabase.from('contacts').select('follow_linkedin').eq('id', contactId).maybeSingle()
-      .then(({ data: row }) => setFollowLinkedin(Boolean(row?.follow_linkedin)));
+      .then(({ data: row }) => setFollowLinkedin(row?.follow_linkedin ?? null));
+    supabase.rpc('can_edit_contact', { p_contact: contactId }).then(({ data: ok }) => setCanEdit(ok === true));
+    supabase.from('contact_shares').select('space_id, shared_by').eq('contact_id', contactId)
+      .then(({ data: rows }) => setShares(rows ?? []));
   }, [contactId]);
-  const toggleFollow = async (on: boolean) => {
+  const toggleFollow = async (on: boolean, viaTag: boolean) => {
+    const before = followLinkedin;
     setFollowLinkedin(on);
     if (IS_MOCK) return;
     const { error } = await supabase.from('contacts').update({ follow_linkedin: on }).eq('id', contactId);
-    if (error) { setFollowLinkedin(!on); toast(`Réglage impossible : ${error.message}`); return; }
-    toast(on ? 'Circl vérifiera son poste chaque semaine et vous préviendra en cas de changement.' : 'Suivi LinkedIn arrêté.');
+    if (error) { setFollowLinkedin(before); toast(`Réglage impossible : ${error.message}`); return; }
+    toast(on ? 'Circl vérifiera son poste chaque semaine et vous préviendra en cas de changement.'
+      : viaTag ? 'Suivi LinkedIn arrêté pour ce contact, malgré son tag de suivi.' : 'Suivi LinkedIn arrêté.');
   };
 
   // Reprise d'une recherche FullEnrich lancée plus tôt (page rechargée, fiche refermée).
@@ -153,6 +164,7 @@ export const ContactDrawer: React.FC<{
   const touch = lastTouch(contact, data.lastNoteByContact.get(contactId));
   const status = relStatus(touch);
   const tags = data.tagsByContact.get(contactId) ?? [];
+  const trackTag = tags.some((t: any) => ['vip', 'à suivre', 'a suivre'].includes(String(t.name ?? '').toLowerCase()));
   // Fiche verrouillée : la vue contacts_visible le dit directement.
   const locked = contact.is_unlocked === false;
   const noteCount = (data.notesByContact.get(contactId) ?? []).length;
@@ -176,9 +188,13 @@ export const ContactDrawer: React.FC<{
     await data.refresh(confirm ? ['updates', 'contacts'] : ['updates']);
   };
 
-  // Partage par référence : la fiche reste dans son cercle d'origine.
-  const sharedWith = (contact.space_ids ?? []).filter((id: string) => id !== contact.space_id).map((id: string) => data.spaceById.get(id)).filter(Boolean);
-  const shareTargets = data.spaces.filter((sp) => sp.type !== 'personal' && sp.id !== contact.space_id && !(contact.space_ids ?? []).includes(sp.id));
+  // Partage par référence : la fiche reste dans son cercle d'origine. Le
+  // propriétaire voit tous les partages, y compris vers des cercles dont il
+  // n'est pas membre (« un cercle d'un collègue »).
+  const shareIds: string[] = shares ? shares.map((x) => x.space_id) : (contact.space_ids ?? []).filter((id: string) => id !== contact.space_id);
+  const sharedWith = shareIds.map((id) => data.spaceById.get(id) ?? { id, name: 'Un cercle d’un collègue', type: 'team' });
+  const canUnshare = (spaceId: string) => canEdit || shares?.find((x) => x.space_id === spaceId)?.shared_by === data.user?.id;
+  const shareTargets = canEdit ? data.spaces.filter((sp) => sp.type !== 'personal' && sp.id !== contact.space_id && !shareIds.includes(sp.id)) : [];
   const share = async (spaceId: string) => {
     const next = [...new Set([...(contact.space_ids ?? [contact.space_id]), spaceId])];
     patchLocal({ space_ids: next });
@@ -186,15 +202,21 @@ export const ContactDrawer: React.FC<{
     const { error } = await supabase.from('contact_shares').insert({ contact_id: contactId, space_id: spaceId, shared_by: data.user?.id });
     if (error && error.code !== '23505') { patchLocal({ space_ids: contact.space_ids }); toast(`Partage impossible : ${error.message}`); return; }
     data.patchContact(contactId, { space_ids: next });
+    setShares((sh) => (sh ? [...sh, { space_id: spaceId, shared_by: data.user?.id }] : sh));
     toast(`Partagé avec ${data.spaceById.get(spaceId)?.name ?? 'ce cercle'}.`);
   };
   const unshare = async (spaceId: string) => {
     const next = (contact.space_ids ?? []).filter((id: string) => id !== spaceId);
     patchLocal({ space_ids: next });
     if (IS_MOCK) return;
-    const { error } = await supabase.from('contact_shares').delete().eq('contact_id', contactId).eq('space_id', spaceId);
-    if (error) { patchLocal({ space_ids: contact.space_ids }); toast(`Retrait impossible : ${error.message}`); return; }
+    const { data: gone, error } = await supabase.from('contact_shares').delete().eq('contact_id', contactId).eq('space_id', spaceId).select('space_id');
+    if (error || !gone?.length) {
+      patchLocal({ space_ids: contact.space_ids });
+      toast(error ? `Retrait impossible : ${error.message}` : 'Seuls le propriétaire de la fiche et l’auteur du partage peuvent le retirer.');
+      return;
+    }
     data.patchContact(contactId, { space_ids: next });
+    setShares((sh) => (sh ? sh.filter((x) => x.space_id !== spaceId) : sh));
     toast(`Partage avec ${data.spaceById.get(spaceId)?.name ?? 'ce cercle'} retiré.`);
   };
 
@@ -204,8 +226,11 @@ export const ContactDrawer: React.FC<{
     toast(`${contact.first_name} déplacé vers ${data.spaceById.get(spaceId)?.name ?? 'ce cercle'}.`);
     if (IS_MOCK) return;
     const { error } = await supabase.from('contacts').update({ space_id: spaceId }).eq('id', contactId);
-    if (error) { toast(`Déplacement impossible : ${error.message}`); return; }
-    data.patchContact(contactId, { space_id: spaceId });
+    if (error) { patchLocal({ space_id: contact.space_id }); toast(`Déplacement impossible : ${error.message}`); return; }
+    // Le cercle d'origine change aussi dans la liste des cercles visibles.
+    const space_ids = [...new Set([...(contact.space_ids ?? []).filter((id: string) => id !== contact.space_id), spaceId])];
+    patchLocal({ space_ids });
+    data.patchContact(contactId, { space_id: spaceId, space_ids });
   };
 
   const requestAccess = async () => {
@@ -393,7 +418,7 @@ export const ContactDrawer: React.FC<{
                   <a href={contact.linkedin.startsWith('http') ? contact.linkedin : `https://${contact.linkedin}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[13px] hover:underline"><Link2 size={12} className="text-muted-foreground" />Profil</a>
                   {!locked && (
                     <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
-                      <input type="checkbox" checked={followLinkedin} onChange={(e) => toggleFollow(e.target.checked)} className="size-3.5 accent-foreground" />
+                      <input type="checkbox" checked={followLinkedin ?? trackTag} onChange={(e) => toggleFollow(e.target.checked, trackTag)} className="size-3.5 accent-foreground" />
                       Suivre ses changements de poste
                     </label>
                   )}
@@ -433,7 +458,7 @@ export const ContactDrawer: React.FC<{
                 {sharedWith.map((sp: any) => (
                   <span key={sp.id} className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-2 py-0.5 text-xs">
                     <span className="size-1.5 rounded-full" style={{ background: circleColor(sp) }} />{sp.name}
-                    {!locked && <button aria-label={`Retirer le partage avec ${sp.name}`} onClick={() => unshare(sp.id)} className="text-muted-foreground hover:text-foreground"><X size={11} /></button>}
+                    {!locked && canUnshare(sp.id) && <button aria-label={`Retirer le partage avec ${sp.name}`} onClick={() => unshare(sp.id)} className="text-muted-foreground hover:text-foreground"><X size={11} /></button>}
                   </span>
                 ))}
                 {shareTargets.length > 0 && !locked && (

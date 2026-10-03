@@ -72,6 +72,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (err) {
     console.warn('[notify-digest] track-linkedin', (err as Error).message);
   }
+  // Recherches d'email ou de téléphone que personne n'a suivies jusqu'au bout : clôture serveur.
+  try {
+    await fetch(`${SUPABASE_URL}/functions/v1/find-contact-info`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, 'Content-Type': 'application/json' },
+      body: '{}',
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch (err) {
+    console.warn('[notify-digest] find-contact-info sweep', (err as Error).message);
+  }
   // Gmail et Agenda des comptes connectés : le dernier échange est à jour avant le digest.
   try {
     await fetch(`${SUPABASE_URL}/functions/v1/google-sync`, {

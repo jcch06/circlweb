@@ -7,7 +7,7 @@ import { fullName, relativeFR } from './format';
 
 // Suivi des introductions envoyées : réponse reçue, intro faite, sans suite.
 // Une intro envoyée devient une relance à J+7 si rien ne bouge.
-type Row = { id: string; from_contact_id: string; to_contact_id: string; status: string; sent_at: string | null; resolved_at: string | null; replied_at: string | null; done_at: string | null };
+type Row = { id: string; from_contact_id: string; to_contact_id: string; status: string; sent_at: string | null; resolved_at: string | null; replied_at: string | null; done_at: string | null; follow_up_id: string | null };
 const OPEN = ['sent', 'replied'];
 const LABEL: Record<string, string> = { sent: 'Envoyée', replied: 'Réponse reçue', done: 'Intro faite', no_reply: 'Sans suite' };
 
@@ -19,7 +19,7 @@ export const IntroTracker: React.FC<{ reloadKey?: number }> = ({ reloadKey }) =>
 
   useEffect(() => {
     if (IS_MOCK) return;
-    supabase.from('intro_suggestions').select('id, from_contact_id, to_contact_id, status, sent_at, resolved_at, replied_at, done_at')
+    supabase.from('intro_suggestions').select('id, from_contact_id, to_contact_id, status, sent_at, resolved_at, replied_at, done_at, follow_up_id')
       .in('status', ['sent', 'replied', 'done', 'no_reply']).order('resolved_at', { ascending: false }).limit(500)
       .then(({ data: r }) => setRows((r ?? []) as Row[]));
   }, [reloadKey]);
@@ -38,7 +38,13 @@ export const IntroTracker: React.FC<{ reloadKey?: number }> = ({ reloadKey }) =>
     if (status === 'done') { patch.done_at = now; patch.replied_at = r.replied_at ?? now; }
     setRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, ...patch } as Row : x)));
     const { error: e } = await supabase.from('intro_suggestions').update(patch).eq('id', r.id);
-    if (e) setError(`Mise à jour impossible : ${e.message}`);
+    if (e) { setError(`Mise à jour impossible : ${e.message}`); return; }
+    // La relance « Vérifier l'intro » n'a plus d'objet : elle est close.
+    if (r.follow_up_id) {
+      const { error: e2 } = await supabase.from('follow_ups').update({ status: status === 'no_reply' ? 'dismissed' : 'done' }).eq('id', r.follow_up_id).eq('status', 'pending');
+      if (e2) setError(`La relance liée n'a pas pu être close : ${e2.message}`);
+      else await data.refresh(['followUps']);
+    }
   };
 
   if (rows.length === 0) return null;

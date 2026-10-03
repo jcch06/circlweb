@@ -1,9 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUp, Sparkles } from 'lucide-react';
 import { useData } from '../data';
 import { Avatar } from '../ui/Bits';
 import { ContactDrawer } from '../ui/ContactDrawer';
-import { fullName } from '../ui/format';
+import { fullName, inCircle } from '../ui/format';
 import { askNetwork } from '../lib/askNetwork';
 import { supabase } from '../lib/supabase';
 import { IS_MOCK } from '../lib/mode';
@@ -28,6 +28,13 @@ export const DemanderPage: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  // Périmètre annoncé = périmètre envoyé : cercle choisi, une personne par fiche.
+  const scopeCount = useMemo(() => {
+    const seen = new Set<string>();
+    for (const c of data.contacts) if (inCircle(c, data.selectedSpaceId)) seen.add(c.shared_contact_id ?? c.id);
+    return seen.size;
+  }, [data.contacts, data.selectedSpaceId]);
+  const scopeName = data.selectedSpaceId ? data.spaceById.get(data.selectedSpaceId)?.name : null;
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs]);
   useEffect(() => { embedInBackground(); }, []);
@@ -41,7 +48,7 @@ export const DemanderPage: React.FC = () => {
     if (IS_MOCK) {
       await new Promise((r) => setTimeout(r, 350));
       const res = askNetwork(q, {
-        contacts: data.contacts, notesByContact: data.notesByContact,
+        contacts: data.contacts.filter((c) => inCircle(c, data.selectedSpaceId)), notesByContact: data.notesByContact,
         tagsByContact: data.tagsByContact, lastNoteByContact: data.lastNoteByContact,
       });
       setMsgs((m) => [...m, { role: 'assistant', text: res.response, ids: res.contact_ids }]);
@@ -93,7 +100,7 @@ export const DemanderPage: React.FC = () => {
           <div className="mb-6 text-center">
             <div className="mx-auto mb-3 grid size-10 place-items-center rounded-xl bg-secondary"><Sparkles size={18} /></div>
             <h2 className="text-[20px] font-semibold tracking-tight">Demandez à votre réseau</h2>
-            <p className="mt-1 text-[13px] text-muted-foreground">Circl cherche dans vos {data.contacts.length.toLocaleString('fr-FR')} contacts, leurs notes et leurs parcours.</p>
+            <p className="mt-1 text-[13px] text-muted-foreground">Circl cherche dans vos {scopeCount.toLocaleString('fr-FR')} contacts{scopeName ? ` du cercle ${scopeName}` : ''}, leurs notes et leurs liens.</p>
           </div>
           {composer}
           <div className="mt-4 flex flex-wrap justify-center gap-2">

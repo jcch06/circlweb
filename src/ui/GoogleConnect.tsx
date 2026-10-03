@@ -59,7 +59,7 @@ export const GoogleConnect: React.FC<{ onClose: () => void; onSynced?: () => voi
             Circl repère vos échanges avec vos contacts : qui vous a écrit, à qui vous avez écrit, qui était à vos rendez-vous. Il met à jour le dernier échange de chaque fiche, sans saisie.
           </p>
           <p className="leading-relaxed text-muted-foreground">
-            Circl ne lit jamais le contenu de vos emails : seulement l'expéditeur, les destinataires et la date. Ces échanges ne sont visibles que par vous.
+            Circl ne lit jamais le contenu de vos emails : seulement l'expéditeur, les destinataires et la date. Le détail de ces échanges n'est visible que par vous. Seule la date du dernier échange est mise à jour sur vos propres fiches, et les membres des cercles qui voient ces fiches la voient aussi.
           </p>
           {conn === undefined ? null : conn ? (
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[13px]">

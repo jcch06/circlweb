@@ -14,7 +14,6 @@ const FULLENRICH_API_KEY = Deno.env.get("FULLENRICH_API_KEY");
 const FE = "https://app.fullenrich.com/api/v2/contact/enrich/bulk";
 const COST: Record<string, number> = { email: 1, phone: 10 };
 const BAD_EMAIL = new Set(["INVALID", "INVALID_DOMAIN"]);
-const JOB_TTL_MS = 30 * 60 * 1000; // au-delà, une recherche non aboutie est close sans débit
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -24,11 +23,66 @@ const cors = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
+// Fait avancer une recherche : interroge le fournisseur, puis clôt en une
+// seule transaction SQL (débit, écriture de la fiche, état final). Utilisé
+// par le suivi du client et par le balayage quotidien du cron.
+const JOB_EXPIRE_MS = 2 * 60 * 60 * 1000;
+async function advance(admin: any, job: any): Promise<{ status: string; value?: string | null; error?: string | null }> {
+  if (!["pending", "finalizing"].includes(job.status)) return { status: job.status, value: job.value, error: job.error };
+  const age = Date.now() - new Date(job.created_at).getTime();
+  const expire = async () => {
+    const error = "La recherche n'a pas abouti. Aucun crédit utilisé.";
+    await admin.from("enrichment_jobs").update({ status: "error", error, finished_at: new Date().toISOString() }).eq("id", job.id).in("status", ["pending", "finalizing"]);
+    return { status: "error", error };
+  };
+  if (!job.enrichment_id) return age > 5 * 60 * 1000 ? expire() : { status: "pending" };
+  const res = await fetch(`${FE}/${job.enrichment_id}`, { headers: { Authorization: `Bearer ${FULLENRICH_API_KEY}` } }).catch(() => null);
+  if (!res || !res.ok) return age > JOB_EXPIRE_MS ? expire() : { status: "pending" };
+  const result = await res.json();
+  if (result.status !== "FINISHED") {
+    if (["CANCELED", "CREDITS_INSUFFICIENT", "UNKNOWN"].includes(result.status)) {
+      const error = result.status === "CREDITS_INSUFFICIENT" ? "Le service d'enrichissement est momentanément indisponible. Aucun crédit utilisé." : `FullEnrich : ${result.status}`;
+      await admin.from("enrichment_jobs").update({ status: "error", error, finished_at: new Date().toISOString() }).eq("id", job.id).in("status", ["pending", "finalizing"]);
+      return { status: "error", error };
+    }
+    return age > JOB_EXPIRE_MS ? expire() : { status: "pending" };
+  }
+  const info = result.data?.[0]?.contact_info ?? {};
+  let value: string | null = null;
+  if (job.kind === "email") {
+    const best = info.most_probable_work_email ?? info.most_probable_personal_email;
+    if (best?.email && !BAD_EMAIL.has(best.status)) value = best.email;
+  } else {
+    value = info.most_probable_phone?.number ?? null;
+  }
+  const { data: status, error } = await admin.rpc("finalize_enrichment_job", { p_job: job.id, p_value: value });
+  if (error) {
+    // La transaction a été annulée : rien n'est débité.
+    const msg = "La fiche n'a pas pu être mise à jour (valeur déjà utilisée par une autre fiche ?). Aucun crédit utilisé.";
+    await admin.from("enrichment_jobs").update({ status: "error", error: msg, finished_at: new Date().toISOString() }).eq("id", job.id);
+    return { status: "error", error: msg };
+  }
+  return { status: status === "found" ? "found" : status, value: status === "found" ? value : null };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return json({ error: "Unauthorized" }, 401);
+    // Balayage quotidien (cron, clé service-role) : clôt les recherches que
+    // personne n'a suivies jusqu'au bout.
+    const bearer = authHeader.replace(/^Bearer\s+/i, "");
+    const secretKeys = (() => { try { return Object.values(JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}")) as string[]; } catch { return []; } })();
+    if (bearer === SERVICE_KEY || secretKeys.includes(bearer)) {
+      if (!FULLENRICH_API_KEY) return json({ swept: 0 });
+      const svc = createClient(SUPABASE_URL, SERVICE_KEY);
+      const { data: jobs } = await svc.from("enrichment_jobs").select("*").in("status", ["pending", "finalizing"])
+        .lt("created_at", new Date(Date.now() - 60 * 1000).toISOString()).limit(50);
+      const out = [];
+      for (const j of jobs ?? []) out.push((await advance(svc, j)).status);
+      return json({ swept: out.length, statuses: out });
+    }
     const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } });
     const { data: { user }, error: authError } = await userClient.auth.getUser();
     if (authError || !user) return json({ error: "Unauthorized" }, 401);
@@ -46,68 +100,8 @@ serve(async (req) => {
     if (body.job_id) {
       const { data: job } = await admin.from("enrichment_jobs").select("*").eq("id", body.job_id).eq("user_id", user.id).maybeSingle();
       if (!job) return json({ error: "Recherche introuvable" }, 404);
-      if (job.status === "finalizing") return json({ status: "pending", balance: await getBalance() });
-      if (job.status !== "pending") return json({ status: job.status, value: job.value, error: job.error, balance: await getBalance() });
-      if (Date.now() - new Date(job.created_at).getTime() > JOB_TTL_MS) {
-        const error = "La recherche n'a pas abouti à temps. Aucun crédit utilisé.";
-        await admin.from("enrichment_jobs").update({ status: "error", error, finished_at: new Date().toISOString() }).eq("id", job.id).eq("status", "pending");
-        return json({ status: "error", error, balance: await getBalance() });
-      }
-
-      const res = await fetch(`${FE}/${job.enrichment_id}`, { headers: { Authorization: `Bearer ${FULLENRICH_API_KEY}` } });
-      if (!res.ok) return json({ status: "pending", balance: await getBalance() });
-      const result = await res.json();
-      if (result.status !== "FINISHED") {
-        if (["CANCELED", "CREDITS_INSUFFICIENT", "UNKNOWN"].includes(result.status)) {
-          const error = result.status === "CREDITS_INSUFFICIENT" ? "Le service d'enrichissement est momentanément indisponible." : `FullEnrich : ${result.status}`;
-          await admin.from("enrichment_jobs").update({ status: "error", error, finished_at: new Date().toISOString() }).eq("id", job.id).eq("status", "pending");
-          return json({ status: "error", error, balance: await getBalance() });
-        }
-        return json({ status: "pending", balance: await getBalance() });
-      }
-
-      const info = result.data?.[0]?.contact_info ?? {};
-      let value: string | null = null;
-      if (job.kind === "email") {
-        const best = info.most_probable_work_email ?? info.most_probable_personal_email;
-        if (best?.email && !BAD_EMAIL.has(best.status)) value = best.email;
-      } else {
-        value = info.most_probable_phone?.number ?? null;
-      }
-
-      // Clôture atomique : un seul appel passe le job en « finalizing », donc
-      // un seul débit. Ordre : débit, écriture de la fiche, puis « found » ;
-      // si l'écriture échoue, le crédit est rendu.
-      // ponytail: un crash entre « finalizing » et « found » laisse le job en
-      // l'état (rare) ; un balayage serveur des finalizing anciens le rattrapera si besoin.
-      const finish = (patch: Record<string, unknown>) =>
-        admin.from("enrichment_jobs").update({ ...patch, finished_at: new Date().toISOString() }).eq("id", job.id);
-      if (!value) {
-        await admin.from("enrichment_jobs").update({ status: "not_found", finished_at: new Date().toISOString() }).eq("id", job.id).eq("status", "pending");
-        return json({ status: "not_found", balance: await getBalance() });
-      }
-      const { data: won } = await admin.from("enrichment_jobs").update({ status: "finalizing" }).eq("id", job.id).eq("status", "pending").select("id");
-      if (!won?.length) return json({ status: "pending", balance: await getBalance() });
-
-      const cost = COST[job.kind];
-      const { data: newBalance } = await admin.rpc("debit_enrichment_credits", {
-        p_user: user.id, p_cost: cost, p_reason: `fullenrich_${job.kind}`, p_contact: job.contact_id,
-      });
-      if (typeof newBalance !== "number" || newBalance < 0) {
-        const error = "Crédits insuffisants";
-        await finish({ status: "error", error });
-        return json({ status: "error", error, balance: await getBalance() });
-      }
-      // Écriture sous les droits de l'appelant (RLS) ; on vérifie qu'une ligne a bien changé.
-      const { data: written } = await userClient.from("contacts").update({ [job.kind]: value }).eq("id", job.contact_id).select("id");
-      if (!written?.length) {
-        await admin.rpc("debit_enrichment_credits", { p_user: user.id, p_cost: -cost, p_reason: `fullenrich_${job.kind}_rembourse`, p_contact: job.contact_id });
-        const error = "La fiche n'a pas pu être mise à jour. Crédit rendu.";
-        await finish({ status: "error", error });
-        return json({ status: "error", error, balance: await getBalance() });
-      }
-      await finish({ status: "found", value });
-      return json({ status: "found", value, balance: newBalance });
+      const r = await advance(admin, job);
+      return json({ ...r, balance: await getBalance() });
     }
 
     // ---- Lancement ----
@@ -139,19 +133,22 @@ serve(async (req) => {
       }
     }
 
-    // Une recherche déjà en cours sur ce contact et ce champ est reprise, pas relancée.
-    const since = new Date(Date.now() - JOB_TTL_MS).toISOString();
-    const { data: active } = await admin.from("enrichment_jobs").select("id")
-      .eq("user_id", user.id).eq("contact_id", contact_id).eq("kind", kind)
-      .in("status", ["pending", "finalizing"]).gte("created_at", since).limit(1).maybeSingle();
-    if (active) return json({ job_id: active.id, status: "pending", balance: await getBalance() });
-
-    // Réservation : les recherches en cours comptent comme déjà dépensées.
-    const balance = await getBalance();
-    const { data: open } = await admin.from("enrichment_jobs").select("kind")
-      .eq("user_id", user.id).in("status", ["pending", "finalizing"]).gte("created_at", since);
-    const reserved = (open ?? []).reduce((n: number, j: { kind: string }) => n + COST[j.kind], 0);
-    if (balance - reserved < cost) return json({ error: "Crédits insuffisants", balance }, 402);
+    // Réservation transactionnelle AVANT l'appel au fournisseur : solde moins
+    // recherches en cours, et une seule recherche active par fiche et par champ.
+    const { data: jobId, error: resErr } = await admin.rpc("reserve_enrichment_job", { p_user: user.id, p_contact: contact_id, p_kind: kind, p_cost: cost });
+    if (resErr) {
+      if (resErr.code === "23505") {
+        const { data: active } = await admin.from("enrichment_jobs").select("id").eq("user_id", user.id).eq("contact_id", contact_id)
+          .eq("kind", kind).in("status", ["pending", "finalizing"]).maybeSingle();
+        return json({ job_id: active?.id, status: "pending", balance: await getBalance() });
+      }
+      if (/insuffisants/i.test(resErr.message)) return json({ error: "Crédits insuffisants", balance: await getBalance() }, 402);
+      return json({ error: resErr.message }, 500);
+    }
+    const fail = async (error: string, status = 502) => {
+      await admin.from("enrichment_jobs").update({ status: "error", error, finished_at: new Date().toISOString() }).eq("id", jobId);
+      return json({ error, balance: await getBalance() }, status);
+    };
 
     const start = await fetch(FE, {
       method: "POST",
@@ -166,19 +163,16 @@ serve(async (req) => {
           enrich_fields: [kind === "email" ? "contact.work_emails" : "contact.phones"],
         }],
       }),
-    });
-    if (!start.ok) {
-      const detail = (await start.text()).slice(0, 300);
-      console.error("FullEnrich start", start.status, detail);
-      return json({ error: `FullEnrich ${start.status} : ${detail}`, balance }, 502);
+    }).catch(() => null);
+    if (!start || !start.ok) {
+      const detail = start ? (await start.text()).slice(0, 300) : "réseau";
+      console.error("FullEnrich start", start?.status, detail);
+      return fail(`FullEnrich ${start?.status ?? ""} : ${detail}`);
     }
     const { enrichment_id } = await start.json();
-    if (!enrichment_id) return json({ error: "FullEnrich : pas d'identifiant d'enrichissement", balance }, 502);
-
-    const { data: job, error: jobError } = await admin.from("enrichment_jobs")
-      .insert({ user_id: user.id, contact_id, kind, enrichment_id }).select("id").single();
-    if (jobError) return json({ error: jobError.message, balance }, 500);
-    return json({ job_id: job.id, status: "pending", balance });
+    if (!enrichment_id) return fail("FullEnrich : pas d'identifiant d'enrichissement");
+    await admin.from("enrichment_jobs").update({ enrichment_id }).eq("id", jobId);
+    return json({ job_id: jobId, status: "pending", balance: await getBalance() });
   } catch (err) {
     return json({ error: (err as Error).message }, 500);
   }

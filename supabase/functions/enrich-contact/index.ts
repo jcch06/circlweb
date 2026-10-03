@@ -50,6 +50,11 @@ serve(async (req) => {
     if (authzError || !allowed) {
       return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
     }
+    // Voir une fiche (partagée par exemple) ne donne pas le droit de la réécrire.
+    const { data: canEdit } = await userClient.rpc("can_edit_contact", { p_contact: contact_id });
+    if (canEdit !== true) {
+      return new Response(JSON.stringify({ error: "Seul le propriétaire de la fiche peut l'enrichir." }), { status: 403 });
+    }
 
     // Fetch the contact
     const { data: contact, error: fetchError } = await supabase

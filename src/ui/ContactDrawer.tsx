@@ -197,17 +197,26 @@ export const ContactDrawer: React.FC<{
     setFinding(kind);
     if (!IS_MOCK) {
       const label = kind === 'email' ? 'Email' : 'Téléphone';
-      const res: any = await supabase.functions.invoke('find-contact-info', { body: { contact_id: contactId, kind } });
-      setFinding(null);
-      if (res.error) {
+      const call = async (body: object) => {
+        const res: any = await supabase.functions.invoke('find-contact-info', { body });
+        if (!res.error) { if (typeof res.data?.balance === 'number') setCredits(res.data.balance); return res.data; }
         let msg = res.error.message ?? 'erreur';
-        try { const body = await res.error.context?.json?.(); if (body?.error) msg = body.error; if (typeof body?.balance === 'number') setCredits(body.balance); } catch { /* corps illisible */ }
-        toast(`Recherche impossible : ${msg}`);
-        return;
+        try { const b = await res.error.context?.json?.(); if (b?.error) msg = b.error; if (typeof b?.balance === 'number') setCredits(b.balance); } catch { /* corps illisible */ }
+        return { status: 'error', error: msg };
+      };
+      // Lancement puis suivi toutes les 4 s, jusqu'à 5 min (waterfall FullEnrich).
+      // ponytail: le suivi s'arrête si la page est rechargée ; le job reste en base.
+      let r = await call({ contact_id: contactId, kind });
+      for (let i = 0; r.status === 'pending' && r.job_id && i < 75; i++) {
+        await new Promise((ok) => setTimeout(ok, 4000));
+        const next = await call({ job_id: r.job_id });
+        r = { ...next, job_id: r.job_id };
       }
-      if (typeof res.data?.balance === 'number') setCredits(res.data.balance);
-      if (!res.data?.value) { toast(`${label} introuvable. Aucun crédit utilisé.`); return; }
-      patchLocal({ [kind]: res.data.value });
+      setFinding(null);
+      if (r.status === 'pending') { toast('La recherche est toujours en cours. Revenez sur la fiche dans quelques minutes.'); return; }
+      if (r.status === 'error') { toast(`Recherche impossible : ${r.error}`); return; }
+      if (!r.value) { toast(`${label} introuvable. Aucun crédit utilisé.`); return; }
+      patchLocal({ [kind]: r.value });
       toast(`${label} trouvé · ${cost} crédit${cost > 1 ? 's' : ''} utilisé${cost > 1 ? 's' : ''}.`);
       await data.refresh();
       return;

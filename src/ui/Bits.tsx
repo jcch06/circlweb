@@ -4,7 +4,10 @@ import { avatarColor, initials, STATUS_META, type RelStatus, dayFR } from './for
 
 /* ============================================================
    Composant 4 : avatar système.
-   Photo sinon initiales sur les 10 couleurs iOS. 24/32/40/56.
+   Initiales sur les 10 couleurs iOS. 24/32/40/56.
+   Les photos ne sont plus affichées : celles issues de l'enrichissement
+   correspondaient trop souvent à la mauvaise personne (03/10/2026).
+   photoUrl reste accepté pour ne pas toucher les appelants.
    ============================================================ */
 export const Avatar: React.FC<{
   name: string;
@@ -13,30 +16,20 @@ export const Avatar: React.FC<{
   photoUrl?: string | null;
   size?: 24 | 32 | 40 | 56;
   locked?: boolean;
-}> = ({ name, firstName, lastName, photoUrl, size = 32, locked }) => {
-  const [broken, setBroken] = useState(false);
+}> = ({ name, firstName, lastName, size = 32, locked }) => {
   const fontSize = size <= 24 ? 9 : size <= 32 ? 11 : size <= 40 ? 13 : 18;
   return (
     <span style={{ position: 'relative', flex: 'none', width: size, height: size, display: 'inline-block' }}>
-      {photoUrl && !broken ? (
-        <img
-          src={photoUrl}
-          alt=""
-          onError={() => setBroken(true)}
-          style={{ width: size, height: size, borderRadius: 999, objectFit: 'cover', display: 'block' }}
-        />
-      ) : (
-        <span
-          style={{
-            width: size, height: size, borderRadius: 999,
-            background: avatarColor(name),
-            display: 'grid', placeItems: 'center',
-            color: '#fff', fontSize, fontWeight: 600,
-          }}
-        >
-          {initials(firstName ?? name.split(' ')[0], lastName ?? name.split(' ')[1])}
-        </span>
-      )}
+      <span
+        style={{
+          width: size, height: size, borderRadius: 999,
+          background: avatarColor(name),
+          display: 'grid', placeItems: 'center',
+          color: '#fff', fontSize, fontWeight: 600,
+        }}
+      >
+        {initials(firstName ?? name.split(' ')[0], lastName ?? name.split(' ')[1])}
+      </span>
       {locked && (
         <span
           style={{

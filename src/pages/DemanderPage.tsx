@@ -18,7 +18,7 @@ const SUGGESTIONS = [
   'Qui est dans la tech à Paris ?',
 ];
 
-type Msg = { role: 'user' | 'assistant'; text: string; ids?: string[] };
+type Msg = { role: 'user' | 'assistant'; text: string; ids?: string[]; why?: Record<string, string> };
 
 export const DemanderPage: React.FC = () => {
   const data = useData();
@@ -47,18 +47,20 @@ export const DemanderPage: React.FC = () => {
       return;
     }
     // IA réelle : ask-network lit vos fiches sous votre session (masquage respecté).
-    const res: any = await supabase.functions.invoke('ask-network', { body: { question: q, space_id: data.selectedSpaceId } });
+    const history = msgs.map(({ role, text, ids }) => ({ role, text, ids }));
+    const res: any = await supabase.functions.invoke('ask-network', { body: { question: q, space_id: data.selectedSpaceId, history } });
     let text: string;
     let ids: string[] = [];
+    const why: Record<string, string> = {};
     if (res.error) {
       let msg = res.error.message ?? 'erreur';
       try { const body = await res.error.context?.json?.(); if (body?.error) msg = body.error; } catch { /* corps illisible */ }
       text = `Je n'ai pas pu interroger votre réseau : ${msg}`;
     } else {
       text = res.data?.response || 'Aucune réponse.';
-      ids = res.data?.contact_ids ?? [];
+      for (const c of res.data?.contacts ?? []) { ids.push(c.id); why[c.id] = c.why; }
     }
-    setMsgs((m) => [...m, { role: 'assistant', text, ids }]);
+    setMsgs((m) => [...m, { role: 'assistant', text, ids, why }]);
     setBusy(false);
   };
 
@@ -107,7 +109,7 @@ export const DemanderPage: React.FC = () => {
             <div key={i} className="self-end rounded-2xl bg-secondary px-4 py-2.5 text-[14px]">{m.text}</div>
           ) : (
             <div key={i}>
-              <p className="text-[14px]">{m.text}</p>
+              <p className="whitespace-pre-wrap text-[14px] leading-relaxed">{m.text}</p>
               {m.ids && m.ids.length > 0 && (
                 <div className="mt-3 overflow-hidden rounded-xl border">
                   {m.ids.map((id) => {
@@ -120,6 +122,7 @@ export const DemanderPage: React.FC = () => {
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-[13px] font-medium">{fullName(c)}</span>
                           <span className="block truncate text-xs text-muted-foreground">{[c.job_title, c.company].filter(Boolean).join(' · ')}</span>
+                          {m.why?.[id] && <span className="mt-0.5 block text-xs leading-snug text-foreground/80">{m.why[id]}</span>}
                         </span>
                       </button>
                     );

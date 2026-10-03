@@ -1,24 +1,37 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Bell, Check, PenLine, Users, Clock, Snowflake } from 'lucide-react';
+import { ArrowRight, Bell, Check, X, PenLine } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useData } from '../data';
 import { useToast } from '../ui/Toast';
-import { Avatar, DecisionPair, DiffLine, SectionLabel } from '../ui/Bits';
+import { Avatar, DiffLine } from '../ui/Bits';
 import { NoteComposer } from '../ui/NoteComposer';
 import { OpportunityCard } from '../ui/OpportunityCard';
 import { deriveIntros, getLatestAnalysis, type MistralPipelineResult } from '../lib/mistral';
 import { fullName, lastTouch, relStatus, relativeFR, dayFR } from '../ui/format';
 import { enablePush, pushSupported } from '../lib/push';
+import { cn } from '../lib/utils';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
-// Accueil (brief 4.1) : la boîte de réception du matin. En moins de 60 s :
-// ce qui attend une décision, qui relancer et pourquoi, ce qui a bougé.
-// Traiter sans quitter l'écran. Le vide est un état sain.
+// Accueil : la boîte de réception du matin. En moins de 60 s : ce qui attend
+// une décision, qui relancer et pourquoi, ce qui a bougé. Traiter sans quitter
+// l'écran. Le vide est un état sain.
 
 const FIELD_LABELS: Record<string, string> = {
   company: 'Entreprise', job_title: 'Poste', industry: 'Secteur',
   location: 'Lieu', linkedin: 'LinkedIn', bio: 'Bio',
 };
+
+const SectionHead: React.FC<{ title: string; count?: number; action?: React.ReactNode }> = ({ title, count, action }) => (
+  <div className="mb-3 flex items-center gap-2">
+    <h2 className="text-sm font-semibold">{title}</h2>
+    {count != null && <span className="text-xs tabular-nums text-muted-foreground">{count}</span>}
+    <span className="flex-1" />
+    {action}
+  </div>
+);
 
 export const HomePage: React.FC = () => {
   const data = useData();
@@ -35,11 +48,6 @@ export const HomePage: React.FC = () => {
     const r = await enablePush(data.user.id);
     toast(r === 'ok' ? 'Rappels activés.' : r === 'denied' ? 'Notifications refusées par le navigateur.' : "Activation impossible sur cet appareil.");
   };
-  // Opportunités de l'Accueil : dérivées de la DERNIÈRE analyse Oracle
-  // enregistrée, exactement comme la page Opportunités (deriveIntros partagé).
-  // Avant, l'Accueil appelait une Edge Function `suggest-intros` distincte
-  // (autre modèle, autre périmètre, aucune persistance) : une paire écartée
-  // dans Opportunités revenait ici, et les cartes n'étaient pas actionnables.
   const [analysis, setAnalysis] = useState<MistralPipelineResult | null>(null);
   const [decided, setDecided] = useState<Set<string>>(new Set());
   const [introsLoaded, setIntrosLoaded] = useState(false);
@@ -49,7 +57,6 @@ export const HomePage: React.FC = () => {
 
   const inSpace = (c: any) => !data.selectedSpaceId || c.space_id === data.selectedSpaceId;
 
-  /* --- À traiter : sommet de la file des mises à jour --- */
   const toProcess = useMemo(
     () => data.pendingUpdates
       .filter((u) => !data.selectedSpaceId || u.space_id === data.selectedSpaceId)
@@ -59,7 +66,6 @@ export const HomePage: React.FC = () => {
   );
   const totalPending = data.pendingUpdates.filter((u) => !data.selectedSpaceId || u.space_id === data.selectedSpaceId).length;
 
-  /* --- À relancer : relances échues d'abord, puis dormants --- */
   const DAY = 86400000;
   const dueFollowUps = useMemo(
     () => data.followUps
@@ -76,7 +82,7 @@ export const HomePage: React.FC = () => {
         return { c, touch, status: relStatus(touch) };
       })
       .filter((x) => x.status === 'due' || x.status === 'dormant')
-      .filter((x) => x.touch)   // les « jamais contactés » ne polluent pas la relance
+      .filter((x) => x.touch)
       .sort((a, b) => (a.touch!.getTime() - b.touch!.getTime()))
       .slice(0, 5),
     [data.contacts, data.lastNoteByContact, data.selectedSpaceId]
@@ -94,14 +100,12 @@ export const HomePage: React.FC = () => {
     [data.contacts, data.lastNoteByContact, data.selectedSpaceId]
   );
 
-  /* --- Rail droit : depuis votre dernière visite --- */
   const recentNotes = useMemo(
     () => data.notes
       .filter((n) => data.contactById.get(n.contact_id) && inSpace(data.contactById.get(n.contact_id)))
       .slice(0, 6),
     [data.notes, data.contactById, data.selectedSpaceId]
   );
-
   const notesThisMonth = useMemo(() => {
     const start = new Date(); start.setDate(1); start.setHours(0, 0, 0, 0);
     return data.notes.filter((n) => new Date(n.created_at) >= start).length;
@@ -112,23 +116,16 @@ export const HomePage: React.FC = () => {
   );
 
   const decide = async (u: any, confirm: boolean) => {
-    const { error } = await supabase.rpc(
-      confirm ? 'confirm_contact_update' : 'dismiss_contact_update',
-      { p_update_id: u.id }
-    );
+    const { error } = await supabase.rpc(confirm ? 'confirm_contact_update' : 'dismiss_contact_update', { p_update_id: u.id });
     if (error) { toast(`Échec : ${error.message}`); return; }
     const c = data.contactById.get(u.contact_id);
     if (confirm && u.field === 'job_title' && c) {
-      toast('Mise à jour appliquée.', {
-        label: `Féliciter ${c.first_name} ?`,
-        onClick: () => { setNoteFor(c.id); },
-      });
+      toast('Mise à jour appliquée.', { label: `Féliciter ${c.first_name} ?`, onClick: () => setNoteFor(c.id) });
     } else {
       toast(confirm ? 'Mise à jour appliquée.' : 'Mise à jour écartée.');
     }
     await data.refresh();
   };
-
   const closeFollowUp = async (f: any) => {
     const now = new Date().toISOString();
     await supabase.from('follow_ups').update({ status: 'done' }).eq('id', f.id);
@@ -136,7 +133,6 @@ export const HomePage: React.FC = () => {
     toast('Relance close.');
     await data.refresh();
   };
-
   const markContacted = async (c: any) => {
     const now = new Date().toISOString();
     const { error } = await supabase.from('contacts').update({ last_contacted_at: now }).eq('id', c.id);
@@ -144,13 +140,11 @@ export const HomePage: React.FC = () => {
     toast(`${c.first_name} marqué comme joint.`);
     await data.refresh();
   };
-
   const loadDecisions = async () => {
     const { data: rows } = await supabase.from('intro_suggestions').select('from_contact_id, to_contact_id');
     setDecided(new Set((rows ?? []).map((r: any) => `${r.from_contact_id}|${r.to_contact_id}`)));
   };
 
-  // Même périmètre que la page Opportunités : null = fusion de tous les cercles.
   useEffect(() => {
     let cancelled = false;
     setIntrosLoaded(false);
@@ -176,36 +170,31 @@ export const HomePage: React.FC = () => {
   const calm = toProcess.length === 0 && dueFollowUps.length === 0 && dormants.length === 0;
   const nextFollowUp = data.followUps[0];
 
+  const stats = [
+    { label: 'Contacts', value: contactsCount, to: '/contacts' },
+    { label: 'À relancer', value: totalDue, to: '/contacts?vue=due', dot: 'bg-hamber-500' },
+    { label: 'À traiter', value: totalPending, to: '/mises-a-jour' },
+    { label: 'En froid', value: enFroid, to: '/contacts?statut=dormant', dot: 'bg-hred-500' },
+  ];
+
   const relanceRow = (c: any, meta: React.ReactNode, action: React.ReactNode, key: string) => {
     const lastNote = (data.notesByContact.get(c.id) ?? [])[0];
     return (
-      <div
-        key={key}
-        onClick={() => navigate(`/contacts/${c.id}`)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
-          borderRadius: 'var(--r-el)', cursor: 'pointer', minHeight: 44,
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--hover)')}
-        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-      >
+      <div key={key} onClick={() => navigate(`/contacts/${c.id}`)}
+        className="group flex min-h-[48px] cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-accent/60">
         <Avatar name={fullName(c)} firstName={c.first_name} lastName={c.last_name} photoUrl={c.photo_url} size={32} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-            <span className="t-name">{fullName(c)}</span>
-            <span className="t-meta" style={{ color: 'var(--mut)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {[c.job_title, c.company].filter(Boolean).join(' · ')}
-            </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-2">
+            <span className="truncate text-sm font-medium">{fullName(c)}</span>
+            <span className="truncate text-xs text-muted-foreground">{[c.job_title, c.company].filter(Boolean).join(' · ')}</span>
           </div>
-          <div className="t-meta" style={{ color: 'var(--mut)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {lastNote ? lastNote.content.slice(0, 60) : meta}
-          </div>
+          <div className="truncate text-xs text-muted-foreground">{lastNote ? lastNote.content.slice(0, 70) : meta}</div>
         </div>
-        {meta && lastNote && <span className="t-meta tnum" style={{ color: 'var(--mut)', flex: 'none' }}>{meta}</span>}
-        <span style={{ display: 'flex', gap: 6, flex: 'none' }} onClick={(e) => e.stopPropagation()}>
-          <button className="btn btn-quiet" style={{ padding: '5px 8px', fontSize: 12.5 }} title="Écrire une note" onClick={() => setNoteFor(c.id)}>
-            <PenLine size={13} /> Noter
-          </button>
+        {meta && lastNote && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{meta}</span>}
+        <span className="flex shrink-0 gap-1" onClick={(e) => e.stopPropagation()}>
+          <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" title="Écrire une note" onClick={() => setNoteFor(c.id)}>
+            <PenLine className="size-3.5" /> Noter
+          </Button>
           {action}
         </span>
       </div>
@@ -213,246 +202,181 @@ export const HomePage: React.FC = () => {
   };
 
   return (
-    <div style={{ height: '100%', overflowY: 'auto' }}>
-      <div style={{ maxWidth: 1060, margin: '0 auto', padding: '24px 24px 60px' }}>
-        {/* En-tête d'une ligne */}
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 20 }}>
-          <h1 className="t-page">Accueil</h1>
-          <span className="t-sec" style={{ color: 'var(--mut)', textTransform: 'capitalize' }}>{today}</span>
-          {activeSpace && (
-            <span className="t-sec" style={{ color: 'var(--mut)' }}>· {activeSpace.name}</span>
-          )}
+    <div className="h-full overflow-y-auto">
+      <div className="mx-auto max-w-5xl px-6 py-8 pb-16">
+        <div className="mb-6 flex items-baseline gap-3">
+          <h1 className="text-[22px] font-medium tracking-tight">Accueil</h1>
+          <span className="text-sm capitalize text-muted-foreground">{today}</span>
+          {activeSpace && <span className="text-sm text-muted-foreground">· {activeSpace.name}</span>}
         </div>
 
-        {/* Rangée d'indicateurs */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 20 }}>
-          <div className="kpi" style={{ cursor: 'pointer' }} onClick={() => navigate('/contacts')}>
-            <div><div className="kpi-lbl">Contacts</div><div className="kpi-val">{contactsCount}</div></div>
-            <div className="kpi-tile" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}><Users size={22} /></div>
-          </div>
-          <div className="kpi" style={{ cursor: 'pointer' }} onClick={() => navigate('/contacts?vue=due')}>
-            <div><div className="kpi-lbl">À relancer</div><div className="kpi-val">{totalDue}</div></div>
-            <div className="kpi-tile" style={{ background: 'var(--status-due-soft)', color: 'var(--status-due)' }}><Clock size={22} /></div>
-          </div>
-          <div className="kpi" style={{ cursor: 'pointer' }} onClick={() => navigate('/mises-a-jour')}>
-            <div><div className="kpi-lbl">À traiter</div><div className="kpi-val">{totalPending}</div></div>
-            <div className="kpi-tile" style={{ background: '#ECECFA', color: 'var(--circle-2)' }}><Bell size={22} /></div>
-          </div>
-          <div className="kpi" style={{ cursor: 'pointer' }} onClick={() => navigate('/contacts?statut=dormant')}>
-            <div><div className="kpi-lbl">En froid · +90j</div><div className="kpi-val">{enFroid}</div></div>
-            <div className="kpi-tile" style={{ background: 'var(--status-dormant-soft)', color: 'var(--status-dormant)' }}><Snowflake size={22} /></div>
-          </div>
-        </div>
+        {/* Indicateurs */}
+        <Card className="mb-5 grid grid-cols-2 divide-border sm:grid-cols-4 sm:divide-x">
+          {stats.map((s) => (
+            <button key={s.label} onClick={() => navigate(s.to)}
+              className="flex flex-col items-start gap-1 px-5 py-4 text-left transition-colors hover:bg-card-hover">
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                {s.dot && <span className={cn('size-1.5 rounded-full', s.dot)} />}{s.label}
+              </span>
+              <span className="text-2xl font-semibold tabular-nums tracking-tight">{s.value}</span>
+            </button>
+          ))}
+        </Card>
 
         {canPromptPush && (
-          <div className="card card-pad" style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20, padding: '14px 18px' }}>
-            <Bell size={18} color="var(--accent)" />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>Activez les rappels</div>
-              <div className="t-sec" style={{ color: 'var(--mut)' }}>Un rappel chaque matin quand des relances vous attendent.</div>
+          <Card className="mb-5 flex items-center gap-3 px-4 py-3">
+            <Bell className="size-4 shrink-0 text-muted-foreground" />
+            <div className="flex-1">
+              <div className="text-sm font-medium">Activez les rappels</div>
+              <div className="text-xs text-muted-foreground">Un rappel chaque matin quand des relances vous attendent.</div>
             </div>
-            <button className="btn btn-quiet" onClick={() => setCanPromptPush(false)}>Plus tard</button>
-            <button className="btn btn-primary" onClick={askPush}>Activer</button>
-          </div>
+            <Button variant="ghost" size="sm" onClick={() => setCanPromptPush(false)}>Plus tard</Button>
+            <Button size="sm" onClick={askPush}>Activer</Button>
+          </Card>
         )}
 
-        <div className="home-grid">
-          {/* Colonne principale */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-
+        <div className="grid items-start gap-5 lg:grid-cols-[1fr_320px]">
+          <div className="flex flex-col gap-5">
             {calm ? (
               contactsCount === 0 ? (
-                <div className="card card-pad" style={{ textAlign: 'center', padding: '44px 24px' }}>
-                  <div className="t-block" style={{ marginBottom: 6 }}>Bienvenue sur Circl</div>
-                  <div className="t-sec" style={{ color: 'var(--mut)', marginBottom: 18 }}>
+                <Card className="px-6 py-11 text-center">
+                  <div className="text-lg font-semibold">Bienvenue sur Circl</div>
+                  <p className="mx-auto mt-1.5 max-w-sm text-sm text-muted-foreground">
                     Votre réseau est vide. Importez vos contacts pour que Circl vous dise qui relancer et qui présenter à qui.
-                  </div>
-                  <button className="btn btn-primary" onClick={() => navigate('/contacts')}>Importer mes contacts</button>
-                </div>
+                  </p>
+                  <Button className="mt-4" onClick={() => navigate('/contacts')}>Importer mes contacts</Button>
+                </Card>
               ) : (
-                <div className="card card-pad" style={{ textAlign: 'center', padding: '40px 20px' }}>
-                  <div className="t-block" style={{ marginBottom: 6 }}>Rien à traiter ce matin</div>
-                  <div className="t-sec" style={{ color: 'var(--mut)' }}>
-                    {nextFollowUp
-                      ? `Prochaine relance planifiée le ${dayFR(nextFollowUp.due_date)}.`
-                      : 'Aucune relance planifiée. Votre réseau est à jour.'}
-                  </div>
-                </div>
+                <Card className="px-5 py-10 text-center">
+                  <div className="text-base font-semibold">Rien à traiter ce matin</div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {nextFollowUp ? `Prochaine relance planifiée le ${dayFR(nextFollowUp.due_date)}.` : 'Aucune relance planifiée. Votre réseau est à jour.'}
+                  </p>
+                </Card>
               )
             ) : (
               <>
-                {/* À traiter */}
                 {toProcess.length > 0 && (
-                  <div className="card card-pad">
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
-                      <SectionLabel style={{ marginBottom: 0 }}>À traiter</SectionLabel>
-                      <span className="t-meta tnum" style={{ color: 'var(--mut)' }}>{totalPending}</span>
-                      <span style={{ flex: 1 }} />
-                      {totalPending > toProcess.length && (
-                        <button className="btn btn-quiet" style={{ padding: '3px 8px', fontSize: 12.5 }} onClick={() => navigate('/mises-a-jour')}>
-                          Voir les {totalPending - toProcess.length} restantes <ArrowRight size={12} />
-                        </button>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <Card className="p-5">
+                    <SectionHead title="À traiter" count={totalPending} action={
+                      totalPending > toProcess.length && (
+                        <Button variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => navigate('/mises-a-jour')}>
+                          Voir les {totalPending - toProcess.length} restantes <ArrowRight className="size-3" />
+                        </Button>
+                      )} />
+                    <div className="flex flex-col gap-1">
                       {toProcess.map((u) => {
                         const c = data.contactById.get(u.contact_id);
                         return (
-                          <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 44 }}>
+                          <div key={u.id} className="flex min-h-[44px] items-center gap-3">
                             <Avatar name={fullName(c)} firstName={c.first_name} lastName={c.last_name} photoUrl={c.photo_url} size={32} />
-                            <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => navigate(`/contacts/${c.id}`)}>
-                              <span className="t-name" style={{ marginRight: 8 }}>{fullName(c)}</span>
-                              {u.field ? (
-                                <DiffLine field={FIELD_LABELS[u.field] ?? u.field} oldValue={u.old_value} newValue={u.new_value ?? ''} />
-                              ) : (
-                                <span className="t-sec" style={{ color: 'var(--ink-2)' }}>{u.summary}</span>
-                              )}
+                            <div className="min-w-0 flex-1 cursor-pointer" onClick={() => navigate(`/contacts/${c.id}`)}>
+                              <span className="mr-2 text-sm font-medium">{fullName(c)}</span>
+                              {u.field
+                                ? <DiffLine field={FIELD_LABELS[u.field] ?? u.field} oldValue={u.old_value} newValue={u.new_value ?? ''} />
+                                : <span className="text-sm text-muted-foreground">{u.summary}</span>}
                             </div>
-                            <DecisionPair onNo={() => decide(u, false)} onYes={() => decide(u, true)} />
+                            <div className="flex shrink-0 gap-1.5">
+                              <Button variant="outline" size="icon" className="size-8" title="Écarter" onClick={() => decide(u, false)}><X className="size-4" /></Button>
+                              <Button size="icon" className="size-8" title="Confirmer" onClick={() => decide(u, true)}><Check className="size-4" /></Button>
+                            </div>
                           </div>
                         );
                       })}
                     </div>
-                  </div>
+                  </Card>
                 )}
 
-                {/* À relancer */}
                 {(dueFollowUps.length > 0 || dormants.length > 0) && (
-                  <div className="card card-pad">
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-                      <SectionLabel style={{ marginBottom: 0 }}>À relancer</SectionLabel>
-                      <button
-                        className="t-meta tnum"
-                        style={{ color: 'var(--mut)', background: 'none', border: 'none', cursor: 'pointer' }}
-                        onClick={() => navigate('/contacts?vue=due')}
-                        title="Voir tous les contacts à relancer"
-                      >
-                        {totalDue}
-                      </button>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <Card className="p-5">
+                    <SectionHead title="À relancer" count={totalDue} action={
+                      <Button variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => navigate('/contacts?vue=due')}>Tout voir <ArrowRight className="size-3" /></Button>
+                    } />
+                    <div className="flex flex-col">
                       {dueFollowUps.map(({ f, c }) =>
-                        relanceRow(
-                          c,
-                          <span className="t-meta tnum" style={{ color: 'var(--orange)', fontWeight: 600 }}>
-                            <Bell size={11} style={{ verticalAlign: -1, marginRight: 3 }} />
-                            {f.label} · {dayFR(f.due_date)}
-                          </span>,
-                          <button className="btn btn-quiet" style={{ padding: '5px 8px', fontSize: 12.5, color: 'var(--accent)' }} onClick={() => closeFollowUp(f)}>
-                            <Check size={13} /> Fait
-                          </button>,
-                          `f-${f.id}`
-                        )
+                        relanceRow(c,
+                          <span className="font-medium text-hamber-500">{f.label} · {dayFR(f.due_date)}</span>,
+                          <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => closeFollowUp(f)}><Check className="size-3.5" /> Fait</Button>,
+                          `f-${f.id}`)
                       )}
-                      {dormants
-                        .filter(({ c }) => !dueFollowUps.some((d) => d.c.id === c.id))
-                        .map(({ c, touch }) =>
-                          relanceRow(
-                            c,
-                            <>{relativeFR(touch!.toISOString())}</>,
-                            <button className="btn btn-quiet" style={{ padding: '5px 8px', fontSize: 12.5, color: 'var(--accent)' }} onClick={() => markContacted(c)}>
-                              <Check size={13} /> Fait
-                            </button>,
-                            `d-${c.id}`
-                          )
-                        )}
+                      {dormants.filter(({ c }) => !dueFollowUps.some((d) => d.c.id === c.id)).map(({ c, touch }) =>
+                        relanceRow(c,
+                          <>{relativeFR(touch!.toISOString())}</>,
+                          <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => markContacted(c)}><Check className="size-3.5" /> Fait</Button>,
+                          `d-${c.id}`)
+                      )}
                     </div>
-                  </div>
+                  </Card>
                 )}
               </>
             )}
 
-            {/* Opportunités : chargées à la demande (coût API) */}
-            <div className="card card-pad">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: intros.length > 0 ? 12 : 0 }}>
-                <SectionLabel style={{ marginBottom: 0 }}>Opportunités</SectionLabel>
-                <span style={{ flex: 1 }} />
-                <button className="btn btn-quiet" style={{ padding: '3px 8px', fontSize: 12.5 }} onClick={() => navigate('/opportunites')}>
-                  Tout voir <ArrowRight size={12} />
-                </button>
-              </div>
+            <Card className="p-5">
+              <SectionHead title="Opportunités" action={
+                <Button variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => navigate('/opportunites')}>Tout voir <ArrowRight className="size-3" /></Button>
+              } />
               {introsLoaded && intros.length === 0 && (
-                <div className="t-sec" style={{ color: 'var(--mut)', marginTop: 8 }}>
-                  {analysis
-                    ? 'Toutes les mises en relation proposées ont été traitées.'
-                    : 'Aucune analyse pour ce périmètre. Lancez-en une depuis Opportunités pour voir qui présenter à qui.'}
-                </div>
+                <p className="text-sm text-muted-foreground">
+                  {analysis ? 'Toutes les mises en relation proposées ont été traitées.' : 'Aucune analyse pour ce périmètre. Lancez-en une depuis Opportunités pour voir qui présenter à qui.'}
+                </p>
               )}
               {intros.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div className="flex flex-col gap-3">
                   {intros.map((i) => (
-                    <OpportunityCard
-                      key={`${i.from_contact_id}|${i.to_contact_id}`}
-                      intro={i}
-                      onResolved={loadDecisions}
-                    />
+                    <OpportunityCard key={`${i.from_contact_id}|${i.to_contact_id}`} intro={i} onResolved={loadDecisions} />
                   ))}
                 </div>
               )}
-            </div>
+            </Card>
           </div>
 
-          {/* Rail droit */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div className="card card-pad" style={{ padding: '14px 16px' }}>
-              <SectionLabel>Depuis votre dernière visite</SectionLabel>
+          {/* Aside */}
+          <div className="flex flex-col gap-4">
+            <Card className="p-4">
+              <h2 className="mb-3 text-sm font-semibold">Depuis votre dernière visite</h2>
               {recentNotes.length === 0 ? (
-                <div className="t-sec" style={{ color: 'var(--mut)' }}>Aucune note récente.</div>
+                <p className="text-sm text-muted-foreground">Aucune note récente.</p>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div className="flex flex-col gap-3">
                   {recentNotes.map((n) => {
                     const c = data.contactById.get(n.contact_id);
                     const space = data.spaceById.get(c.space_id);
                     const shared = space?.type !== 'personal';
                     const mine = n.author_id === data.user?.id;
                     return (
-                      <div key={n.id} style={{ display: 'flex', gap: 8, cursor: 'pointer' }} onClick={() => navigate(`/contacts/${c.id}`)}>
+                      <div key={n.id} className="flex cursor-pointer gap-2.5" onClick={() => navigate(`/contacts/${c.id}`)}>
                         <Avatar name={fullName(c)} firstName={c.first_name} lastName={c.last_name} photoUrl={c.photo_url} size={24} />
-                        <div style={{ minWidth: 0 }}>
-                          <div className="t-meta" style={{ color: 'var(--mut)' }}>
-                            <span style={{ color: 'var(--ink)', fontWeight: 500 }}>{fullName(c)}</span>
-                            {shared && <> · {mine ? 'vous' : 'un membre'}</>}
-                            {' · '}{relativeFR(n.created_at)}
+                        <div className="min-w-0">
+                          <div className="text-xs text-muted-foreground">
+                            <span className="font-medium text-foreground">{fullName(c)}</span>
+                            {shared && <> · {mine ? 'vous' : 'un membre'}</>}{' · '}{relativeFR(n.created_at)}
                           </div>
-                          <div className="t-sec" style={{ color: 'var(--ink-2)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                            {n.content}
-                          </div>
+                          <div className="line-clamp-2 text-sm text-foreground/90">{n.content}</div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
               )}
-            </div>
-
-            {/* Compteurs-liens */}
-            <div className="t-meta tnum" style={{ color: 'var(--mut)', padding: '0 4px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <a style={{ cursor: 'pointer' }} onClick={() => navigate('/contacts')}>
-                {data.contacts.filter(inSpace).length} contacts
-              </a>
+            </Card>
+            <div className="flex flex-wrap gap-1.5 px-1 text-xs text-muted-foreground">
+              <button className="hover:text-foreground" onClick={() => navigate('/contacts')}>{data.contacts.filter(inSpace).length} contacts</button>
               · <span>{notesThisMonth} notes ce mois</span>
-              · <a style={{ cursor: 'pointer' }} onClick={() => navigate('/contacts?vue=not_enriched')}>
-                {incomplete} fiches incomplètes
-              </a>
+              · <button className="hover:text-foreground" onClick={() => navigate('/contacts?vue=not_enriched')}>{incomplete} fiches incomplètes</button>
             </div>
           </div>
         </div>
 
-        {/* Composer pré-ciblé (action « Noter » et « Féliciter ») */}
-        {noteFor && (
-          <div className="modal-scrim" onClick={() => setNoteFor(null)}>
-            <div className="modal" style={{ width: 560 }} onClick={(e) => e.stopPropagation()}>
-              <div className="t-block" style={{ marginBottom: 12 }}>
-                Note sur {fullName(data.contactById.get(noteFor) ?? {})}
-              </div>
-              <NoteComposer
-                contactId={noteFor}
-                contactFirstName={data.contactById.get(noteFor)?.first_name}
-                onSaved={() => setNoteFor(null)}
-              />
-            </div>
-          </div>
-        )}
+        <Dialog open={!!noteFor} onOpenChange={(o) => !o && setNoteFor(null)}>
+          <DialogContent className="sm:max-w-xl">
+            <DialogHeader>
+              <DialogTitle>Note sur {fullName(data.contactById.get(noteFor ?? '') ?? {})}</DialogTitle>
+            </DialogHeader>
+            {noteFor && (
+              <NoteComposer contactId={noteFor} contactFirstName={data.contactById.get(noteFor)?.first_name} onSaved={() => setNoteFor(null)} />
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

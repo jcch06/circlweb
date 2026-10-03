@@ -1,4 +1,95 @@
-@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   MONDE ATLAS (thème app « Pay Smooth »), tokens shadcn.
+   Repris de Hémicycle. Remplace progressivement l'ancien design
+   (classes CSS maison conservées plus bas pour les écrans pas
+   encore migrés ; à retirer une fois la migration finie).
+   ============================================================ */
+@layer base {
+  :root {
+    --h-navy-950: 213 60% 5%;
+    --h-navy-900: 216 55% 10%;
+    --h-navy-800: 215 50% 16%;
+    --h-navy-700: 217 55% 21%;
+    --h-navy-600: 216 55% 27%;
+    --h-navy-500: 216 55% 38%;
+    --h-navy-400: 216 50% 53%;
+    --h-navy-300: 212 60% 67%;
+    --h-navy-200: 212 65% 82%;
+    --h-navy-100: 212 70% 91%;
+    --h-navy-50: 212 75% 96%;
+    --h-gold-500: 0 0% 9%;
+    --h-gold-200: 0 0% 90%;
+    --h-green-500: 146 60% 30%;
+    --h-green-100: 146 34% 92%;
+    --h-red-500: 0 53% 41%;
+    --h-red-100: 0 54% 93%;
+    --h-amber-500: 35 71% 32%;
+    --h-amber-100: 36 62% 92%;
+
+    --background: 0 0% 92%;
+    --foreground: 0 0% 9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 9%;
+    --card-hover: 0 0% 98%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 95%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 94.5%;
+    --muted-foreground: 0 0% 42%;
+    --accent: 0 0% 93.5%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 3 79% 53%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 85.5%;
+    --input: 0 0% 85.5%;
+    --ring: 0 0% 9%;
+    --radius: 0.875rem;
+  }
+
+  .dark {
+    --h-green-100: 146 30% 14%;
+    --h-green-500: 146 45% 68%;
+    --h-red-100: 0 30% 14%;
+    --h-red-500: 0 65% 68%;
+    --h-amber-100: 35 30% 14%;
+    --h-amber-500: 35 65% 68%;
+
+    --background: 0 0% 7%;
+    --foreground: 0 0% 96%;
+    --card: 0 0% 11%;
+    --card-foreground: 0 0% 96%;
+    --card-hover: 0 0% 15%;
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 0 0% 96%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 13%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 0 0% 13%;
+    --muted-foreground: 0 0% 64%;
+    --accent: 0 0% 16%;
+    --accent-foreground: 0 0% 96%;
+    --destructive: 3 74% 57%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 100% / 0.10;
+    --input: 0 0% 100% / 0.12;
+    --ring: 0 0% 100% / 0.28;
+  }
+
+  * { @apply border-border; }
+}
+
+/* ===== Ancien design (classes maison), conservé pour les écrans
+   pas encore migrés sur shadcn. À supprimer en fin de migration. ===== */
 
 /* ============================================================
    CIRCL WEB — DESIGN SYSTEM

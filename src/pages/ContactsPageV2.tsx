@@ -1,27 +1,45 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Plus, Sparkles, Trash2, Layers, Tag as TagIcon, Search, Rows3, Share2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { enrichAndPersistContact } from '../lib/mistral';
 import { useData } from '../data';
 import { useToast } from '../ui/Toast';
-import { Avatar, StatusPill, ConfirmModal, Segmented } from '../ui/Bits';
+import { Avatar, ConfirmModal } from '../ui/Bits';
 import { ContactDrawer } from '../ui/ContactDrawer';
 import { TagsPanel } from '../ui/TagsPanel';
-import { fullName, lastTouch, relStatus, relativeFR, circleColor, STATUS_META, type RelStatus } from '../ui/format';
+import { fullName, lastTouch, relStatus, relativeFR, circleColor, type RelStatus } from '../ui/format';
+import { cn } from '../lib/utils';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
-// Page Contacts (brief 4.2) : l'espace de travail central.
-// Table de travail (composant 1) + vues + bulk + fiche unique.
+// Page Contacts : l'espace de travail central. Table de travail + vues + bulk
+// + fiche. Monde Atlas (shadcn), statut relationnel dérivé.
 
 type ViewKey = 'all' | 'due' | 'not_enriched';
-
 const VIEWS: { key: ViewKey; label: string }[] = [
   { key: 'all', label: 'Tous' },
   { key: 'due', label: 'À relancer' },
   { key: 'not_enriched', label: 'Non enrichis' },
 ];
-
 type SortKey = 'name' | 'company' | 'last';
+
+const STATUS: Record<RelStatus, { label: string; cls: string; dot: string }> = {
+  fresh: { label: 'Actif', cls: 'text-hgreen-500', dot: 'bg-hgreen-500' },
+  due: { label: 'À relancer', cls: 'text-hamber-500', dot: 'bg-hamber-500' },
+  dormant: { label: 'En froid', cls: 'text-hred-500', dot: 'bg-hred-500' },
+  never: { label: 'Jamais contacté', cls: 'text-muted-foreground', dot: 'bg-muted-foreground' },
+};
+const StatusTag: React.FC<{ s: RelStatus }> = ({ s }) => (
+  <span className={cn('inline-flex items-center gap-1.5 text-xs font-medium', STATUS[s].cls)}>
+    <span className={cn('size-1.5 rounded-full', STATUS[s].dot)} />{STATUS[s].label}
+  </span>
+);
 
 export const ContactsPageV2: React.FC = () => {
   const data = useData();
@@ -38,8 +56,6 @@ export const ContactsPageV2: React.FC = () => {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
-  const [circlePicker, setCirclePicker] = useState(false);
-  const [tagPicker, setTagPicker] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showTags, setShowTags] = useState(false);
@@ -54,13 +70,8 @@ export const ContactsPageV2: React.FC = () => {
     setSearchParams(next, { replace: true });
   };
 
-  /* Enrichissement du modèle par ligne : statut, dernier échange, tags, cercle. */
   const rows = useMemo(() => {
-    let base = data.selectedSpaceId
-      ? data.contacts.filter((c) => c.space_id === data.selectedSpaceId)
-      : data.contacts;
-
-    // Dédoublonnage d'affichage par shared_contact_id (multi-cercles, brief 4.0.17)
+    let base = data.selectedSpaceId ? data.contacts.filter((c) => c.space_id === data.selectedSpaceId) : data.contacts;
     if (!data.selectedSpaceId) {
       const seen = new Set<string>();
       base = base.filter((c) => {
@@ -70,35 +81,28 @@ export const ContactsPageV2: React.FC = () => {
         return true;
       });
     }
-
     const q = query.trim().toLowerCase();
     let out = base.map((c) => {
       const touch = lastTouch(c, data.lastNoteByContact.get(c.id));
       return {
-        c,
-        name: fullName(c),
-        touch,
-        status: relStatus(touch),
+        c, name: fullName(c), touch, status: relStatus(touch),
         tags: data.tagsByContact.get(c.id) ?? [],
         space: data.spaceById.get(c.space_id),
         followUp: (data.followUpsByContact.get(c.id) ?? [])[0] ?? null,
         pendingCount: (data.pendingByContact.get(c.id) ?? []).length,
       };
     });
-
     if (q) {
       out = out.filter((r) =>
         r.name.toLowerCase().includes(q) ||
         (r.c.company ?? '').toLowerCase().includes(q) ||
         (r.c.job_title ?? '').toLowerCase().includes(q) ||
-        r.tags.some((t: any) => t.name.toLowerCase().includes(q))
-      );
+        r.tags.some((t: any) => t.name.toLowerCase().includes(q)));
     }
     if (view === 'due') out = out.filter((r) => r.status === 'due' || r.status === 'dormant');
     if (view === 'not_enriched') out = out.filter((r) => !r.c.enriched_at);
     if (statusFilter) out = out.filter((r) => r.status === statusFilter);
     if (tagFilter) out = out.filter((r) => r.tags.some((t: any) => t.id === tagFilter));
-
     const bySort: Record<SortKey, (a: typeof out[0], b: typeof out[0]) => number> = {
       name: (a, b) => a.name.localeCompare(b.name, 'fr'),
       company: (a, b) => (a.c.company ?? '').localeCompare(b.c.company ?? '', 'fr'),
@@ -109,31 +113,30 @@ export const ContactsPageV2: React.FC = () => {
   }, [data, view, query, statusFilter, tagFilter, sort]);
 
   const siblingIds = useMemo(() => rows.map((r) => r.c.id), [rows]);
+  const nbSel = selected.size;
+  const counts = useMemo(() => {
+    const m: Record<RelStatus, number> = { fresh: 0, due: 0, dormant: 0, never: 0 };
+    for (const r of rows) m[r.status]++;
+    return m;
+  }, [rows]);
 
-  /* Sélection en masse */
-  const toggleSelect = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+  const toggleSelect = (id: string) => setSelected((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
 
   const bulkDelete = async () => {
     setBulkBusy(true);
     const ids = [...selected];
     const { error } = await supabase.from('contacts').delete().in('id', ids);
-    setBulkBusy(false);
-    setConfirmBulkDelete(false);
+    setBulkBusy(false); setConfirmBulkDelete(false);
     if (error) { toast(`Suppression impossible : ${error.message}`); return; }
     setSelected(new Set());
     toast(`${ids.length} contact${ids.length > 1 ? 's' : ''} supprimé${ids.length > 1 ? 's' : ''}.`);
     await data.refresh();
   };
-
   const bulkMoveCircle = async (spaceId: string) => {
-    setCirclePicker(false);
     const ids = [...selected];
     const { error } = await supabase.from('contacts').update({ space_id: spaceId }).in('id', ids);
     if (error) { toast(`Déplacement impossible : ${error.message}`); return; }
@@ -141,16 +144,10 @@ export const ContactsPageV2: React.FC = () => {
     toast(`${ids.length} contact${ids.length > 1 ? 's' : ''} déplacé${ids.length > 1 ? 's' : ''}.`);
     await data.refresh();
   };
-
   const bulkTag = async (tagId: string) => {
-    setTagPicker(false);
     const ids = [...selected];
-    const already = new Set(
-      data.contactTags.filter((ct) => ct.tag_id === tagId).map((ct) => ct.contact_id)
-    );
-    const rowsToInsert = ids
-      .filter((id) => !already.has(id))
-      .map((contact_id) => ({ contact_id, tag_id: tagId, tagged_by: data.user?.id }));
+    const already = new Set(data.contactTags.filter((ct) => ct.tag_id === tagId).map((ct) => ct.contact_id));
+    const rowsToInsert = ids.filter((id) => !already.has(id)).map((contact_id) => ({ contact_id, tag_id: tagId, tagged_by: data.user?.id }));
     if (rowsToInsert.length === 0) { toast('Tag déjà appliqué à toute la sélection.'); return; }
     const { error } = await supabase.from('contact_tags').insert(rowsToInsert);
     if (error) { toast(`Tag impossible : ${error.message}`); return; }
@@ -158,8 +155,6 @@ export const ContactsPageV2: React.FC = () => {
     toast(`Tag appliqué à ${rowsToInsert.length} contact${rowsToInsert.length > 1 ? 's' : ''}.`);
     await data.refresh();
   };
-
-  /* Enrichissement en masse : récapitulatif préalable, annulable en cours. */
   const bulkEnrich = async () => {
     setConfirmEnrich(false);
     const ids = [...selected];
@@ -169,317 +164,283 @@ export const ContactsPageV2: React.FC = () => {
     for (const id of ids) {
       if (cancelEnrich.current) break;
       try {
-        // Même chemin que la fiche individuelle : Perplexity + persistance des
-        // skills/inferred_needs, que l'ancienne Edge Function ne produisait pas.
         const c = data.contactById.get(id);
         if (c) {
-          await enrichAndPersistContact({
-            id,
-            first_name: c.first_name,
-            last_name: c.last_name,
-            company: c.company,
-            job_title: c.job_title,
-            industry: c.industry,
-            bio: c.bio,
-            ai_context: c.ai_context,
-            location: c.location,
-          });
+          await enrichAndPersistContact({ id, first_name: c.first_name, last_name: c.last_name, company: c.company, job_title: c.job_title, industry: c.industry, bio: c.bio, ai_context: c.ai_context, location: c.location });
           ok++;
         }
-      } catch { /* on continue : un échec ne doit pas arrêter le lot */ }
+      } catch { /* un échec n'arrête pas le lot */ }
       setEnrichProgress((p) => (p ? { ...p, done: p.done + 1 } : null));
     }
     setEnrichProgress(null);
     setSelected(new Set());
-    toast(
-      cancelEnrich.current
-        ? `Enrichissement interrompu. ${ok} fiche${ok > 1 ? 's' : ''} complétée${ok > 1 ? 's' : ''}.`
-        : `${ok} fiche${ok > 1 ? 's' : ''} enrichie${ok > 1 ? 's' : ''} sur ${ids.length}.`
-    );
+    toast(cancelEnrich.current
+      ? `Enrichissement interrompu. ${ok} fiche${ok > 1 ? 's' : ''} complétée${ok > 1 ? 's' : ''}.`
+      : `${ok} fiche${ok > 1 ? 's' : ''} enrichie${ok > 1 ? 's' : ''} sur ${ids.length}.`);
     await data.refresh();
   };
 
-  const nbSel = selected.size;
-  const counts = useMemo(() => {
-    const m: Record<RelStatus, number> = { fresh: 0, due: 0, dormant: 0, never: 0 };
-    for (const r of rows) m[r.status]++;
-    return m;
-  }, [rows]);
+  const statusOrder: RelStatus[] = ['fresh', 'due', 'dormant', 'never'];
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-      {/* Header */}
-      <div style={{ padding: '20px 28px 0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-          <h1 className="t-page">Contacts</h1>
-          <span className="t-sec tnum" style={{ color: 'var(--mut)' }}>{rows.length.toLocaleString('fr-FR')}</span>
-          <Segmented
-            options={[
-              { key: 'table', label: 'Table', icon: Rows3 },
-              { key: 'reseau', label: 'Réseau', icon: Share2 },
-            ]}
-            value="table"
-            onChange={(v) => { if (v === 'reseau') navigate(`/reseau${window.location.search}`); }}
-          />
-          <span style={{ flex: 1 }} />
-          <div style={{ position: 'relative' }}>
-            <Search size={14} style={{ position: 'absolute', left: 10, top: 10, color: 'var(--faint)' }} />
-            <input
-              className="input"
-              style={{ width: 260, paddingLeft: 30 }}
-              placeholder="Rechercher…"
-              value={query}
-              onChange={(e) => setParam('q', e.target.value)}
-            />
+    <div className="relative flex h-full flex-col">
+      {/* En-tête */}
+      <div className="px-7 pt-6">
+        <div className="mb-3.5 flex flex-wrap items-center gap-3">
+          <h1 className="text-[22px] font-medium tracking-tight">Contacts</h1>
+          <span className="text-sm tabular-nums text-muted-foreground">{rows.length.toLocaleString('fr-FR')}</span>
+          <div className="flex rounded-lg bg-muted p-0.5">
+            <button className="rounded-md bg-card px-3 py-1 text-xs font-medium shadow-sm"><Rows3 className="mr-1.5 inline size-3.5" />Table</button>
+            <button className="rounded-md px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground" onClick={() => navigate(`/reseau${window.location.search}`)}><Share2 className="mr-1.5 inline size-3.5" />Réseau</button>
           </div>
-          <button className="btn btn-ghost" onClick={() => setShowImport(true)}>
-            Importer
-          </button>
-          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-            <Plus size={15} /> Nouveau contact
-          </button>
+          <span className="flex-1" />
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input className="w-64 pl-9" placeholder="Rechercher" value={query} onChange={(e) => setParam('q', e.target.value)} />
+          </div>
+          <Button variant="outline" onClick={() => setShowImport(true)}>Importer</Button>
+          <Button onClick={() => setShowCreate(true)}><Plus className="size-4" /> Nouveau contact</Button>
         </div>
 
-        {/* Vues + filtres de statut */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 12, flexWrap: 'wrap' }}>
+        {/* Vues + filtres */}
+        <div className="flex flex-wrap items-center gap-2 pb-3">
           {VIEWS.map((v) => (
-            <button
-              key={v.key}
-              className={`chip clickable chip-filter${view === v.key ? ' on' : ''}`}
-              onClick={() => { setParam('vue', v.key === 'all' ? null : v.key); }}
-            >
-              {v.label}
-            </button>
+            <Button key={v.key} variant={view === v.key ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs"
+              onClick={() => setParam('vue', v.key === 'all' ? null : v.key)}>{v.label}</Button>
           ))}
+          <span className="mx-1 h-4 w-px bg-border" />
+          {statusOrder.map((s) => (
+            <Button key={s} variant={statusFilter === s ? 'secondary' : 'ghost'} size="sm" className="h-7 gap-1.5 text-xs"
+              onClick={() => setParam('statut', statusFilter === s ? null : s)}>
+              <span className={cn('size-1.5 rounded-full', STATUS[s].dot)} />{STATUS[s].label}
+              <span className="tabular-nums text-muted-foreground">{counts[s]}</span>
+            </Button>
+          ))}
+          <span className="flex-1" />
           {tagFilter && (
-            <button className="chip clickable chip-filter on" onClick={() => setParam('tag', null)}>
+            <Button variant="secondary" size="sm" className="h-7 text-xs" onClick={() => setParam('tag', null)}>
               tag : {data.tags.find((t) => t.id === tagFilter)?.name ?? '?'} ✕
-            </button>
+            </Button>
           )}
-          <button className="chip clickable" onClick={() => setShowTags(true)}>Gérer les tags</button>
-          <span style={{ width: 1, height: 18, background: 'var(--line-strong)', margin: '0 4px' }} />
-          {(Object.keys(counts) as RelStatus[]).filter((s) => counts[s] > 0).map((s) => (
-            <button
-              key={s}
-              className={`chip clickable chip-filter${statusFilter === s ? ' on' : ''}`}
-              onClick={() => setParam('statut', statusFilter === s ? null : s)}
-            >
-              <span style={{ width: 8, height: 8, borderRadius: 3, background: STATUS_META[s].color, flex: 'none' }} />
-              {STATUS_META[s].label} <span className="tnum" style={{ color: 'var(--mut)' }}>{counts[s]}</span>
-            </button>
-          ))}
+          <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => setShowTags(true)}>Gérer les tags</Button>
         </div>
       </div>
 
       {/* Table */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 28px 80px' }}>
+      <div className="flex-1 overflow-y-auto px-7 pb-24">
         {rows.length === 0 ? (
           <EmptyContacts hasQuery={!!query || view !== 'all' || !!statusFilter} onCreate={() => setShowCreate(true)} onImport={() => setShowImport(true)} />
         ) : (
-          <div className="card" style={{ overflow: 'hidden' }}>
-            <table className="wtable">
-              <thead>
-                <tr>
-                  <th style={{ width: 34 }} />
-                  <th className="sortable" onClick={() => setSort('name')}>Nom</th>
-                  <th className="sortable" onClick={() => setSort('company')}>Poste @ Entreprise</th>
-                  <th>Statut</th>
-                  <th className="sortable" onClick={() => setSort('last')}>Dernier échange</th>
-                  <th>Tags</th>
-                  <th>Relance</th>
-                  {!data.selectedSpaceId && <th>Cercle</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.slice(0, 400).map(({ c, name, touch, status, tags, space, pendingCount, followUp }) => (
-                  <tr
-                    key={c.id}
-                    className={selected.has(c.id) ? 'selected' : ''}
-                    onClick={() => navigate(`/contacts/${c.id}${window.location.search}`)}
-                  >
-                    <td onClick={(e) => { e.stopPropagation(); toggleSelect(c.id); }}>
-                      <input
-                        type="checkbox"
-                        checked={selected.has(c.id)}
-                        onChange={() => {}}
-                        style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
-                      />
-                    </td>
-                    <td>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Card className="overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-10" />
+                  <TableHead className="cursor-pointer" onClick={() => setSort('name')}>Nom</TableHead>
+                  <TableHead className="cursor-pointer" onClick={() => setSort('company')}>Poste & entreprise</TableHead>
+                  <TableHead>Statut</TableHead>
+                  <TableHead className="cursor-pointer" onClick={() => setSort('last')}>Dernier échange</TableHead>
+                  <TableHead>Tags</TableHead>
+                  {!data.selectedSpaceId && <TableHead>Cercle</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.slice(0, 400).map(({ c, name, touch, status, tags, space, pendingCount }) => (
+                  <TableRow key={c.id} data-state={selected.has(c.id) ? 'selected' : undefined}
+                    className="cursor-pointer" onClick={() => navigate(`/contacts/${c.id}${window.location.search}`)}>
+                    <TableCell onClick={(e) => { e.stopPropagation(); toggleSelect(c.id); }}>
+                      <input type="checkbox" checked={selected.has(c.id)} onChange={() => {}} className="size-4 cursor-pointer accent-foreground" />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2.5">
                         <Avatar name={name} firstName={c.first_name} lastName={c.last_name} photoUrl={c.photo_url} size={32} />
-                        <span className="t-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{name}</span>
-                        {c.enriched_at && <Sparkles size={11} color="var(--accent)" aria-label="Fiche enrichie" />}
-                        {pendingCount > 0 && (
-                          <span className="badge" style={{ background: 'var(--accent)', color: '#fff', fontSize: 10, borderRadius: 7, padding: '0 6px', fontWeight: 600 }}>
-                            {pendingCount}
-                          </span>
-                        )}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="t-sec" style={{ color: 'var(--ink-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: 260 }}>
-                        {[c.job_title, c.company].filter(Boolean).join(' @ ') || <span style={{ color: 'var(--faint)' }}>·</span>}
-                      </span>
-                    </td>
-                    <td><StatusPill status={status} lastTouchIso={touch?.toISOString()} /></td>
-                    <td className="tnum t-sec" style={{ color: touch ? 'var(--ink-2)' : 'var(--faint)', whiteSpace: 'nowrap' }}>
-                      {touch ? relativeFR(touch.toISOString()) : 'jamais'}
-                    </td>
-                    <td>
-                      <span style={{ display: 'flex', gap: 4 }}>
+                        <span className="max-w-[220px] truncate font-medium">{name}</span>
+                        {c.enriched_at && <Sparkles className="size-3 text-muted-foreground" aria-label="Fiche enrichie" />}
+                        {pendingCount > 0 && <span className="rounded-md bg-primary px-1.5 text-[10px] font-semibold tabular-nums text-primary-foreground">{pendingCount}</span>}
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-[260px]">
+                      <span className="block truncate text-muted-foreground">{[c.job_title, c.company].filter(Boolean).join(' · ') || '·'}</span>
+                    </TableCell>
+                    <TableCell><StatusTag s={status} /></TableCell>
+                    <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">{touch ? relativeFR(touch.toISOString()) : 'jamais'}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
                         {tags.slice(0, 2).map((t: any) => (
-                          <span key={t.id} className="chip" style={{ height: 20, fontSize: 11, padding: '0 8px', ...(t.color_hex ? { borderColor: 'transparent', background: `${t.color_hex}1F`, color: t.color_hex } : {}) }}>
-                            {t.name}
-                          </span>
+                          <Badge key={t.id} variant="secondary" className="font-normal"
+                            style={t.color_hex ? { background: `${t.color_hex}1F`, color: t.color_hex } : undefined}>{t.name}</Badge>
                         ))}
-                        {tags.length > 2 && <span className="t-meta" style={{ color: 'var(--mut)' }}>+{tags.length - 2}</span>}
-                      </span>
-                    </td>
-                    <td className="tnum t-sec" style={{ whiteSpace: 'nowrap' }}>
-                      {followUp ? (
-                        <span style={{ color: new Date(followUp.due_date) <= new Date() ? 'var(--orange)' : 'var(--ink-2)', fontWeight: new Date(followUp.due_date) <= new Date() ? 600 : 400 }}>
-                          {followUp.due_date}
-                        </span>
-                      ) : (
-                        <span className="muted" style={{ color: 'var(--faint)' }}>·</span>
-                      )}
-                    </td>
+                        {tags.length > 2 && <span className="text-xs text-muted-foreground">+{tags.length - 2}</span>}
+                      </div>
+                    </TableCell>
                     {!data.selectedSpaceId && (
-                      <td>
+                      <TableCell>
                         {space && (
-                          <span className="chip" style={{ height: 20, fontSize: 11, padding: '0 8px' }}>
-                            <span style={{ width: 7, height: 7, borderRadius: 999, background: circleColor(space), flex: 'none' }} />
-                            {space.name}
-                          </span>
+                          <Badge variant="outline" className="gap-1.5 font-normal">
+                            <span className="size-1.5 rounded-full" style={{ background: circleColor(space) }} />{space.name}
+                          </Badge>
                         )}
-                      </td>
+                      </TableCell>
                     )}
-                  </tr>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
             {rows.length > 400 && (
-              <div className="t-sec" style={{ color: 'var(--mut)', padding: '10px 14px' }}>
+              <div className="px-5 py-2.5 text-sm text-muted-foreground">
                 {rows.length - 400} contacts de plus. Affinez avec la recherche ou les filtres.
               </div>
             )}
-          </div>
+          </Card>
         )}
       </div>
 
-      {/* Barre de sélection flottante */}
+      {/* Barre de sélection */}
       {nbSel > 0 && (
-        <div className="bulkbar">
-          <span className="tnum" style={{ fontWeight: 600 }}>{nbSel} sélectionné{nbSel > 1 ? 's' : ''}</span>
-          <span className="sep" />
-          <div style={{ position: 'relative' }}>
-            <button onClick={() => { setCirclePicker((o) => !o); setTagPicker(false); }}>
-              <Layers size={14} /> Cercle
-            </button>
-            {circlePicker && (
-              <div className="popover" style={{ bottom: 'calc(100% + 10px)', left: 0, color: 'var(--ink)' }}>
-                {data.spaces.map((s) => (
-                  <button key={s.id} className="nav-item" onClick={() => bulkMoveCircle(s.id)}>
-                    <span style={{ width: 8, height: 8, borderRadius: 999, background: circleColor(s), flex: 'none' }} />
-                    {s.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div style={{ position: 'relative' }}>
-            <button onClick={() => { setTagPicker((o) => !o); setCirclePicker(false); }}>
-              <TagIcon size={14} /> Tag
-            </button>
-            {tagPicker && (
-              <div className="popover" style={{ bottom: 'calc(100% + 10px)', left: 0, color: 'var(--ink)', maxHeight: 260, overflowY: 'auto' }}>
-                {data.tags.length === 0 && <span className="t-sec" style={{ color: 'var(--mut)' }}>Aucun tag.</span>}
-                {data.tags.map((t) => (
-                  <button key={t.id} className="nav-item" onClick={() => bulkTag(t.id)}>
-                    <span style={{ width: 8, height: 8, borderRadius: 999, background: t.color_hex ?? 'var(--faint)', flex: 'none' }} />
-                    {t.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <button onClick={() => setConfirmEnrich(true)}>
-            <Sparkles size={14} /> Enrichir
-          </button>
-          <button onClick={() => setConfirmBulkDelete(true)} style={{ color: '#F1A9A3' }}>
-            <Trash2 size={14} /> Supprimer
-          </button>
-          <span className="sep" />
-          <button onClick={() => setSelected(new Set())}>Annuler</button>
+        <div className="absolute bottom-5 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-xl bg-foreground px-3 py-2 text-background shadow-lg">
+          <span className="px-1 text-sm font-semibold tabular-nums">{nbSel} sélectionné{nbSel > 1 ? 's' : ''}</span>
+          <span className="h-4 w-px bg-background/25" />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button variant="ghost" size="sm" className="h-8 gap-1.5 text-background hover:bg-background/15 hover:text-background"><Layers className="size-4" /> Cercle</Button></DropdownMenuTrigger>
+            <DropdownMenuContent side="top">
+              {data.spaces.map((s) => (
+                <DropdownMenuItem key={s.id} onClick={() => bulkMoveCircle(s.id)}>
+                  <span className="size-2 rounded-full" style={{ background: circleColor(s) }} />{s.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button variant="ghost" size="sm" className="h-8 gap-1.5 text-background hover:bg-background/15 hover:text-background"><TagIcon className="size-4" /> Tag</Button></DropdownMenuTrigger>
+            <DropdownMenuContent side="top" className="max-h-64 overflow-y-auto">
+              {data.tags.length === 0 && <div className="px-2 py-1.5 text-sm text-muted-foreground">Aucun tag.</div>}
+              {data.tags.map((t) => (
+                <DropdownMenuItem key={t.id} onClick={() => bulkTag(t.id)}>
+                  <span className="size-2 rounded-full" style={{ background: t.color_hex ?? 'hsl(var(--muted-foreground))' }} />{t.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-background hover:bg-background/15 hover:text-background" onClick={() => setConfirmEnrich(true)}><Sparkles className="size-4" /> Enrichir</Button>
+          <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-hred-500 hover:bg-background/15 hover:text-hred-500" onClick={() => setConfirmBulkDelete(true)}><Trash2 className="size-4" /> Supprimer</Button>
+          <span className="h-4 w-px bg-background/25" />
+          <Button variant="ghost" size="sm" className="h-8 text-background hover:bg-background/15 hover:text-background" onClick={() => setSelected(new Set())}>Annuler</Button>
         </div>
       )}
 
-      {/* Fiche */}
       {params.id && (
-        <ContactDrawer
-          contactId={params.id}
-          siblings={siblingIds}
+        <ContactDrawer contactId={params.id} siblings={siblingIds}
           onClose={() => navigate(`/contacts${window.location.search}`)}
-          onNavigate={(id) => navigate(`/contacts/${id}${window.location.search}`)}
-        />
+          onNavigate={(id) => navigate(`/contacts/${id}${window.location.search}`)} />
       )}
 
       {confirmBulkDelete && (
-        <ConfirmModal
-          title={`Supprimer ${nbSel} contact${nbSel > 1 ? 's' : ''} ?`}
+        <ConfirmModal title={`Supprimer ${nbSel} contact${nbSel > 1 ? 's' : ''} ?`}
           body="Cette suppression est définitive et emporte les notes, liens, mises à jour et relances rattachés à chaque fiche."
-          confirmLabel="Supprimer définitivement"
-          danger
-          busy={bulkBusy}
-          onConfirm={bulkDelete}
-          onCancel={() => setConfirmBulkDelete(false)}
-        />
+          confirmLabel="Supprimer définitivement" danger busy={bulkBusy} onConfirm={bulkDelete} onCancel={() => setConfirmBulkDelete(false)} />
       )}
-
       {confirmEnrich && (
-        <ConfirmModal
-          title={`Enrichir ${nbSel} fiche${nbSel > 1 ? 's' : ''} via l'IA ?`}
-          body={
-            <>
-              L'IA cherchera poste, entreprise et contexte pour chaque contact sélectionné.
-              Durée estimée : environ <b className="tnum">{Math.ceil(nbSel * 1.5)} secondes</b>.
-              Vous pourrez interrompre en cours de route.
-            </>
-          }
-          confirmLabel="Lancer l'enrichissement"
-          onConfirm={bulkEnrich}
-          onCancel={() => setConfirmEnrich(false)}
-        />
+        <ConfirmModal title={`Enrichir ${nbSel} fiche${nbSel > 1 ? 's' : ''} via l'IA ?`}
+          body={<>L'IA cherchera poste, entreprise et contexte pour chaque contact sélectionné. Durée estimée : environ <b className="tabular-nums">{Math.ceil(nbSel * 1.5)} secondes</b>. Vous pourrez interrompre en cours de route.</>}
+          confirmLabel="Lancer l'enrichissement" onConfirm={bulkEnrich} onCancel={() => setConfirmEnrich(false)} />
       )}
-
       {enrichProgress && (
-        <div className="bulkbar">
-          <span className="tnum">
-            Enrichissement… {enrichProgress.done}/{enrichProgress.total}
-          </span>
-          <span className="sep" />
-          <button onClick={() => { cancelEnrich.current = true; }}>Interrompre</button>
+        <div className="absolute bottom-5 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-xl bg-foreground px-3 py-2 text-background shadow-lg">
+          <span className="text-sm tabular-nums">Enrichissement… {enrichProgress.done}/{enrichProgress.total}</span>
+          <span className="h-4 w-px bg-background/25" />
+          <Button variant="ghost" size="sm" className="h-8 text-background hover:bg-background/15 hover:text-background" onClick={() => { cancelEnrich.current = true; }}>Interrompre</Button>
         </div>
       )}
 
       {showCreate && <CreateContactModal onClose={() => setShowCreate(false)} />}
-
       {showImport && <ImportContactsModal onClose={() => setShowImport(false)} />}
-
-      {showTags && (
-        <TagsPanel
-          onClose={() => setShowTags(false)}
-          onFilterTag={(tagId) => setParam('tag', tagId)}
-        />
-      )}
+      {showTags && <TagsPanel onClose={() => setShowTags(false)} onFilterTag={(tagId) => setParam('tag', tagId)} />}
     </div>
   );
 };
 
-/* Import en masse : coller un texte (signatures d'email, listing, notes…),
-   parse-contacts-from-text en extrait les fiches, l'utilisateur confirme,
-   insertion groupée. Seule voie d'entrée en volume sur le web. */
+/* État vide. */
+const EmptyContacts: React.FC<{ hasQuery: boolean; onCreate: () => void; onImport: () => void }> = ({ hasQuery, onCreate, onImport }) => {
+  if (hasQuery) {
+    return (
+      <Card className="px-5 py-12 text-center">
+        <div className="text-base font-semibold">Personne ne correspond</div>
+        <p className="mt-1 text-sm text-muted-foreground">Élargissez la recherche ou changez de vue.</p>
+      </Card>
+    );
+  }
+  return (
+    <Card className="px-5 py-12 text-center">
+      <div className="text-base font-semibold">Votre réseau commence ici</div>
+      <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">Importez vos contacts, ou ajoutez une première fiche à la main.</p>
+      <div className="mt-4 flex justify-center gap-2.5">
+        <Button onClick={onImport}>Importer des contacts</Button>
+        <Button variant="outline" onClick={onCreate}><Plus className="size-4" /> Nouveau contact</Button>
+      </div>
+    </Card>
+  );
+};
+
+const CIRCLE_FIELD = 'space_id';
+
+/* Création rapide. */
+const CreateContactModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const data = useData();
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({ first_name: '', last_name: '', company: '', job_title: '', email: '', phone: '' });
+  const personal = data.spaces.find((s) => s.type === 'personal');
+  const [spaceId, setSpaceId] = useState<string>(data.selectedSpaceId ?? personal?.id ?? data.spaces[0]?.id ?? '');
+  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const save = async () => {
+    if (!form.first_name.trim() || !spaceId) return;
+    setBusy(true);
+    const { data: created, error } = await supabase.from('contacts').insert({
+      [CIRCLE_FIELD]: spaceId, owner_id: data.user?.id,
+      first_name: form.first_name.trim(), last_name: form.last_name.trim(),
+      company: form.company.trim() || null, job_title: form.job_title.trim() || null,
+      email: form.email.trim() || null, phone: form.phone.trim() || null, source: 'manual',
+    }).select('id').single();
+    setBusy(false);
+    if (error) { toast(`Création impossible : ${error.message}`); return; }
+    onClose();
+    toast(`${form.first_name} ajouté.`);
+    await data.refresh();
+    if (created) navigate(`/contacts/${created.id}`);
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader><DialogTitle>Nouveau contact</DialogTitle></DialogHeader>
+        <div className="grid grid-cols-2 gap-2.5">
+          <Input placeholder="Prénom" autoFocus value={form.first_name} onChange={(e) => set('first_name', e.target.value)} />
+          <Input placeholder="Nom" value={form.last_name} onChange={(e) => set('last_name', e.target.value)} />
+          <Input placeholder="Poste" value={form.job_title} onChange={(e) => set('job_title', e.target.value)} />
+          <Input placeholder="Entreprise" value={form.company} onChange={(e) => set('company', e.target.value)} />
+          <Input placeholder="Email" type="email" value={form.email} onChange={(e) => set('email', e.target.value)} />
+          <Input placeholder="Téléphone" value={form.phone} onChange={(e) => set('phone', e.target.value)} />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cercle</span>
+          {data.spaces.map((s) => (
+            <Button key={s.id} variant={spaceId === s.id ? 'secondary' : 'ghost'} size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setSpaceId(s.id)}>
+              <span className="size-1.5 rounded-full" style={{ background: circleColor(s) }} />{s.name}
+            </Button>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Annuler</Button>
+          <Button disabled={!form.first_name.trim() || busy} onClick={save}>{busy ? 'Création…' : 'Créer la fiche'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+/* Import en masse : coller un texte, parse-contacts-from-text, confirmer. */
 const ImportContactsModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const data = useData();
   const { toast } = useToast();
@@ -489,12 +450,6 @@ const ImportContactsModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const personal = data.spaces.find((s) => s.type === 'personal');
   const [spaceId, setSpaceId] = useState<string>(data.selectedSpaceId ?? personal?.id ?? data.spaces[0]?.id ?? '');
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
 
   const parse = async () => {
     if (text.trim().length < 10) return;
@@ -507,26 +462,17 @@ const ImportContactsModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     setParsed(list);
     setSelected(new Set(list.map((_: any, i: number) => i)));
   };
-
   const importSelected = async () => {
     if (!spaceId || !parsed) return;
-    const rows = parsed
-      .filter((_, i) => selected.has(i))
-      .map((c: any) => ({
-        space_id: spaceId,
-        owner_id: data.user?.id,
-        first_name: (c.first_name || c.last_name || '').trim(),
-        last_name: (c.first_name ? (c.last_name || '') : '').trim() || null,
-        company: c.company?.trim() || null,
-        job_title: c.job_title?.trim() || null,
-        email: c.email?.trim() || null,
-        phone: c.phone?.trim() || null,
-        linkedin: c.linkedin?.trim() || null,
-        location: c.location?.trim() || null,
-        industry: c.industry?.trim() || null,
-        source: 'import',
-      }))
-      .filter((r) => r.first_name);
+    const rows = parsed.filter((_, i) => selected.has(i)).map((c: any) => ({
+      space_id: spaceId, owner_id: data.user?.id,
+      first_name: (c.first_name || c.last_name || '').trim(),
+      last_name: (c.first_name ? (c.last_name || '') : '').trim() || null,
+      company: c.company?.trim() || null, job_title: c.job_title?.trim() || null,
+      email: c.email?.trim() || null, phone: c.phone?.trim() || null,
+      linkedin: c.linkedin?.trim() || null, location: c.location?.trim() || null,
+      industry: c.industry?.trim() || null, source: 'import',
+    })).filter((r) => r.first_name);
     if (rows.length === 0) return;
     setBusy(true);
     const { error } = await supabase.from('contacts').insert(rows);
@@ -536,180 +482,51 @@ const ImportContactsModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     toast(`${rows.length} contact${rows.length > 1 ? 's' : ''} importé${rows.length > 1 ? 's' : ''}.`);
     await data.refresh();
   };
-
-  const toggle = (i: number) => setSelected((s) => {
-    const n = new Set(s);
-    n.has(i) ? n.delete(i) : n.add(i);
-    return n;
-  });
+  const toggle = (i: number) => setSelected((s) => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n; });
 
   return (
-    <div className="modal-scrim" onClick={onClose}>
-      <div className="modal" style={{ width: 560, maxHeight: '86vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
-        <div className="t-block" style={{ marginBottom: 6 }}>Importer des contacts</div>
-
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="flex max-h-[86vh] flex-col sm:max-w-xl">
+        <DialogHeader><DialogTitle>Importer des contacts</DialogTitle></DialogHeader>
         {!parsed ? (
           <>
-            <div className="t-sec" style={{ color: 'var(--mut)', marginBottom: 12 }}>
-              Collez n'importe quel texte contenant des contacts : signatures d'email, liste de participants, notes de réunion. L'IA en extrait les fiches, vous validez avant l'ajout.
-            </div>
-            <textarea
-              className="input"
-              autoFocus
-              style={{ minHeight: 200, resize: 'vertical' }}
-              placeholder={"Jean Dupont, Directeur commercial chez Acme\njean.dupont@acme.com — +33 6 12 34 56 78\n\nMarie Martin, CTO, Lumen — marie@lumen.co"}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-            />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
-              <button className="btn btn-ghost" onClick={onClose}>Annuler</button>
-              <button className="btn btn-primary" disabled={text.trim().length < 10 || busy} onClick={parse}>
-                {busy ? 'Analyse…' : 'Analyser le texte'}
-              </button>
-            </div>
+            <p className="text-sm text-muted-foreground">Collez n'importe quel texte contenant des contacts : signatures d'email, liste de participants, notes de réunion. L'IA en extrait les fiches, vous validez avant l'ajout.</p>
+            <textarea className="min-h-[200px] w-full resize-y rounded-lg border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              autoFocus placeholder={"Jean Dupont, Directeur commercial chez Acme\njean.dupont@acme.com — +33 6 12 34 56 78"} value={text} onChange={(e) => setText(e.target.value)} />
+            <DialogFooter>
+              <Button variant="outline" onClick={onClose}>Annuler</Button>
+              <Button disabled={text.trim().length < 10 || busy} onClick={parse}>{busy ? 'Analyse…' : 'Analyser le texte'}</Button>
+            </DialogFooter>
           </>
         ) : (
           <>
-            <div className="t-sec" style={{ color: 'var(--mut)', marginBottom: 10 }}>
-              {parsed.length} contact{parsed.length > 1 ? 's' : ''} détecté{parsed.length > 1 ? 's' : ''}. Décochez ceux à écarter.
-            </div>
-            <div style={{ flex: 1, overflowY: 'auto', margin: '0 -4px', paddingRight: 4 }}>
+            <p className="text-sm text-muted-foreground">{parsed.length} contact{parsed.length > 1 ? 's' : ''} détecté{parsed.length > 1 ? 's' : ''}. Décochez ceux à écarter.</p>
+            <div className="-mx-1 flex-1 overflow-y-auto pr-1">
               {parsed.map((c: any, i: number) => (
-                <label key={i} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 6px', borderBottom: '1px solid var(--line-2)', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={selected.has(i)} onChange={() => toggle(i)} style={{ accentColor: 'var(--accent)' }} />
-                  <span style={{ minWidth: 0 }}>
-                    <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>{[c.first_name, c.last_name].filter(Boolean).join(' ') || '—'}</span>
-                    <span style={{ display: 'block', color: 'var(--mut)', fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {[[c.job_title, c.company].filter(Boolean).join(' · '), c.email].filter(Boolean).join(' — ') || 'aucun détail'}
-                    </span>
+                <label key={i} className="flex cursor-pointer items-center gap-3 border-b border-border px-1.5 py-2.5 last:border-0">
+                  <input type="checkbox" checked={selected.has(i)} onChange={() => toggle(i)} className="size-4 accent-foreground" />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">{[c.first_name, c.last_name].filter(Boolean).join(' ') || '—'}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{[[c.job_title, c.company].filter(Boolean).join(' · '), c.email].filter(Boolean).join(' — ') || 'aucun détail'}</span>
                   </span>
                 </label>
               ))}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0', flexWrap: 'wrap' }}>
-              <span className="t-label">Cercle</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cercle</span>
               {data.spaces.map((s) => (
-                <button key={s.id} className={`chip clickable chip-filter${spaceId === s.id ? ' on' : ''}`} onClick={() => setSpaceId(s.id)}>
-                  <span style={{ width: 8, height: 8, borderRadius: 999, background: circleColor(s), flex: 'none' }} />
-                  {s.name}
-                </button>
+                <Button key={s.id} variant={spaceId === s.id ? 'secondary' : 'ghost'} size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setSpaceId(s.id)}>
+                  <span className="size-1.5 rounded-full" style={{ background: circleColor(s) }} />{s.name}
+                </Button>
               ))}
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-              <button className="btn btn-ghost" onClick={() => setParsed(null)}>Retour</button>
-              <button className="btn btn-primary" disabled={selected.size === 0 || !spaceId || busy} onClick={importSelected}>
-                {busy ? 'Import…' : `Importer ${selected.size}`}
-              </button>
-            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setParsed(null)}>Retour</Button>
+              <Button disabled={selected.size === 0 || !spaceId || busy} onClick={importSelected}>{busy ? 'Import…' : `Importer ${selected.size}`}</Button>
+            </DialogFooter>
           </>
         )}
-      </div>
-    </div>
-  );
-};
-
-/* État vide pédagogique (composant 15). */
-const EmptyContacts: React.FC<{ hasQuery: boolean; onCreate: () => void; onImport: () => void }> = ({ hasQuery, onCreate, onImport }) => {
-  if (hasQuery) {
-    return (
-      <div className="card card-pad" style={{ textAlign: 'center', padding: '48px 20px' }}>
-        <div className="t-block" style={{ marginBottom: 6 }}>Personne ne correspond</div>
-        <div className="t-sec" style={{ color: 'var(--mut)' }}>Élargissez la recherche ou changez de vue.</div>
-      </div>
-    );
-  }
-  return (
-    <div className="card card-pad" style={{ textAlign: 'center', padding: '48px 20px' }}>
-      <div className="t-block" style={{ marginBottom: 6 }}>Votre réseau commence ici</div>
-      <div className="t-sec" style={{ color: 'var(--mut)', marginBottom: 18 }}>
-        Ajoutez une première fiche, collez un texte qui contient des contacts, ou importez depuis l'app iPhone.
-      </div>
-      <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-        <button className="btn btn-primary" onClick={onImport}>Importer des contacts</button>
-        <button className="btn btn-ghost" onClick={onCreate}><Plus size={15} /> Nouveau contact</button>
-      </div>
-    </div>
-  );
-};
-
-/* Création rapide d'un contact. */
-const CreateContactModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const data = useData();
-  const { toast } = useToast();
-  const navigate = useNavigate();
-  const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({
-    first_name: '', last_name: '', company: '', job_title: '', email: '', phone: '',
-  });
-  const personal = data.spaces.find((s) => s.type === 'personal');
-  const [spaceId, setSpaceId] = useState<string>(data.selectedSpaceId ?? personal?.id ?? data.spaces[0]?.id ?? '');
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
-
-  const save = async () => {
-    if (!form.first_name.trim() || !spaceId) return;
-    setBusy(true);
-    const { data: created, error } = await supabase
-      .from('contacts')
-      .insert({
-        space_id: spaceId,
-        owner_id: data.user?.id,
-        first_name: form.first_name.trim(),
-        last_name: form.last_name.trim(),
-        company: form.company.trim() || null,
-        job_title: form.job_title.trim() || null,
-        email: form.email.trim() || null,
-        phone: form.phone.trim() || null,
-        source: 'manual',
-      })
-      .select('id')
-      .single();
-    setBusy(false);
-    if (error) { toast(`Création impossible : ${error.message}`); return; }
-    onClose();
-    toast(`${form.first_name} ajouté.`);
-    await data.refresh();
-    if (created) navigate(`/contacts/${created.id}`);
-  };
-
-  return (
-    <div className="modal-scrim" onClick={onClose}>
-      <div className="modal" style={{ width: 480 }} onClick={(e) => e.stopPropagation()}>
-        <div className="t-block" style={{ marginBottom: 16 }}>Nouveau contact</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-          <input className="input" placeholder="Prénom" autoFocus value={form.first_name} onChange={(e) => set('first_name', e.target.value)} />
-          <input className="input" placeholder="Nom" value={form.last_name} onChange={(e) => set('last_name', e.target.value)} />
-          <input className="input" placeholder="Poste" value={form.job_title} onChange={(e) => set('job_title', e.target.value)} />
-          <input className="input" placeholder="Entreprise" value={form.company} onChange={(e) => set('company', e.target.value)} />
-          <input className="input" placeholder="Email" type="email" value={form.email} onChange={(e) => set('email', e.target.value)} />
-          <input className="input" placeholder="Téléphone" value={form.phone} onChange={(e) => set('phone', e.target.value)} />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}>
-          <span className="t-label">Cercle</span>
-          {data.spaces.map((s) => (
-            <button
-              key={s.id}
-              className={`chip clickable chip-filter${spaceId === s.id ? ' on' : ''}`}
-              onClick={() => setSpaceId(s.id)}
-            >
-              <span style={{ width: 8, height: 8, borderRadius: 999, background: circleColor(s), flex: 'none' }} />
-              {s.name}
-            </button>
-          ))}
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-          <button className="btn btn-ghost" onClick={onClose}>Annuler</button>
-          <button className="btn btn-primary" disabled={!form.first_name.trim() || busy} onClick={save}>
-            {busy ? 'Création…' : 'Créer la fiche'}
-          </button>
-        </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };

@@ -52,6 +52,16 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   // Sous md, la barre latérale devient un panneau ouvert par le bouton menu.
   const [navOpen, setNavOpen] = useState(false);
   useEffect(() => setNavOpen(false), [location.pathname]);
+  // Retour de Stripe après un achat de crédits.
+  const [creditsNotice, setCreditsNotice] = useState<string | null>(null);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('credits');
+    if (!q) return;
+    setCreditsNotice(q === 'ok' ? 'Paiement reçu. Vos crédits sont ajoutés à votre solde.' : 'Paiement annulé. Aucun montant n’a été débité.');
+    window.history.replaceState(null, '', window.location.pathname);
+    const t = window.setTimeout(() => setCreditsNotice(null), 6000);
+    return () => window.clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -171,6 +181,7 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           <button onClick={() => setNavOpen(true)} aria-label="Ouvrir la navigation"
             className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-muted md:hidden"><Menu size={16} /></button>
           <h1 className="text-sm font-medium tracking-tight">{title}</h1>
+          {creditsNotice && <span role="status" className="ml-auto text-xs text-muted-foreground">{creditsNotice}</span>}
         </header>
         <div className="relative min-h-0 flex-1 overflow-hidden page-enter">
           {data.errorMsg ? (

@@ -11,6 +11,7 @@ import { NoteComposer } from './NoteComposer';
 import { Timeline } from './Timeline';
 import { fullName, lastTouch, relStatus, relativeFR, circleColor } from './format';
 import { IS_MOCK } from '../lib/mode';
+import { BuyCredits } from './BuyCredits';
 import { cn } from '../lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -77,6 +78,7 @@ export const ContactDrawer: React.FC<{
   const [finding, setFinding] = useState<null | 'email' | 'phone'>(null);
   const [overrides, setOverrides] = useState<Record<string, Record<string, any>>>({});
   const [credits, setCredits] = useState(25);
+  const [buyOpen, setBuyOpen] = useState(false);
 
   // Solde réel (créé à 25 crédits offerts au premier usage côté serveur).
   useEffect(() => {
@@ -224,7 +226,7 @@ export const ContactDrawer: React.FC<{
   // côté serveur, seulement si une valeur est trouvée.
   const findInfo = async (kind: 'email' | 'phone', resume = false) => {
     const cost = COST[kind];
-    if (!resume && credits < cost) { toast('Crédits insuffisants pour cette recherche.'); return; }
+    if (!resume && credits < cost) { setBuyOpen(true); return; }
     setFinding(kind);
     if (!IS_MOCK) {
       const label = kind === 'email' ? 'Email' : 'Téléphone';
@@ -361,7 +363,8 @@ export const ContactDrawer: React.FC<{
           <div className="border-b px-6 py-4 md:overflow-y-auto md:border-b-0 md:border-r">
             <div className="mb-1 flex items-center justify-between">
               <h3 className="text-xs font-semibold">Coordonnées</h3>
-              <span className="text-[11px] tabular-nums text-muted-foreground">{credits} crédits</span>
+              <button onClick={() => setBuyOpen(true)} title="Acheter des crédits"
+                className="rounded px-1 text-[11px] tabular-nums text-muted-foreground hover:bg-muted hover:text-foreground">{credits} crédits · Acheter</button>
             </div>
             <Prop label="Email">
               {contact.email ? <a href={`mailto:${contact.email}`} title={contact.email} className="inline-flex max-w-full items-center gap-1.5 truncate px-0 py-1 text-[13px] hover:underline"><Mail size={12} className="shrink-0 text-muted-foreground" />{contact.email}</a> : findBtn('email')}
@@ -550,6 +553,7 @@ export const ContactDrawer: React.FC<{
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {buyOpen && <BuyCredits balance={credits} onClose={() => setBuyOpen(false)} />}
     </>
   );
 };

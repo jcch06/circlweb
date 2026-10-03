@@ -43,6 +43,19 @@ serve(async (req) => {
 
   try {
     switch (event.type) {
+      // Achat de crédits (buy-credits) : crédit idempotent, une fois par session.
+      case "checkout.session.completed": {
+        const s = event.data.object as Stripe.Checkout.Session;
+        if (s.metadata?.kind !== "credits" || s.payment_status !== "paid") break;
+        const credits = Number(s.metadata.credits);
+        if (!s.metadata.user_id || !Number.isInteger(credits) || credits <= 0) break;
+        const { error } = await admin.rpc("add_enrichment_credits", {
+          p_user: s.metadata.user_id, p_credits: credits, p_reason: `achat_${s.metadata.pack ?? "credits"}`, p_ref: s.id,
+        });
+        if (error) throw error;
+        break;
+      }
+
       case "customer.subscription.created":
       case "customer.subscription.updated": {
         const sub = event.data.object as Stripe.Subscription;

@@ -49,10 +49,12 @@
     --accent-foreground: 0 0% 9%;
     --destructive: 3 79% 53%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 85.5%;
-    --input: 0 0% 85.5%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
     --ring: 0 0% 9%;
     --radius: 0.875rem;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-border: 0 0% 92%;
   }
 
   .dark {
@@ -63,29 +65,36 @@
     --h-amber-100: 35 30% 14%;
     --h-amber-500: 35 65% 68%;
 
-    --background: 0 0% 7%;
-    --foreground: 0 0% 96%;
-    --card: 0 0% 11%;
-    --card-foreground: 0 0% 96%;
-    --card-hover: 0 0% 15%;
-    --popover: 0 0% 12%;
-    --popover-foreground: 0 0% 96%;
-    --primary: 0 0% 96%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 13%;
-    --secondary-foreground: 0 0% 96%;
-    --muted: 0 0% 13%;
-    --muted-foreground: 0 0% 64%;
-    --accent: 0 0% 16%;
-    --accent-foreground: 0 0% 96%;
-    --destructive: 3 74% 57%;
+    --background: 213 60% 4%;
+    --foreground: 0 0% 100%;
+    --card: 215 55% 9%;
+    --card-foreground: 0 0% 100%;
+    --card-hover: 217 55% 14%;
+    --popover: 215 55% 9%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 217 55% 21%;
+    --secondary: 216 55% 9%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 216 55% 12%;
+    --muted-foreground: 0 0% 100% / 0.38;
+    --accent: 218 40% 94%;
+    --accent-foreground: 217 55% 21%;
+    --destructive: 0 53% 41%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 100% / 0.10;
-    --input: 0 0% 100% / 0.12;
-    --ring: 0 0% 100% / 0.28;
+    --border: 0 0% 100% / 0.07;
+    --input: 0 0% 100% / 0.07;
+    --ring: 0 0% 100% / 0.2;
+    --sidebar-background: 216 55% 9%;
+    --sidebar-border: 0 0% 100% / 0.07;
   }
 
   * { @apply border-border; }
+
+  .mono { font-family: 'Geist Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .serif { font-family: 'Instrument Serif', Georgia, serif; }
+  body { font-size: 13px; line-height: 1.5; }
+  h1, h2, h3, h4, h5, h6 { letter-spacing: -0.02em; }
 }
 
 /* ===== Ancien design (classes maison), conservé pour les écrans

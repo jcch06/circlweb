@@ -187,8 +187,7 @@ export const ContactsPageV2: React.FC = () => {
       {/* En-tête */}
       <div className="px-7 pt-6">
         <div className="mb-3.5 flex flex-wrap items-center gap-3">
-          <h1 className="text-[22px] font-medium tracking-tight">Contacts</h1>
-          <span className="text-sm tabular-nums text-muted-foreground">{rows.length.toLocaleString('fr-FR')}</span>
+          <span className="text-sm tabular-nums text-muted-foreground">{rows.length.toLocaleString('fr-FR')} contacts</span>
           <div className="flex rounded-lg bg-muted p-0.5">
             <button className="rounded-md bg-card px-3 py-1 text-xs font-medium shadow-sm"><Rows3 className="mr-1.5 inline size-3.5" />Table</button>
             <button className="rounded-md px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground" onClick={() => navigate(`/reseau${window.location.search}`)}><Share2 className="mr-1.5 inline size-3.5" />Réseau</button>

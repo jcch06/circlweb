@@ -204,11 +204,7 @@ export const HomePage: React.FC = () => {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-5xl px-6 py-8 pb-16">
-        <div className="mb-6 flex items-baseline gap-3">
-          <h1 className="text-[22px] font-medium tracking-tight">Accueil</h1>
-          <span className="text-sm capitalize text-muted-foreground">{today}</span>
-          {activeSpace && <span className="text-sm text-muted-foreground">· {activeSpace.name}</span>}
-        </div>
+        <div className="mb-5 text-sm capitalize text-muted-foreground">{today}{activeSpace ? ` · ${activeSpace.name}` : ''}</div>
 
         {/* Indicateurs */}
         <Card className="mb-5 grid grid-cols-2 divide-border sm:grid-cols-4 sm:divide-x">

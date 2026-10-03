@@ -36,7 +36,7 @@ const STATUS: Record<RelStatus, { label: string; cls: string; dot: string }> = {
   never: { label: 'Jamais contacté', cls: 'text-muted-foreground', dot: 'bg-muted-foreground' },
 };
 const StatusTag: React.FC<{ s: RelStatus }> = ({ s }) => (
-  <span className={cn('inline-flex items-center gap-1.5 text-xs font-medium', STATUS[s].cls)}>
+  <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium', STATUS[s].cls)}>
     <span className={cn('size-1.5 rounded-full', STATUS[s].dot)} />{STATUS[s].label}
   </span>
 );

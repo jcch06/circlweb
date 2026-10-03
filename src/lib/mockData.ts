@@ -1,0 +1,160 @@
+// Données mockées pour construire et vérifier le design en local sans session.
+// Branchées via App.tsx en mode ?mock (dev only). Remplacées par le vrai
+// DataProvider une fois le design validé.
+
+const DAY = 86400000;
+const now = Date.now();
+const iso = (daysAgo: number) => new Date(now - daysAgo * DAY).toISOString();
+const dateOnly = (daysFromNow: number) => new Date(now + daysFromNow * DAY).toISOString().slice(0, 10);
+
+const USER_ID = 'me';
+
+export const mockSpaces = [
+  { id: 's-perso', name: 'Personnel', type: 'personal' },
+  { id: 's-invest', name: 'Investisseurs', type: 'team' },
+  { id: 's-climat', name: 'Climat', type: 'team' },
+  { id: 's-anciens', name: 'Anciens collègues', type: 'team' },
+];
+
+export const mockTags = [
+  { id: 't-vip', name: 'VIP', color_hex: '#171717' },
+  { id: 't-suivre', name: 'À suivre', color_hex: '#b7791f' },
+  { id: 't-client', name: 'Client', color_hex: '#1a8f4c' },
+  { id: 't-presse', name: 'Presse', color_hex: '#8a7fd1' },
+];
+
+type C = {
+  id: string; space_id: string; owner_id: string; first_name: string; last_name: string;
+  job_title?: string | null; company?: string | null; email?: string | null; phone?: string | null;
+  photo_url?: string | null; enriched_at?: string | null; last_contacted_at?: string | null;
+  shared_contact_id?: string | null; industry?: string | null; bio?: string | null;
+  ai_context?: string | null; location?: string | null; linkedin?: string | null;
+  skills?: string[] | null; inferred_needs?: string[] | null;
+};
+
+const raw: Array<[string, string, string, string, string, number | null]> = [
+  // prénom, nom, poste, société, cercle, jours depuis dernier contact (null = jamais)
+  ['Claire', 'Fontaine', 'Directrice associée', 'Vinci', 's-invest', 62],
+  ['Thomas', 'Reynaud', 'Partner', 'Green Fund', 's-climat', 8],
+  ['Marc', 'Ollivier', 'Directeur financier', 'Groupe Rocher', 's-anciens', 95],
+  ['Julie', 'Aymard', 'Fondatrice', 'Lumen', 's-invest', 110],
+  ['Sophie', 'Lambert', 'Head of Talent', 'AXA', 's-anciens', 12],
+  ['Philippe', 'De Gestas', 'Président', 'Cercle Alcuin', 's-perso', 5],
+  ['Charles', 'Allioncle', 'Député', 'Assemblée nationale', 's-perso', 64],
+  ['Foulques-Antoine', 'Argoeuves', 'Consultant', 'Indépendant', 's-perso', 70],
+  ['Olivier', 'Debeney', 'DG', 'Solaris', 's-climat', 68],
+  ['Thérèse', 'Brulé', 'Avocate', 'Cabinet Brulé', 's-perso', 73],
+  ['Benoît', 'de Balincourt', 'Directeur relations publiques', 'Dalkia', 's-anciens', 1],
+  ['Henri', 'Huvey', 'Cofondateur', 'MeetBridge', 's-invest', 30],
+  ['Camille', 'Prévost', 'CMO', 'Payfit', 's-invest', 22],
+  ['Nicolas', 'Marchand', 'Directeur', 'Saper Vedere', 's-perso', 140],
+  ['Léa', 'Fournier', 'Journaliste', 'Les Échos', 's-perso', 40],
+  ['Antoine', 'Berger', 'CTO', 'Qonto', 's-invest', 9],
+  ['Inès', 'Moreau', 'VC Principal', 'Serena', 's-invest', 54],
+  ['Hugo', 'Renard', 'Founder', 'Pennylane', 's-climat', 16],
+  ['Chloé', 'Girard', 'DRH', 'Doctolib', 's-anciens', 200],
+  ['Lucas', 'Petit', 'Head of Sales', 'Spendesk', 's-anciens', 88],
+  ['Emma', 'Roux', 'Analyste', 'Bpifrance', 's-invest', 3],
+  ['Paul', 'Vidal', 'Associé', 'Alven', 's-invest', 130],
+  ['Manon', 'Faure', 'Déléguée générale', 'France Digitale', 's-perso', 45],
+  ['Gabriel', 'Lemoine', 'CEO', 'Alan', 's-climat', 6],
+];
+
+const AV = ['#e06666', '#57b06f', '#8a7fd1', '#d9b84a', '#e091c0', '#5b8def', '#4bb3a7', '#d98a4a'];
+
+export const mockContacts: C[] = raw.map(([fn, ln, job, co, space, days], i) => ({
+  id: `c-${i}`, space_id: space, owner_id: USER_ID,
+  first_name: fn, last_name: ln, job_title: job, company: co,
+  email: `${fn.toLowerCase().replace(/[^a-z]/g, '')}@${co.toLowerCase().replace(/[^a-z]/g, '') || 'mail'}.com`,
+  phone: '+33 6 12 34 56 78',
+  photo_url: null,
+  enriched_at: i % 3 === 0 ? iso(10) : null,
+  last_contacted_at: days == null ? null : iso(days),
+  shared_contact_id: null,
+  industry: 'Tech', location: 'Paris', bio: null, ai_context: null, linkedin: `linkedin.com/in/${fn.toLowerCase()}`,
+  skills: i % 4 === 0 ? ['levée de fonds', 'climat'] : null,
+  inferred_needs: i % 5 === 0 ? ['recrutement CTO'] : null,
+}));
+
+export const mockNotes = [
+  { id: 'n1', contact_id: 'c-0', author_id: USER_ID, is_private: false, created_at: iso(62), content: 'Nous nous sommes revus à plusieurs reprises lors des différents événements de la place. Cherche à investir dans la transition énergétique.' },
+  { id: 'n2', contact_id: 'c-7', author_id: USER_ID, is_private: false, created_at: iso(70), content: 'Je vais contacter Foulques-Antoine pour qu\'il puisse tester les nouvelles fonctionnalités.' },
+  { id: 'n3', contact_id: 'c-8', author_id: USER_ID, is_private: false, created_at: iso(68), content: 'J\'ai rencontré Olivier aujourd\'hui pour lui présenter la solution. Très intéressé par le volet data.' },
+  { id: 'n4', contact_id: 'c-9', author_id: USER_ID, is_private: false, created_at: iso(73), content: 'Ne pas oublier anniversaire le 17 juillet, m\'envoyer une notification.' },
+  { id: 'n5', contact_id: 'c-6', author_id: USER_ID, is_private: false, created_at: iso(64), content: 'Échange au dîner du Cercle Alcuin. Ouvert à une mise en relation côté finance verte.' },
+  { id: 'n6', contact_id: 'c-10', author_id: 'other', is_private: false, created_at: iso(1), content: 'Occupe le poste de directeur des relations publiques.' },
+  { id: 'n7', contact_id: 'c-11', author_id: USER_ID, is_private: false, created_at: iso(30), content: 'Est cofondateur de sa nouvelle structure, MeetBridge.' },
+  { id: 'n8', contact_id: 'c-1', author_id: USER_ID, is_private: false, created_at: iso(8), content: 'Lève un fonds climat de 120M. Cherche une associée opérationnelle.' },
+];
+
+export const mockFollowUps = [
+  { id: 'f1', contact_id: 'c-0', user_id: USER_ID, space_id: 's-invest', due_date: dateOnly(0), label: 'Envoyer le deck', status: 'pending' },
+  { id: 'f2', contact_id: 'c-2', user_id: USER_ID, space_id: 's-anciens', due_date: dateOnly(0), label: 'Point trimestriel', status: 'pending' },
+  { id: 'f3', contact_id: 'c-3', user_id: USER_ID, space_id: 's-invest', due_date: dateOnly(-2), label: 'Relancer sur la série A', status: 'pending' },
+];
+
+export const mockUpdates = [
+  { id: 'u1', contact_id: 'c-10', space_id: 's-anciens', field: 'job_title', old_value: 'Responsable com', new_value: 'Directeur relations publiques', summary: null, status: 'pending', source: 'linkedin' },
+  { id: 'u2', contact_id: 'c-10', space_id: 's-anciens', field: 'company', old_value: 'Veolia', new_value: 'Dalkia', summary: null, status: 'pending', source: 'linkedin' },
+  { id: 'u3', contact_id: 'c-11', space_id: 's-invest', field: null, old_value: null, new_value: null, summary: 'Évolue dans le secteur de la mise en relation.', status: 'pending', source: 'web' },
+];
+
+export const mockContactTags = [
+  { contact_id: 'c-0', tag_id: 't-vip' }, { contact_id: 'c-0', tag_id: 't-suivre' },
+  { contact_id: 'c-1', tag_id: 't-vip' }, { contact_id: 'c-5', tag_id: 't-vip' },
+  { contact_id: 'c-14', tag_id: 't-presse' }, { contact_id: 'c-4', tag_id: 't-client' },
+];
+
+export const mockLinks = [
+  { from_contact_id: 'c-0', to_contact_id: 'c-1', created_at: iso(20) },
+  { from_contact_id: 'c-5', to_contact_id: 'c-1', created_at: iso(15) },
+  { from_contact_id: 'c-2', to_contact_id: 'c-4', created_at: iso(12) },
+];
+
+// --- Index dérivés (mêmes formes que data.tsx) ---
+function buildMaps() {
+  const contactById = new Map(mockContacts.map((c) => [c.id, c]));
+  const spaceById = new Map(mockSpaces.map((s) => [s.id, s]));
+  const notesByContact = new Map<string, any[]>();
+  const lastNoteByContact = new Map<string, string>();
+  for (const n of [...mockNotes].sort((a, b) => (a.created_at < b.created_at ? 1 : -1))) {
+    (notesByContact.get(n.contact_id) ?? notesByContact.set(n.contact_id, []).get(n.contact_id)!).push(n);
+    const prev = lastNoteByContact.get(n.contact_id);
+    if (!prev || n.created_at > prev) lastNoteByContact.set(n.contact_id, n.created_at);
+  }
+  const tagById = new Map(mockTags.map((t) => [t.id, t]));
+  const tagsByContact = new Map<string, any[]>();
+  for (const ct of mockContactTags) {
+    const tag = tagById.get(ct.tag_id); if (!tag) continue;
+    (tagsByContact.get(ct.contact_id) ?? tagsByContact.set(ct.contact_id, []).get(ct.contact_id)!).push(tag);
+  }
+  const linksByContact = new Map<string, any[]>();
+  for (const l of mockLinks) for (const id of [l.from_contact_id, l.to_contact_id]) {
+    (linksByContact.get(id) ?? linksByContact.set(id, []).get(id)!).push(l);
+  }
+  const pendingByContact = new Map<string, any[]>();
+  for (const u of mockUpdates) (pendingByContact.get(u.contact_id) ?? pendingByContact.set(u.contact_id, []).get(u.contact_id)!).push(u);
+  const followUpsByContact = new Map<string, any[]>();
+  for (const f of mockFollowUps) (followUpsByContact.get(f.contact_id) ?? followUpsByContact.set(f.contact_id, []).get(f.contact_id)!).push(f);
+  return { contactById, spaceById, notesByContact, lastNoteByContact, tagsByContact, linksByContact, pendingByContact, followUpsByContact };
+}
+
+export function buildMockBase() {
+  const maps = buildMaps();
+  return {
+    session: { user: { id: USER_ID } },
+    user: { id: USER_ID, email: 'anselme.boussuge@gmail.com', user_metadata: { full_name: 'Anselme Boussuge' } },
+    loading: false,
+    errorMsg: null as string | null,
+    spaces: mockSpaces,
+    contacts: mockContacts,
+    notes: mockNotes,
+    tags: mockTags,
+    contactTags: mockContactTags,
+    contactLinks: mockLinks,
+    pendingUpdates: mockUpdates,
+    followUps: mockFollowUps,
+    avatarColorFor: (i: number) => AV[i % AV.length],
+    ...maps,
+  };
+}

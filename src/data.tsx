@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { supabase } from './lib/supabase';
+import { buildMockBase } from './lib/mockData';
 
 // Contexte de données du redesign. Les lectures passent par les vues
 // masquées (contacts_visible…) : un contact verrouillé n'expose que
@@ -212,5 +213,15 @@ export const DataProvider: React.FC<{ session: any; children: React.ReactNode }>
     contactById,
   };
 
+  return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
+};
+
+// Provider de données mockées (design local, dev uniquement). Satisfait la
+// même interface que DataProvider pour que tous les écrans s'affichent sans
+// session. Remplacé par DataProvider une fois le design validé.
+export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const base = useMemo(() => buildMockBase(), []);
+  const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
+  const value = { ...base, selectedSpaceId, setSelectedSpaceId, refresh: async () => {} } as unknown as DataApi;
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 };

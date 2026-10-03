@@ -26,8 +26,29 @@ export function initials(firstName?: string | null, lastName?: string | null): s
   return (f + l).toUpperCase() || '?';
 }
 
+/* Casse des noms à l'affichage : majuscule en tête de chaque mot (y compris
+   après trait d'union ou apostrophe), particules en minuscule sauf en tête
+   (« Benoît de Balincourt », « Jeanne d'Arc »). Un mot déjà en casse mixte
+   (« McDonald », « DeGaulle ») est laissé tel quel : c'est un choix voulu. */
+const PARTICLES = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'von', 'van', 'der', 'den', 'di', 'da', 'dos', 'del', 'y']);
+
+function capWord(word: string, isLead: boolean): string {
+  if (word !== word.toUpperCase() && word !== word.toLowerCase()) return word;
+  const lower = word.toLowerCase();
+  if (!isLead && PARTICLES.has(lower)) return lower;
+  if (!isLead && /^d['’]\p{L}/u.test(lower)) return `d${lower[1]}${capWord(lower.slice(2), true)}`;
+  return lower.replace(/(^|[-'’])(\p{L})/gu, (_m, sep: string, ch: string) => sep + ch.toUpperCase());
+}
+
+export function formatName(s: string | null | undefined, isLead = true): string {
+  if (!s) return '';
+  return s.trim().split(/\s+/).map((w, i) => capWord(w, isLead && i === 0)).join(' ');
+}
+
 export function fullName(c: { first_name?: string | null; last_name?: string | null }): string {
-  return [c.first_name, c.last_name].filter(Boolean).join(' ').trim() || 'Sans nom';
+  const first = formatName(c.first_name, true);
+  const last = formatName(c.last_name, !first);
+  return [first, last].filter(Boolean).join(' ') || 'Sans nom';
 }
 
 /* ---- Statut relationnel (brief 4.0.6) : dérivé des faits, jamais saisi.

@@ -52,7 +52,7 @@ const Prop: React.FC<{
             className="w-full rounded-md border bg-card px-2 py-1 text-[13px] outline-none focus:border-foreground/25" />
         ) : (
           <button disabled={disabled || !onSave} onClick={() => setEditing(true)}
-            className={cn('w-full truncate rounded-md px-2 py-1 text-left text-[13px] -ml-2', onSave && !disabled && 'hover:bg-muted',
+            className={cn('w-full whitespace-normal break-words rounded-md px-2 py-1 text-left text-[13px] leading-snug -ml-2', onSave && !disabled && 'hover:bg-muted',
               !value && 'text-muted-foreground/70')}>
             {value || placeholder}
           </button>
@@ -261,7 +261,7 @@ export const ContactDrawer: React.FC<{
     <>
       <div className="fixed inset-0 z-50 bg-black/20 animate-in fade-in-0" onClick={onClose} />
       <aside role="dialog" aria-label={`Fiche de ${name}`}
-        className="fixed bottom-0 right-0 top-0 z-50 flex w-[min(940px,96vw)] flex-col border-l bg-background shadow-2xl animate-in slide-in-from-right-8 duration-200">
+        className="fixed bottom-0 right-0 top-0 z-50 flex w-[min(1100px,96vw)] flex-col border-l bg-background shadow-2xl animate-in slide-in-from-right-8 duration-200">
         {/* Barre */}
         <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
           {stack.length > 0 && (
@@ -316,7 +316,7 @@ export const ContactDrawer: React.FC<{
         )}
 
         {/* Corps : propriétés | activité */}
-        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto md:grid-cols-[300px_1fr] md:overflow-hidden">
+        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto md:grid-cols-[360px_1fr] md:overflow-hidden">
           <div className="border-b px-6 py-4 md:overflow-y-auto md:border-b-0 md:border-r">
             <div className="mb-1 flex items-center justify-between">
               <h3 className="text-xs font-semibold">Coordonnées</h3>
@@ -339,16 +339,6 @@ export const ContactDrawer: React.FC<{
             <Prop label="Entreprise" value={contact.company} disabled={locked} onSave={(v) => saveField('company', v)} />
             <Prop label="Secteur" value={contact.industry} disabled={locked} onSave={(v) => saveField('industry', v)} />
             <Prop label="Lieu" value={contact.location} disabled={locked} onSave={(v) => saveField('location', v)} />
-            {Array.isArray(contact.skills) && contact.skills.length > 0 && (
-              <Prop label="Compétences">
-                <div className="flex flex-wrap gap-1 py-1">{contact.skills.map((s: string) => <span key={s} className="rounded-full bg-secondary px-2 py-0.5 text-[11px]">{s}</span>)}</div>
-              </Prop>
-            )}
-            {Array.isArray(contact.inferred_needs) && contact.inferred_needs.length > 0 && (
-              <Prop label="Cherche">
-                <div className="flex flex-wrap gap-1 py-1">{contact.inferred_needs.map((s: string) => <span key={s} className="rounded-full border px-2 py-0.5 text-[11px]">{s}</span>)}</div>
-              </Prop>
-            )}
 
             <h3 className="mb-1 mt-5 text-xs font-semibold">Organisation</h3>
             <Prop label="Cercle">
@@ -421,6 +411,36 @@ export const ContactDrawer: React.FC<{
               <div>
                 <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold"><Sparkles size={12} /> Mémoire</h3>
                 <p className="text-[13px] leading-relaxed text-muted-foreground">{contact.ai_context}</p>
+              </div>
+            )}
+
+            {/* Profil enrichi : compétences (étiquettes courtes) et besoins
+                (phrases, donc en liste et pas en étiquettes). */}
+            {((contact.skills?.length ?? 0) > 0 || (contact.inferred_needs?.length ?? 0) > 0) && (
+              <div className="flex flex-col gap-5">
+                {(contact.skills?.length ?? 0) > 0 && (
+                  <div>
+                    <h3 className="mb-2 text-xs font-semibold">Compétences</h3>
+                    <div className="flex flex-wrap gap-1.5">
+                      {contact.skills.map((s: string) => (
+                        <span key={s} className="rounded-md bg-secondary px-2 py-1 text-xs leading-snug">{s}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {(contact.inferred_needs?.length ?? 0) > 0 && (
+                  <div>
+                    <h3 className="mb-2 text-xs font-semibold">Cherche</h3>
+                    <ul className="flex flex-col gap-1.5">
+                      {contact.inferred_needs.map((s: string) => (
+                        <li key={s} className="flex gap-2 text-[13px] leading-snug text-muted-foreground">
+                          <span className="mt-[7px] size-1 shrink-0 rounded-full bg-muted-foreground/60" />
+                          <span>{s.charAt(0).toUpperCase() + s.slice(1)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
 

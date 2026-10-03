@@ -78,6 +78,17 @@ export const mockContacts: C[] = raw.map(([fn, ln, job, co, space, days], i) => 
   inferred_needs: i % 5 === 0 ? ['recrutement CTO'] : null,
 }));
 
+// Cas réel reproduit : nom saisi en minuscules, profil enrichi verbeux.
+Object.assign(mockContacts[10], {
+  first_name: 'benoit', last_name: 'de balincourt',
+  skills: ['affaires publiques', 'relations presse', 'gestion de crise', 'énergie', 'lobbying européen', 'communication institutionnelle'],
+  inferred_needs: [
+    'contacts au cabinet du ministre de la Transition énergétique pour le projet de réseau de chaleur',
+    'un prestataire de veille parlementaire',
+    'recruter un chargé d’affaires publiques junior',
+  ],
+});
+
 // ?mock=big : 10 000 contacts synthétiques pour éprouver l'échelle visée.
 if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mock') === 'big') {
   const F = ['Jean', 'Marie', 'Pierre', 'Sophie', 'Luc', 'Anne', 'Paul', 'Claire', 'Marc', 'Julie', 'Louis', 'Emma', 'Hugo', 'Léa', 'Tom', 'Chloé'];

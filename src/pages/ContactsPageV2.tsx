@@ -471,11 +471,13 @@ const ImportContactsModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     })).filter((r) => r.first_name);
     if (rows.length === 0) return;
     setBusy(true);
-    const { error } = await supabase.from('contacts').insert(rows);
+    // La base ignore les personnes déjà présentes dans vos cercles (trigger zz_skip_duplicate_import).
+    const { data: inserted, error } = await supabase.from('contacts').insert(rows).select('id');
     setBusy(false);
     if (error) { toast(`Import impossible : ${error.message}`); return; }
     onClose();
-    toast(`${rows.length} contact${rows.length > 1 ? 's' : ''} importé${rows.length > 1 ? 's' : ''}.`);
+    const n = inserted?.length ?? 0, skipped = rows.length - n;
+    toast(`${n} contact${n > 1 ? 's' : ''} importé${n > 1 ? 's' : ''}.` + (skipped > 0 ? ` ${skipped} déjà présent${skipped > 1 ? 's' : ''}, ignoré${skipped > 1 ? 's' : ''}.` : ''));
     await data.refresh();
   };
   const toggle = (i: number) => setSelected((s) => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n; });

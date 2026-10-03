@@ -1,18 +1,29 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Search } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 import { useData } from '../data';
 import { useToast } from '../ui/Toast';
 import { Avatar } from '../ui/Bits';
 import { ContactDrawer } from '../ui/ContactDrawer';
 import { fullName, lastTouch, relStatus, relativeFR } from '../ui/format';
+import { IS_MOCK } from '../lib/mode';
 import { cn } from '../lib/utils';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 // Pipelines : des tableaux de contacts rangés par étapes (prospection, levée,
 // recrutement…). Glisser une carte d'une colonne à l'autre change l'étape.
-// La persistance Supabase est branchée à l'étape « données » de la refonte.
+// Mises à jour optimistes, persistées dans pipeline_items (retour arrière si
+// l'écriture échoue).
 
+const DEFAULT_STAGES: { name: string; tone: string }[] = [
+  { name: 'À contacter', tone: 'neutral' },
+  { name: 'Contacté', tone: 'neutral' },
+  { name: 'En discussion', tone: 'progress' },
+  { name: 'Proposition', tone: 'progress' },
+  { name: 'Gagné', tone: 'won' },
+  { name: 'Perdu', tone: 'lost' },
+];
 const TONE_DOT: Record<string, string> = {
   neutral: 'bg-muted-foreground/60',
   progress: 'bg-foreground',
@@ -29,17 +40,31 @@ const STATUS_DOT: Record<string, string> = {
 export const PipelinesPage: React.FC = () => {
   const data = useData();
   const { toast } = useToast();
-  const [pipelineId, setPipelineId] = useState<string | null>(data.pipelines[0]?.id ?? null);
+  const [pipelines, setPipelines] = useState<any[]>(data.pipelines);
+  const [stagesAll, setStagesAll] = useState<any[]>(data.pipelineStages);
   const [items, setItems] = useState<any[]>(data.pipelineItems);
+  const [pipelineId, setPipelineId] = useState<string | null>(data.pipelines[0]?.id ?? null);
   const [overStage, setOverStage] = useState<string | null>(null);
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [addStage, setAddStage] = useState<string | null>(null);
   const [addQuery, setAddQuery] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [creating, setCreating] = useState(false);
   const dragId = useRef<string | null>(null);
 
+  // Resynchronise avec les données serveur après chaque rafraîchissement.
+  useEffect(() => { setPipelines(data.pipelines); }, [data.pipelines]);
+  useEffect(() => { setStagesAll(data.pipelineStages); }, [data.pipelineStages]);
+  useEffect(() => { setItems(data.pipelineItems); }, [data.pipelineItems]);
+  useEffect(() => {
+    if (!pipelineId || !pipelines.some((p) => p.id === pipelineId)) setPipelineId(pipelines[0]?.id ?? null);
+  }, [pipelines, pipelineId]);
+
   const stages = useMemo(
-    () => data.pipelineStages.filter((s) => s.pipeline_id === pipelineId).sort((a, b) => a.position - b.position),
-    [data.pipelineStages, pipelineId]
+    () => stagesAll.filter((s) => s.pipeline_id === pipelineId).sort((a, b) => a.position - b.position),
+    [stagesAll, pipelineId]
   );
   const pipelineItems = useMemo(() => items.filter((i) => i.pipeline_id === pipelineId), [items, pipelineId]);
   const byStage = useMemo(() => {
@@ -50,13 +75,19 @@ export const PipelinesPage: React.FC = () => {
     return m;
   }, [stages, pipelineItems]);
 
-  const moveTo = (itemId: string, stageId: string) => {
+  const moveTo = async (itemId: string, stageId: string) => {
     const it = items.find((i) => i.id === itemId);
     if (!it || it.stage_id === stageId) return;
-    const end = (byStage.get(stageId)?.length ?? 0);
-    setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, stage_id: stageId, position: end, updated_at: new Date().toISOString() } : i)));
+    const before = items;
+    const position = byStage.get(stageId)?.length ?? 0;
+    const updated_at = new Date().toISOString();
+    setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, stage_id: stageId, position, updated_at } : i)));
     const stage = stages.find((s) => s.id === stageId);
     const c = data.contactById.get(it.contact_id);
+    if (!IS_MOCK) {
+      const { error } = await supabase.from('pipeline_items').update({ stage_id: stageId, position, updated_at }).eq('id', itemId);
+      if (error) { setItems(before); toast(`Déplacement impossible : ${error.message}`); return; }
+    }
     toast(`${c ? c.first_name : 'Contact'} → ${stage?.name}`);
   };
 
@@ -69,32 +100,89 @@ export const PipelinesPage: React.FC = () => {
       .slice(0, 30);
   }, [data.contacts, inPipeline, addQuery]);
 
-  const addContact = (contactId: string, stageId?: string) => {
-    const target = stageId ?? stages[0]?.id;
+  const addContact = async (contactId: string) => {
+    const target = addStage ?? stages[0]?.id;
     if (!target || !pipelineId) return;
-    const end = byStage.get(target)?.length ?? 0;
-    setItems((prev) => [...prev, { id: `pi-${Date.now()}`, pipeline_id: pipelineId, stage_id: target, contact_id: contactId, position: end, updated_at: new Date().toISOString() }]);
+    const position = byStage.get(target)?.length ?? 0;
     setAddOpen(false); setAddQuery('');
     const c = data.contactById.get(contactId);
+    if (IS_MOCK) {
+      setItems((prev) => [...prev, { id: `pi-${Date.now()}`, pipeline_id: pipelineId, stage_id: target, contact_id: contactId, position, updated_at: new Date().toISOString() }]);
+    } else {
+      const { data: row, error } = await supabase.from('pipeline_items')
+        .insert({ pipeline_id: pipelineId, stage_id: target, contact_id: contactId, position })
+        .select('*').single();
+      if (error) { toast(`Ajout impossible : ${error.message}`); return; }
+      setItems((prev) => [...prev, row]);
+    }
     toast(`${c ? fullName(c) : 'Contact'} ajouté au pipeline.`);
   };
 
-  if (data.pipelines.length === 0) {
+  // Un pipeline vit dans un cercle : le cercle sélectionné, sinon le personnel.
+  const createPipeline = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    const spaceId = data.selectedSpaceId ?? data.spaces.find((s) => s.type === 'personal')?.id ?? data.spaces[0]?.id;
+    if (!spaceId) { toast('Aucun cercle disponible.'); return; }
+    setCreating(true);
+    if (IS_MOCK) {
+      const pid = `p-${Date.now()}`;
+      setPipelines((prev) => [...prev, { id: pid, name, space_id: spaceId, position: prev.length }]);
+      setStagesAll((prev) => [...prev, ...DEFAULT_STAGES.map((s, i) => ({ id: `${pid}-s${i}`, pipeline_id: pid, name: s.name, tone: s.tone, position: i }))]);
+      setPipelineId(pid);
+    } else {
+      const { data: p, error } = await supabase.from('pipelines')
+        .insert({ name, space_id: spaceId, position: pipelines.length }).select('*').single();
+      if (error || !p) { setCreating(false); toast(`Création impossible : ${error?.message ?? 'erreur'}`); return; }
+      const { data: st, error: e2 } = await supabase.from('pipeline_stages')
+        .insert(DEFAULT_STAGES.map((s, i) => ({ pipeline_id: p.id, name: s.name, tone: s.tone, position: i }))).select('*');
+      if (e2) { setCreating(false); toast(`Étapes non créées : ${e2.message}`); return; }
+      setPipelines((prev) => [...prev, p]);
+      setStagesAll((prev) => [...prev, ...(st ?? [])]);
+      setPipelineId(p.id);
+    }
+    setCreating(false); setCreateOpen(false); setNewName('');
+    toast(`Pipeline « ${name} » créé.`);
+  };
+
+  const createDialog = (
+    <Dialog open={createOpen} onOpenChange={(o) => { setCreateOpen(o); if (!o) setNewName(''); }}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader><DialogTitle>Nouveau pipeline</DialogTitle></DialogHeader>
+        <Input autoFocus placeholder="Prospection, levée de fonds, recrutement…" value={newName}
+          onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') createPipeline(); }} />
+        <p className="text-xs text-muted-foreground">Étapes créées : {DEFAULT_STAGES.map((s) => s.name).join(', ')}.</p>
+        <DialogFooter>
+          <button className="rounded-md px-3 py-1.5 text-[13px] text-muted-foreground hover:bg-muted" onClick={() => setCreateOpen(false)}>Annuler</button>
+          <button disabled={!newName.trim() || creating} onClick={createPipeline}
+            className="rounded-md bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground disabled:opacity-40">
+            {creating ? 'Création…' : 'Créer'}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
+  if (pipelines.length === 0) {
     return (
       <div className="grid h-full place-items-center p-10">
         <div className="max-w-sm text-center">
           <div className="text-[15px] font-semibold">Aucun pipeline pour l'instant</div>
-          <p className="mt-1.5 text-[13px] text-muted-foreground">Un pipeline range vos contacts par étapes : prospection, levée de fonds, recrutement. Créez le premier pour suivre qui vous avez contacté, quand et pourquoi.</p>
+          <p className="mt-1.5 text-[13px] text-muted-foreground">Un pipeline range vos contacts par étapes : prospection, levée de fonds, recrutement. Vous suivez qui vous avez contacté, quand et où vous en êtes.</p>
+          <button onClick={() => setCreateOpen(true)}
+            className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-primary px-3.5 py-2 text-[13px] font-medium text-primary-foreground">
+            <Plus size={14} /> Créer un pipeline
+          </button>
         </div>
+        {createDialog}
       </div>
     );
   }
 
   return (
     <div className="flex h-full flex-col">
-      {/* Barre : choix du pipeline + ajout */}
       <div className="flex items-center gap-1.5 px-6 pb-3 pt-5">
-        {data.pipelines.map((p) => {
+        {pipelines.map((p) => {
           const n = items.filter((i) => i.pipeline_id === p.id).length;
           return (
             <button key={p.id} onClick={() => setPipelineId(p.id)}
@@ -104,14 +192,15 @@ export const PipelinesPage: React.FC = () => {
             </button>
           );
         })}
+        <button onClick={() => setCreateOpen(true)} title="Nouveau pipeline"
+          className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"><Plus size={14} /></button>
         <span className="flex-1" />
-        <button onClick={() => setAddOpen(true)}
+        <button onClick={() => { setAddStage(null); setAddOpen(true); }}
           className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground hover:opacity-90">
           <Plus size={14} /> Ajouter un contact
         </button>
       </div>
 
-      {/* Tableau */}
       <div className="min-h-0 flex-1 overflow-x-auto px-6 pb-6">
         <div className="flex min-w-max items-start gap-3">
           {stages.map((s) => {
@@ -124,7 +213,7 @@ export const PipelinesPage: React.FC = () => {
                   <span className="text-[13px] font-medium">{s.name}</span>
                   <span className="text-xs text-muted-foreground">{col.length}</span>
                   <span className="flex-1" />
-                  <button onClick={() => { setAddOpen(true); }} title="Ajouter dans cette étape"
+                  <button onClick={() => { setAddStage(s.id); setAddOpen(true); }} title="Ajouter dans cette étape"
                     className="grid size-6 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"><Plus size={13} /></button>
                 </div>
                 <div
@@ -174,10 +263,9 @@ export const PipelinesPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Ajouter un contact au pipeline */}
       <Dialog open={addOpen} onOpenChange={(o) => { setAddOpen(o); if (!o) setAddQuery(''); }}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Ajouter un contact</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Ajouter un contact{addStage ? ` · ${stages.find((s) => s.id === addStage)?.name}` : ''}</DialogTitle></DialogHeader>
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input autoFocus className="pl-9" placeholder="Nom ou entreprise" value={addQuery} onChange={(e) => setAddQuery(e.target.value)} />
@@ -197,6 +285,8 @@ export const PipelinesPage: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {createDialog}
 
       {drawerId && (
         <ContactDrawer contactId={drawerId} siblings={pipelineItems.map((i) => i.contact_id)}

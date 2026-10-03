@@ -5,6 +5,8 @@ import { Avatar } from '../ui/Bits';
 import { ContactDrawer } from '../ui/ContactDrawer';
 import { fullName } from '../ui/format';
 import { askNetwork } from '../lib/askNetwork';
+import { supabase } from '../lib/supabase';
+import { IS_MOCK } from '../lib/mode';
 
 // Demander : parler à son réseau. « Trouve-moi tous mes contacts dans les
 // affaires publiques. » La réponse cite des fiches cliquables.
@@ -34,12 +36,29 @@ export const DemanderPage: React.FC = () => {
     setInput('');
     setMsgs((m) => [...m, { role: 'user', text: q }]);
     setBusy(true);
-    await new Promise((r) => setTimeout(r, 350));
-    const res = askNetwork(q, {
-      contacts: data.contacts, notesByContact: data.notesByContact,
-      tagsByContact: data.tagsByContact, lastNoteByContact: data.lastNoteByContact,
-    });
-    setMsgs((m) => [...m, { role: 'assistant', text: res.response, ids: res.contact_ids }]);
+    if (IS_MOCK) {
+      await new Promise((r) => setTimeout(r, 350));
+      const res = askNetwork(q, {
+        contacts: data.contacts, notesByContact: data.notesByContact,
+        tagsByContact: data.tagsByContact, lastNoteByContact: data.lastNoteByContact,
+      });
+      setMsgs((m) => [...m, { role: 'assistant', text: res.response, ids: res.contact_ids }]);
+      setBusy(false);
+      return;
+    }
+    // IA réelle : ask-network lit vos fiches sous votre session (masquage respecté).
+    const res: any = await supabase.functions.invoke('ask-network', { body: { question: q, space_id: data.selectedSpaceId } });
+    let text: string;
+    let ids: string[] = [];
+    if (res.error) {
+      let msg = res.error.message ?? 'erreur';
+      try { const body = await res.error.context?.json?.(); if (body?.error) msg = body.error; } catch { /* corps illisible */ }
+      text = `Je n'ai pas pu interroger votre réseau : ${msg}`;
+    } else {
+      text = res.data?.response || 'Aucune réponse.';
+      ids = res.data?.contact_ids ?? [];
+    }
+    setMsgs((m) => [...m, { role: 'assistant', text, ids }]);
     setBusy(false);
   };
 

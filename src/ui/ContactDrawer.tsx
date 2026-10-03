@@ -78,6 +78,13 @@ export const ContactDrawer: React.FC<{
   const [overrides, setOverrides] = useState<Record<string, Record<string, any>>>({});
   const [credits, setCredits] = useState(25);
 
+  // Solde réel (créé à 25 crédits offerts au premier usage côté serveur).
+  useEffect(() => {
+    if (IS_MOCK || !data.user?.id) return;
+    supabase.from('enrichment_credits').select('balance').eq('user_id', data.user.id).maybeSingle()
+      .then(({ data: row }) => setCredits(row?.balance ?? 25));
+  }, [data.user?.id]);
+
   const base = data.contactById.get(contactId);
   const contact = base ? { ...base, ...(overrides[contactId] ?? {}) } : null;
 
@@ -182,13 +189,29 @@ export const ContactDrawer: React.FC<{
     } finally { setEnriching(false); }
   };
 
-  // Recherche d'email / téléphone (FullEnrich, revendue au crédit).
-  // ponytail: simulée en mode design ; edge function find-contact-info +
-  // registre de crédits branchés à l'étape données.
+  // Recherche d'email / téléphone (FullEnrich, revendue au crédit). Débit
+  // côté serveur, seulement si une valeur est trouvée.
   const findInfo = async (kind: 'email' | 'phone') => {
     const cost = COST[kind];
     if (credits < cost) { toast('Crédits insuffisants pour cette recherche.'); return; }
     setFinding(kind);
+    if (!IS_MOCK) {
+      const label = kind === 'email' ? 'Email' : 'Téléphone';
+      const res: any = await supabase.functions.invoke('find-contact-info', { body: { contact_id: contactId, kind } });
+      setFinding(null);
+      if (res.error) {
+        let msg = res.error.message ?? 'erreur';
+        try { const body = await res.error.context?.json?.(); if (body?.error) msg = body.error; if (typeof body?.balance === 'number') setCredits(body.balance); } catch { /* corps illisible */ }
+        toast(`Recherche impossible : ${msg}`);
+        return;
+      }
+      if (typeof res.data?.balance === 'number') setCredits(res.data.balance);
+      if (!res.data?.value) { toast(`${label} introuvable. Aucun crédit utilisé.`); return; }
+      patchLocal({ [kind]: res.data.value });
+      toast(`${label} trouvé · ${cost} crédit${cost > 1 ? 's' : ''} utilisé${cost > 1 ? 's' : ''}.`);
+      await data.refresh();
+      return;
+    }
     await new Promise((r) => setTimeout(r, 1000));
     const slug = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z]/g, '');
     const value = kind === 'email'
@@ -200,8 +223,16 @@ export const ContactDrawer: React.FC<{
     toast(`${kind === 'email' ? 'Email' : 'Téléphone'} trouvé · ${cost} crédit${cost > 1 ? 's' : ''} utilisé${cost > 1 ? 's' : ''}.`);
   };
 
-  const addToPipeline = (pipelineId: string) => {
+  const addToPipeline = async (pipelineId: string) => {
     const p = data.pipelines.find((x) => x.id === pipelineId);
+    if (memberships.some((m) => m.item.pipeline_id === pipelineId)) { toast(`${contact.first_name} est déjà dans ${p?.name}.`); return; }
+    if (!IS_MOCK) {
+      const first = data.pipelineStages.filter((s) => s.pipeline_id === pipelineId).sort((a, b) => a.position - b.position)[0];
+      if (!first) { toast('Ce pipeline n’a pas d’étape.'); return; }
+      const { error } = await supabase.from('pipeline_items').insert({ pipeline_id: pipelineId, stage_id: first.id, contact_id: contactId, position: 0 });
+      if (error) { toast(`Ajout impossible : ${error.message}`); return; }
+      await data.refresh();
+    }
     toast(`${contact.first_name} ajouté à ${p?.name ?? 'ce pipeline'}.`);
   };
 

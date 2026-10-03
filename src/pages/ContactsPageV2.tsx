@@ -85,11 +85,17 @@ export const ContactsPageV2: React.FC = () => {
   const load = async (offset: number) => {
     const id = ++reqId.current;
     setLoading(true);
-    const page = await queryContacts(
-      { q: debouncedQ, view, status: statusFilter, tagId: tagFilter, spaceId: data.selectedSpaceId, sort, offset, limit: PAGE },
-      { contacts: data.contacts, lastNoteByContact: data.lastNoteByContact, tagsByContact: data.tagsByContact,
-        spaceById: data.spaceById, followUpsByContact: data.followUpsByContact, pendingByContact: data.pendingByContact },
-    );
+    let page;
+    try {
+      page = await queryContacts(
+        { q: debouncedQ, view, status: statusFilter, tagId: tagFilter, spaceId: data.selectedSpaceId, sort, offset, limit: PAGE },
+        { contacts: data.contacts, lastNoteByContact: data.lastNoteByContact, tagsByContact: data.tagsByContact,
+          spaceById: data.spaceById, followUpsByContact: data.followUpsByContact, pendingByContact: data.pendingByContact },
+      );
+    } catch (err: any) {
+      if (id === reqId.current) { setLoading(false); toast(`Recherche impossible : ${err.message ?? 'erreur réseau'}`); }
+      return;
+    }
     if (id !== reqId.current) return; // une requête plus récente a été lancée
     setRows((prev) => (offset === 0 ? page.rows : [...prev, ...page.rows]));
     setTotal(page.total);

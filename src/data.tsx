@@ -79,6 +79,9 @@ export const DataProvider: React.FC<{ session: any; children: React.ReactNode }>
   const [contactLinks, setContactLinks] = useState<any[]>([]);
   const [pendingUpdates, setPendingUpdates] = useState<any[]>([]);
   const [followUps, setFollowUps] = useState<any[]>([]);
+  const [pipelines, setPipelines] = useState<any[]>([]);
+  const [pipelineStages, setPipelineStages] = useState<any[]>([]);
+  const [pipelineItems, setPipelineItems] = useState<any[]>([]);
   const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -93,7 +96,7 @@ export const DataProvider: React.FC<{ session: any; children: React.ReactNode }>
       const spacesData = await fetchAll('spaces', 'name');
       setSpaces(spacesData);
       if (spacesData.length > 0) {
-        const [contactsData, notesData, tagsData, contactTagsData, linksData, updatesData, followUpsData] = await Promise.all([
+        const [contactsData, notesData, tagsData, contactTagsData, linksData, updatesData, followUpsData, pipelinesData, stagesData, itemsData] = await Promise.all([
           fetchAll('contacts_visible', 'first_name'),
           fetchAll('notes_visible', 'created_at', false),
           fetchAll('tags', 'name'),
@@ -103,7 +106,13 @@ export const DataProvider: React.FC<{ session: any; children: React.ReactNode }>
           // (see supabase/migrations/20260720100000_add_redesign_tables.sql).
           fetchAll('contact_updates', 'detected_at', false, ['status', 'pending']),
           fetchAll('follow_ups', 'due_date', true, ['status', 'pending']),
+          fetchAll('pipelines', 'position').catch(() => []),
+          fetchAll('pipeline_stages', 'position').catch(() => []),
+          fetchAll('pipeline_items', 'position').catch(() => []),
         ]);
+        setPipelines(pipelinesData);
+        setPipelineStages(stagesData);
+        setPipelineItems(itemsData);
         setContacts(contactsData);
         setNotes(notesData);
         setTags(tagsData);
@@ -205,9 +214,9 @@ export const DataProvider: React.FC<{ session: any; children: React.ReactNode }>
     contactLinks,
     pendingUpdates,
     followUps,
-    pipelines: [],
-    pipelineStages: [],
-    pipelineItems: [],
+    pipelines,
+    pipelineStages,
+    pipelineItems,
     selectedSpaceId,
     setSelectedSpaceId,
     refresh,

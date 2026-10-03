@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Home, Users, Bell, BookOpen, Lightbulb, Layers, Share2, Columns3, Sparkles,
-  Plus, Search, LogOut, ChevronsUpDown, Check, Copy, Sun, Moon, Menu, Mail,
+  Plus, Search, LogOut, ChevronsUpDown, Check, Copy, Sun, Moon, Menu, Mail, CreditCard,
 } from 'lucide-react';
 import { useData } from './data';
 import { supabase } from './lib/supabase';
@@ -42,7 +42,7 @@ const NAV_GROUPS: { label?: string; items: { to: string; label: string; icon: an
 const TITLES: Record<string, string> = {
   '/accueil': 'Accueil', '/demander': 'Demander', '/contacts': 'Contacts', '/pipelines': 'Pipelines',
   '/reseau': 'Réseau', '/cercles': 'Cercles', '/mises-a-jour': 'Mises à jour', '/opportunites': 'Opportunités',
-  '/journal': 'Journal', '/doublons': 'Doublons', '/capture': 'Capturer',
+  '/journal': 'Journal', '/doublons': 'Doublons', '/capture': 'Capturer', '/abonnement': 'Abonnement',
 };
 
 export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
@@ -213,6 +213,7 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="top" className="w-48">
+              <DropdownMenuItem onClick={() => navigate('/abonnement')}><CreditCard size={13} /> Abonnement et factures</DropdownMenuItem>
               <DropdownMenuItem onClick={() => setGoogleOpen(true)}><Mail size={13} /> Gmail et Agenda</DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate('/doublons')}><Copy size={13} /> Doublons</DropdownMenuItem>
               <DropdownMenuItem onClick={onLogout}><LogOut size={13} /> Se déconnecter</DropdownMenuItem>

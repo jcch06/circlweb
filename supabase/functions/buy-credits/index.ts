@@ -21,7 +21,7 @@ const PACKS: Record<string, { credits: number; eur_cents: number }> = (() => {
   try { return JSON.parse(Deno.env.get("CREDIT_PACKS") ?? "") ?? DEFAULT_PACKS; } catch { return DEFAULT_PACKS; }
 })();
 // Retour après paiement : uniquement vers une origine connue.
-const ORIGINS = ["https://circl-web-rho.vercel.app", "http://localhost:5173", "http://localhost:5200"];
+const ORIGINS = ["https://circl-web-rho.vercel.app", "https://mycircl.eu", "http://localhost:5173", "http://localhost:5200"];
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -56,23 +56,31 @@ serve(async (req) => {
       await admin.from("profiles").update({ stripe_customer_id: customerId }).eq("id", user.id);
     }
 
+    // Prix du catalogue Stripe (credits_100…), HT ; sinon prix de secours défini ici.
+    const { data: catalog } = await stripe.prices.list({ lookup_keys: [`credits_${p.credits}`], active: true, limit: 1 });
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: "payment",
-      line_items: [{
+      line_items: [catalog[0] ? { price: catalog[0].id, quantity: 1 } : {
         quantity: 1,
         price_data: {
           currency: "eur",
           unit_amount: p.eur_cents,
-          product_data: { name: `Circl · ${p.credits} crédits d'enrichissement`, description: "Recherche d'emails (1 crédit) et de téléphones (10 crédits). Un crédit n'est débité que si une valeur est trouvée." },
+          tax_behavior: "exclusive",
+          product_data: { name: `Circl · ${p.credits} crédits d'enrichissement` },
         },
       }],
+      // Facture PDF pour chaque achat, TVA calculée par Stripe Tax, clients B2B.
+      invoice_creation: { enabled: true, invoice_data: { description: `${p.credits} crédits d'enrichissement Circl` } },
+      automatic_tax: { enabled: true },
+      billing_address_collection: "required",
+      tax_id_collection: { enabled: true },
+      customer_update: { address: "auto", name: "auto" },
       metadata: { kind: "credits", user_id: user.id, credits: String(p.credits), pack },
       payment_intent_data: { metadata: { kind: "credits", user_id: user.id, credits: String(p.credits) } },
-      success_url: `${origin}/?credits=ok`,
-      cancel_url: `${origin}/?credits=annule`,
+      success_url: `${origin}/abonnement?credits=ok`,
+      cancel_url: `${origin}/abonnement?credits=annule`,
       locale: "fr",
-      automatic_tax: { enabled: false },
     });
     return json({ url: session.url });
   } catch (err) {

@@ -11,6 +11,7 @@ import { HomePage } from './pages/HomePage';
 import { JournalPage } from './pages/JournalPage';
 import { CirclesPage } from './pages/CirclesPage';
 import { NetworkPage } from './pages/NetworkPage';
+import { SubscriptionPage } from './pages/SubscriptionPage';
 import { CapturePage } from './pages/CapturePage';
 import { OpportunitiesPage } from './pages/OpportunitiesPage';
 import { DuplicatesRoute } from './pages/DuplicatesRoute';
@@ -36,6 +37,7 @@ function AppRoutes({ onLogout }: { onLogout: () => void }) {
           <Route path="/cercles" element={<CirclesPage />} />
           <Route path="/capture" element={<CapturePage />} />
           <Route path="/doublons" element={<DuplicatesRoute />} />
+          <Route path="/abonnement" element={<SubscriptionPage />} />
           <Route path="*" element={<Navigate to="/accueil" replace />} />
         </Route>
       </Routes>

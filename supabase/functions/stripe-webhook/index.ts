@@ -16,16 +16,15 @@ const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 // Map Stripe price nicknames/product names to our tier system
 // You can also look up by product ID if you set product metadata
-function tierFromPriceId(priceId: string): string {
-  const mapping: Record<string, string> = {
-    [Deno.env.get("STRIPE_PRICE_SOLO_MONTHLY") ?? ""]: "solo",
-    [Deno.env.get("STRIPE_PRICE_SOLO_YEARLY") ?? ""]: "solo",
-    [Deno.env.get("STRIPE_PRICE_TEAM_MONTHLY") ?? ""]: "team",
-    [Deno.env.get("STRIPE_PRICE_TEAM_YEARLY") ?? ""]: "team",
-    [Deno.env.get("STRIPE_PRICE_BUSINESS_MONTHLY") ?? ""]: "business",
-    [Deno.env.get("STRIPE_PRICE_BUSINESS_YEARLY") ?? ""]: "business",
-  };
-  return mapping[priceId] ?? "free";
+function periodEnd(sub: Stripe.Subscription): string | null {
+  const ts = (sub as any).current_period_end ?? (sub.items.data[0] as any)?.current_period_end;
+  return typeof ts === "number" ? new Date(ts * 1000).toISOString() : null;
+}
+
+// Offre déduite du lookup_key du prix (solo_monthly, team_yearly…).
+function tierFromPrice(price: Stripe.Price | undefined): string {
+  const t = (price?.lookup_key ?? "").split("_")[0];
+  return ["solo", "team", "business"].includes(t) ? t : "free";
 }
 
 serve(async (req) => {
@@ -61,9 +60,8 @@ serve(async (req) => {
       case "customer.subscription.updated": {
         const sub = event.data.object as Stripe.Subscription;
         const customerId = sub.customer as string;
-        const priceId = sub.items.data[0]?.price.id ?? "";
         const quantity = sub.items.data[0]?.quantity ?? 1;
-        const tier = tierFromPriceId(priceId);
+        const tier = tierFromPrice(sub.items.data[0]?.price);
 
         await admin
           .from("profiles")
@@ -72,7 +70,8 @@ serve(async (req) => {
             subscription_status: sub.status,
             subscription_tier: tier,
             subscription_seats: quantity,
-            current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+            // Selon la version d'API du compte, la fin de période est sur l'abonnement ou sur sa ligne.
+            current_period_end: periodEnd(sub),
             trial_end: sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null,
             plan: tier,
           })
@@ -91,6 +90,15 @@ serve(async (req) => {
             stripe_subscription_id: null,
           })
           .eq("stripe_customer_id", sub.customer as string);
+        break;
+      }
+
+      case "invoice.paid": {
+        const invoice = event.data.object as Stripe.Invoice;
+        if (invoice.subscription) {
+          await admin.from("profiles").update({ subscription_status: "active" })
+            .eq("stripe_customer_id", invoice.customer as string).eq("stripe_subscription_id", invoice.subscription as string);
+        }
         break;
       }
 

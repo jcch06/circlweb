@@ -6,6 +6,7 @@ import { useData } from '../data';
 import { useToast } from '../ui/Toast';
 import { Avatar, AICard, SectionLabel, ConfirmModal } from '../ui/Bits';
 import { OpportunityCard, type Intro } from '../ui/OpportunityCard';
+import { IntroTracker } from '../ui/IntroTracker';
 import { UserProfilePopup } from '../components/UserProfilePopup';
 import { fullName, dayFR, relativeFR, timeFR, inCircle } from '../ui/format';
 import type { MistralPipelineResult, AnalysisHistoryEntry, AnalysisDelta } from '../lib/mistral';
@@ -221,7 +222,7 @@ export const OpportunitiesPage: React.FC = () => {
 
   const pending = intros.filter((i) => !decided.has(`${i.from_contact_id}|${i.to_contact_id}`));
   const planned = [...decided.values()].filter((d) => d.status === 'snoozed');
-  const done = [...decided.values()].filter((d) => d.status === 'sent');
+  const done = [...decided.values()].filter((d) => ['sent', 'replied', 'done', 'no_reply'].includes(d.status));
 
   const lastAnalysis = history[0];
 
@@ -352,6 +353,7 @@ export const OpportunitiesPage: React.FC = () => {
         {tab === 'intros' && (
           <div className="home-grid">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <IntroTracker reloadKey={decided.size} />
               {!result ? (
                 <AICard>
                   <SectionLabel>Trouvez qui présenter à qui</SectionLabel>

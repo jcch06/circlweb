@@ -72,6 +72,7 @@ export const OpportunityCard: React.FC<{
       status,
       snoozed_until: snoozedUntil ?? null,
       resolved_at: new Date().toISOString(),
+      ...(status === 'sent' ? { sent_at: new Date().toISOString() } : {}),
     };
     const { error } = await supabase
       .from('intro_suggestions')
@@ -92,7 +93,14 @@ export const OpportunityCard: React.FC<{
     const ok = await persist('sent');
     if (!ok) return;
     setDraftOpen(false);
-    toast('Intro enregistrée comme envoyée.');
+    // Relance à J+7 : vérifier que l'intro a pris.
+    const due = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    await supabase.from('follow_ups').insert({
+      space_id: from.space_id, contact_id: from.id, user_id: data.user?.id, due_date: due,
+      label: `Vérifier l'intro avec ${fullName(to)}`,
+    });
+    toast('Intro enregistrée comme envoyée. Relance prévue dans 7 jours.');
+    await data.refresh(['followUps']);
     onResolved();
   };
 

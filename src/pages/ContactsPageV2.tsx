@@ -11,6 +11,7 @@ import { TagsPanel } from '../ui/TagsPanel';
 import { relativeFR, circleColor, type RelStatus } from '../ui/format';
 import { queryContacts, type ContactRow, type ViewKey, type SortKey } from '../lib/contactsQuery';
 import { cn } from '../lib/utils';
+import { ImportFile } from '../ui/ImportFile';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -455,6 +456,7 @@ const ImportContactsModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const personal = data.spaces.find((s) => s.type === 'personal');
   const [spaceId, setSpaceId] = useState<string>(data.selectedSpaceId ?? personal?.id ?? data.spaces[0]?.id ?? '');
+  const [mode, setMode] = useState<'file' | 'text'>('file');
 
   const parse = async () => {
     if (text.trim().length < 10) return;
@@ -495,7 +497,17 @@ const ImportContactsModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="flex max-h-[86vh] flex-col sm:max-w-xl">
         <DialogHeader><DialogTitle>Importer des contacts</DialogTitle></DialogHeader>
-        {!parsed ? (
+        {!parsed && (
+          <div className="flex w-fit items-center rounded-lg bg-secondary p-0.5 text-xs" role="tablist">
+            {([['file', 'Fichier CSV ou Excel'], ['text', 'Coller du texte']] as const).map(([k, label]) => (
+              <button key={k} role="tab" aria-selected={mode === k} onClick={() => setMode(k)}
+                className={cn('rounded-md px-3 py-1 font-medium', mode === k ? 'bg-card shadow-sm' : 'text-muted-foreground hover:text-foreground')}>{label}</button>
+            ))}
+          </div>
+        )}
+        {mode === 'file' && !parsed ? (
+          <ImportFile onClose={onClose} />
+        ) : !parsed ? (
           <>
             <p className="text-sm text-muted-foreground">Collez n'importe quel texte contenant des contacts : signatures d'email, liste de participants, notes de réunion. L'IA en extrait les fiches, vous validez avant l'ajout.</p>
             <textarea className="min-h-[200px] w-full resize-y rounded-lg border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"

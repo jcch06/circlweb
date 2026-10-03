@@ -78,6 +78,24 @@ export const mockContacts: C[] = raw.map(([fn, ln, job, co, space, days], i) => 
   inferred_needs: i % 5 === 0 ? ['recrutement CTO'] : null,
 }));
 
+// ?mock=big : 10 000 contacts synthétiques pour éprouver l'échelle visée.
+if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mock') === 'big') {
+  const F = ['Jean', 'Marie', 'Pierre', 'Sophie', 'Luc', 'Anne', 'Paul', 'Claire', 'Marc', 'Julie', 'Louis', 'Emma', 'Hugo', 'Léa', 'Tom', 'Chloé'];
+  const L = ['Martin', 'Bernard', 'Dubois', 'Durand', 'Lefebvre', 'Moreau', 'Laurent', 'Simon', 'Michel', 'Garcia', 'David', 'Bertrand', 'Roux', 'Vincent'];
+  const J = ['CEO', 'CTO', 'Directeur', 'Associé', 'Consultant', 'Responsable affaires publiques', 'Head of Sales', 'Avocat', 'Analyste', 'Fondateur'];
+  const CO = ['Axa', 'BNP', 'Qonto', 'Alan', 'Doctolib', 'Total', 'Orange', 'Danone', 'Capgemini', 'Sanofi', 'Engie', 'Renault'];
+  const S = ['s-perso', 's-invest', 's-climat', 's-anciens'];
+  for (let i = 0; i < 10000; i++) {
+    const fn = F[i % F.length], ln = L[(i * 7) % L.length], co = CO[(i * 3) % CO.length];
+    mockContacts.push({
+      id: `b-${i}`, space_id: S[i % 4], owner_id: USER_ID, first_name: fn, last_name: `${ln} ${i}`,
+      job_title: J[(i * 7) % J.length], company: co, email: i % 3 ? `${fn.toLowerCase()}.${i}@${co.toLowerCase()}.com` : null,
+      phone: null, photo_url: null, enriched_at: null, last_contacted_at: i % 4 ? iso((i * 13) % 400) : null,
+      shared_contact_id: null, industry: null, location: 'Paris', bio: null, ai_context: null, linkedin: null, skills: null, inferred_needs: null,
+    });
+  }
+}
+
 export const mockNotes = [
   { id: 'n1', contact_id: 'c-0', author_id: USER_ID, is_private: false, created_at: iso(62), content: 'Nous nous sommes revus à plusieurs reprises lors des différents événements de la place. Cherche à investir dans la transition énergétique.' },
   { id: 'n2', contact_id: 'c-7', author_id: USER_ID, is_private: false, created_at: iso(70), content: 'Je vais contacter Foulques-Antoine pour qu\'il puisse tester les nouvelles fonctionnalités.' },

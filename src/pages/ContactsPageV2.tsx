@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Plus, Sparkles, Trash2, Layers, Tag as TagIcon, Search, Rows3, Share2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -8,7 +8,8 @@ import { useToast } from '../ui/Toast';
 import { Avatar, ConfirmModal } from '../ui/Bits';
 import { ContactDrawer } from '../ui/ContactDrawer';
 import { TagsPanel } from '../ui/TagsPanel';
-import { fullName, lastTouch, relStatus, relativeFR, circleColor, type RelStatus } from '../ui/format';
+import { relativeFR, circleColor, type RelStatus } from '../ui/format';
+import { queryContacts, type ContactRow, type ViewKey, type SortKey } from '../lib/contactsQuery';
 import { cn } from '../lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,13 +22,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 // Page Contacts : l'espace de travail central. Table de travail + vues + bulk
 // + fiche. Monde Atlas (shadcn), statut relationnel dérivé.
 
-type ViewKey = 'all' | 'due' | 'not_enriched';
 const VIEWS: { key: ViewKey; label: string }[] = [
   { key: 'all', label: 'Tous' },
   { key: 'due', label: 'À relancer' },
   { key: 'not_enriched', label: 'Non enrichis' },
 ];
-type SortKey = 'name' | 'company' | 'last';
 
 const STATUS: Record<RelStatus, { label: string; cls: string; dot: string }> = {
   fresh: { label: 'Actif', cls: 'text-hgreen-500', dot: 'bg-hgreen-500' },
@@ -70,55 +69,48 @@ export const ContactsPageV2: React.FC = () => {
     setSearchParams(next, { replace: true });
   };
 
-  const rows = useMemo(() => {
-    let base = data.selectedSpaceId ? data.contacts.filter((c) => c.space_id === data.selectedSpaceId) : data.contacts;
-    if (!data.selectedSpaceId) {
-      const seen = new Set<string>();
-      base = base.filter((c) => {
-        const key = c.shared_contact_id ?? c.id;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-    }
-    const q = query.trim().toLowerCase();
-    let out = base.map((c) => {
-      const touch = lastTouch(c, data.lastNoteByContact.get(c.id));
-      return {
-        c, name: fullName(c), touch, status: relStatus(touch),
-        tags: data.tagsByContact.get(c.id) ?? [],
-        space: data.spaceById.get(c.space_id),
-        followUp: (data.followUpsByContact.get(c.id) ?? [])[0] ?? null,
-        pendingCount: (data.pendingByContact.get(c.id) ?? []).length,
-      };
-    });
-    if (q) {
-      out = out.filter((r) =>
-        r.name.toLowerCase().includes(q) ||
-        (r.c.company ?? '').toLowerCase().includes(q) ||
-        (r.c.job_title ?? '').toLowerCase().includes(q) ||
-        r.tags.some((t: any) => t.name.toLowerCase().includes(q)));
-    }
-    if (view === 'due') out = out.filter((r) => r.status === 'due' || r.status === 'dormant');
-    if (view === 'not_enriched') out = out.filter((r) => !r.c.enriched_at);
-    if (statusFilter) out = out.filter((r) => r.status === statusFilter);
-    if (tagFilter) out = out.filter((r) => r.tags.some((t: any) => t.id === tagFilter));
-    const bySort: Record<SortKey, (a: typeof out[0], b: typeof out[0]) => number> = {
-      name: (a, b) => a.name.localeCompare(b.name, 'fr'),
-      company: (a, b) => (a.c.company ?? '').localeCompare(b.c.company ?? '', 'fr'),
-      last: (a, b) => (a.touch?.getTime() ?? 0) - (b.touch?.getTime() ?? 0),
-    };
-    out.sort(bySort[view === 'due' && sort === 'name' ? 'last' : sort]);
-    return out;
-  }, [data, view, query, statusFilter, tagFilter, sort]);
+  /* Liste paginée : on ne charge jamais tout le carnet. Page de 100,
+     la suivante arrive quand on approche du bas. */
+  const PAGE = 100;
+  const [rows, setRows] = useState<ContactRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [counts, setCounts] = useState<Record<RelStatus, number>>({ fresh: 0, due: 0, dormant: 0, never: 0 });
+  const [loading, setLoading] = useState(true);
+  const [debouncedQ, setDebouncedQ] = useState(query);
+  const reqId = useRef(0);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { const t = setTimeout(() => setDebouncedQ(query), 200); return () => clearTimeout(t); }, [query]);
+
+  const load = async (offset: number) => {
+    const id = ++reqId.current;
+    setLoading(true);
+    const page = await queryContacts(
+      { q: debouncedQ, view, status: statusFilter, tagId: tagFilter, spaceId: data.selectedSpaceId, sort, offset, limit: PAGE },
+      { contacts: data.contacts, lastNoteByContact: data.lastNoteByContact, tagsByContact: data.tagsByContact,
+        spaceById: data.spaceById, followUpsByContact: data.followUpsByContact, pendingByContact: data.pendingByContact },
+    );
+    if (id !== reqId.current) return; // une requête plus récente a été lancée
+    setRows((prev) => (offset === 0 ? page.rows : [...prev, ...page.rows]));
+    setTotal(page.total);
+    setCounts(page.counts);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(0); }, [debouncedQ, view, statusFilter, tagFilter, sort, data.selectedSpaceId, data.contacts, data.lastNoteByContact]);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && !loading && rows.length < total) load(rows.length);
+    }, { rootMargin: '400px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [rows.length, total, loading]);
 
   const siblingIds = useMemo(() => rows.map((r) => r.c.id), [rows]);
   const nbSel = selected.size;
-  const counts = useMemo(() => {
-    const m: Record<RelStatus, number> = { fresh: 0, due: 0, dormant: 0, never: 0 };
-    for (const r of rows) m[r.status]++;
-    return m;
-  }, [rows]);
 
   const toggleSelect = (id: string) => setSelected((prev) => {
     const next = new Set(prev);
@@ -187,7 +179,7 @@ export const ContactsPageV2: React.FC = () => {
       {/* En-tête */}
       <div className="px-7 pt-6">
         <div className="mb-3.5 flex flex-wrap items-center gap-3">
-          <span className="text-sm tabular-nums text-muted-foreground">{rows.length.toLocaleString('fr-FR')} contacts</span>
+          <span className="text-sm tabular-nums text-muted-foreground">{total.toLocaleString('fr-FR')} contact{total > 1 ? 's' : ''}</span>
           <div className="flex rounded-lg bg-muted p-0.5">
             <button className="rounded-md bg-card px-3 py-1 text-xs font-medium shadow-sm"><Rows3 className="mr-1.5 inline size-3.5" />Table</button>
             <button className="rounded-md px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground" onClick={() => navigate(`/reseau${window.location.search}`)}><Share2 className="mr-1.5 inline size-3.5" />Réseau</button>
@@ -227,7 +219,7 @@ export const ContactsPageV2: React.FC = () => {
 
       {/* Table */}
       <div className="flex-1 overflow-y-auto px-7 pb-24">
-        {rows.length === 0 ? (
+        {!loading && total === 0 ? (
           <EmptyContacts hasQuery={!!query || view !== 'all' || !!statusFilter} onCreate={() => setShowCreate(true)} onImport={() => setShowImport(true)} />
         ) : (
           <Card className="overflow-hidden">
@@ -244,7 +236,7 @@ export const ContactsPageV2: React.FC = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.slice(0, 400).map(({ c, name, touch, status, tags, space, pendingCount }) => (
+                {rows.map(({ c, name, touch, status, tags, space, pendingCount }) => (
                   <TableRow key={c.id} data-state={selected.has(c.id) ? 'selected' : undefined}
                     className="cursor-pointer" onClick={() => navigate(`/contacts/${c.id}${window.location.search}`)}>
                     <TableCell onClick={(e) => { e.stopPropagation(); toggleSelect(c.id); }}>
@@ -285,13 +277,12 @@ export const ContactsPageV2: React.FC = () => {
                 ))}
               </TableBody>
             </Table>
-            {rows.length > 400 && (
-              <div className="px-5 py-2.5 text-sm text-muted-foreground">
-                {rows.length - 400} contacts de plus. Affinez avec la recherche ou les filtres.
-              </div>
+            {rows.length < total && (
+              <div className="px-5 py-3 text-center text-xs text-muted-foreground">Chargement de la suite…</div>
             )}
           </Card>
         )}
+        <div ref={sentinelRef} className="h-px" />
       </div>
 
       {/* Barre de sélection */}

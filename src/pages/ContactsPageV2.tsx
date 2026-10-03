@@ -482,7 +482,7 @@ const ImportContactsModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
           <>
             <p className="text-sm text-muted-foreground">Collez n'importe quel texte contenant des contacts : signatures d'email, liste de participants, notes de réunion. L'IA en extrait les fiches, vous validez avant l'ajout.</p>
             <textarea className="min-h-[200px] w-full resize-y rounded-lg border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              autoFocus placeholder={"Jean Dupont, Directeur commercial chez Acme\njean.dupont@acme.com — +33 6 12 34 56 78"} value={text} onChange={(e) => setText(e.target.value)} />
+              autoFocus placeholder={"Jean Dupont, Directeur commercial chez Acme\njean.dupont@acme.com · +33 6 12 34 56 78"} value={text} onChange={(e) => setText(e.target.value)} />
             <DialogFooter>
               <Button variant="outline" onClick={onClose}>Annuler</Button>
               <Button disabled={text.trim().length < 10 || busy} onClick={parse}>{busy ? 'Analyse…' : 'Analyser le texte'}</Button>
@@ -496,8 +496,8 @@ const ImportContactsModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                 <label key={i} className="flex cursor-pointer items-center gap-3 border-b border-border px-1.5 py-2.5 last:border-0">
                   <input type="checkbox" checked={selected.has(i)} onChange={() => toggle(i)} className="size-4 accent-foreground" />
                   <span className="min-w-0">
-                    <span className="block text-sm font-medium">{[c.first_name, c.last_name].filter(Boolean).join(' ') || '—'}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{[[c.job_title, c.company].filter(Boolean).join(' · '), c.email].filter(Boolean).join(' — ') || 'aucun détail'}</span>
+                    <span className="block text-sm font-medium">{[c.first_name, c.last_name].filter(Boolean).join(' ') || 'Sans nom'}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{[[c.job_title, c.company].filter(Boolean).join(' · '), c.email].filter(Boolean).join(' · ') || 'aucun détail'}</span>
                   </span>
                 </label>
               ))}

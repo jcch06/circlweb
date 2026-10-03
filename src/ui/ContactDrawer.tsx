@@ -325,7 +325,7 @@ export const ContactDrawer: React.FC<{
                 <DropdownMenuTrigger asChild>
                   <button className="-ml-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] hover:bg-muted">
                     <span className="size-2 rounded-full" style={{ background: data.spaceById.get(contact.space_id) ? circleColor(data.spaceById.get(contact.space_id)) : undefined }} />
-                    {data.spaceById.get(contact.space_id)?.name ?? '—'}
+                    {data.spaceById.get(contact.space_id)?.name ?? 'Aucun'}
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-52">

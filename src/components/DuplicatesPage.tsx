@@ -164,9 +164,8 @@ export const DuplicatesPage: React.FC<DuplicatesPageProps> = ({ contacts, notes,
     <div style={styles.container}>
       <div style={styles.header}>
         <div>
-          <h1 style={styles.title}>Doublons</h1>
           <p style={styles.subtitle}>
-            Fiches en double détectées par nom — fusionnez-les pour garder un réseau propre (les notes sont conservées et transférées).
+            Fiches en double détectées par nom. Fusionnez-les pour garder un réseau propre : les notes sont conservées et transférées.
           </p>
         </div>
         <div style={styles.counter}>
@@ -179,7 +178,7 @@ export const DuplicatesPage: React.FC<DuplicatesPageProps> = ({ contacts, notes,
         <div className="glass-card" style={{ padding: 40, textAlign: 'center', color: 'var(--text-secondary)' }}>
           <Check size={36} style={{ color: 'var(--status-fresh)', marginBottom: 12 }} />
           <h3 style={{ color: 'var(--text-primary)', marginBottom: 6 }}>Aucun doublon détecté</h3>
-          <p>Chaque personne n'apparaît qu'une fois dans votre réseau. 🎉</p>
+          <p>Chaque personne n'apparaît qu'une fois dans votre réseau.</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -196,7 +195,7 @@ export const DuplicatesPage: React.FC<DuplicatesPageProps> = ({ contacts, notes,
                   <span style={styles.badge}>{group.members.length} fiches</span>
                   {hasLocked && (
                     <span style={{ ...styles.badge, color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <AlertTriangle size={12} /> contact verrouillé — fusion indisponible
+                      <AlertTriangle size={12} /> contact verrouillé, fusion indisponible
                     </span>
                   )}
                 </div>

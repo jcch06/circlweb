@@ -294,7 +294,7 @@ export const OpportunitiesPage: React.FC = () => {
           <div className="card card-pad" style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div className="t-sec tnum" style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--ink-2)' }}>
               <span>
-                Analyse en tâche de fond — {(
+                Analyse en tâche de fond : {(
                   { init: 'initialisation', embed: 'vectorisation', plan: 'clustering', map: 'analyse des lots', reduce: 'synthèse', supply: 'offre/demande', done: 'terminé' } as Record<string, string>
                 )[asyncJob.phase] ?? asyncJob.phase}
                 {asyncJob.phase === 'embed' && asyncJob.totalToEmbed ? ` (${asyncJob.embedded}/${asyncJob.totalToEmbed})` : ''}

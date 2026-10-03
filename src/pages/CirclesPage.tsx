@@ -175,15 +175,16 @@ export const CirclesPage: React.FC = () => {
               <div
                 key={s.id}
                 className="card"
-                style={{ padding: '16px 18px 16px 15px', borderLeft: `3px solid ${color}`, cursor: 'pointer' }}
+                style={{ padding: '16px 18px', cursor: 'pointer' }}
                 onClick={() => setOpenSpaceId(s.id)}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <span className="t-block" style={{ fontSize: 16 }}>{s.name}</span>
+                  <span style={{ width: 9, height: 9, borderRadius: 999, background: color, flex: 'none' }} />
+                  <span className="t-block" style={{ fontSize: 15 }}>{s.name}</span>
                   <span style={{ flex: 1 }} />
                   <span
                     className="chip"
-                    style={{ height: 20, fontSize: 11, padding: '0 8px', borderColor: 'transparent', background: `${''}var(--hover)`, color: 'var(--ink-2)' }}
+                    style={{ height: 20, fontSize: 11, padding: '0 8px', borderColor: 'transparent', background: 'var(--hover)', color: 'var(--ink-2)' }}
                   >
                     {s.type === 'personal' ? 'Personnel' : 'Collaboratif'}
                   </span>

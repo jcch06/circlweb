@@ -64,26 +64,32 @@ export const HomePage: React.FC = () => {
     () => data.followUps.filter((f) => new Date(f.due_date).getTime() <= Date.now() + DAY).map((f) => ({ f, c: data.contactById.get(f.contact_id) })).filter((x) => x.c && inSpace(x.c)),
     [data.followUps, data.contactById, data.selectedSpaceId]
   );
+  // Une personne = une ligne, même si elle a été copiée dans plusieurs cercles
+  // (même unité que la table Contacts, qui regroupe par shared_contact_id).
+  const people = useMemo(() => {
+    const seen = new Set<string>();
+    return data.contacts.filter(inSpace).filter((c) => { const k = c.shared_contact_id ?? c.id; if (seen.has(k)) return false; seen.add(k); return true; });
+  }, [data.contacts, data.selectedSpaceId]);
   const dormants = useMemo(
-    () => data.contacts.filter(inSpace).map((c) => { const touch = lastTouch(c, data.lastNoteByContact.get(c.id)); return { c, touch, status: relStatus(touch) }; })
+    () => people.map((c) => { const touch = lastTouch(c, data.lastNoteByContact.get(c.id)); return { c, touch, status: relStatus(touch) }; })
       .filter((x) => x.status === 'due' || x.status === 'dormant').filter((x) => x.touch).sort((a, b) => (a.touch!.getTime() - b.touch!.getTime())).slice(0, 5),
-    [data.contacts, data.lastNoteByContact, data.selectedSpaceId]
+    [people, data.lastNoteByContact]
   );
-  const totalDue = useMemo(
-    () => data.contacts.filter(inSpace).filter((c) => { const s = relStatus(lastTouch(c, data.lastNoteByContact.get(c.id))); return s === 'due' || s === 'dormant'; }).length,
-    [data.contacts, data.lastNoteByContact, data.selectedSpaceId]
-  );
-  const contactsCount = useMemo(() => data.contacts.filter(inSpace).length, [data.contacts, data.selectedSpaceId]);
-  const enFroid = useMemo(
-    () => data.contacts.filter(inSpace).filter((c) => relStatus(lastTouch(c, data.lastNoteByContact.get(c.id))) === 'dormant').length,
-    [data.contacts, data.lastNoteByContact, data.selectedSpaceId]
-  );
+  // « À relancer » = statut due seul ; « À recontacter » = due + en froid.
+  const statusCount = useMemo(() => {
+    const n = { due: 0, dormant: 0 };
+    for (const c of people) { const st = relStatus(lastTouch(c, data.lastNoteByContact.get(c.id))); if (st === 'due' || st === 'dormant') n[st]++; }
+    return n;
+  }, [people, data.lastNoteByContact]);
+  const totalDue = statusCount.due;
+  const enFroid = statusCount.dormant;
+  const contactsCount = people.length;
   const recentNotes = useMemo(
     () => data.notes.filter((n) => data.contactById.get(n.contact_id) && inSpace(data.contactById.get(n.contact_id))).slice(0, 6),
     [data.notes, data.contactById, data.selectedSpaceId]
   );
   const notesThisMonth = useMemo(() => { const s = new Date(); s.setDate(1); s.setHours(0, 0, 0, 0); return data.notes.filter((n) => new Date(n.created_at) >= s).length; }, [data.notes]);
-  const incomplete = useMemo(() => data.contacts.filter(inSpace).filter((c) => !c.company || !c.job_title).length, [data.contacts, data.selectedSpaceId]);
+  const incomplete = useMemo(() => people.filter((c) => !c.company || !c.job_title).length, [people]);
 
   const decide = async (u: any, confirm: boolean) => {
     const { error } = await supabase.rpc(confirm ? 'confirm_contact_update' : 'dismiss_contact_update', { p_update_id: u.id });
@@ -93,10 +99,16 @@ export const HomePage: React.FC = () => {
     else toast(confirm ? 'Mise à jour appliquée.' : 'Mise à jour écartée.');
     await data.refresh();
   };
-  const closeFollowUp = async (f: any) => {
-    await supabase.from('follow_ups').update({ status: 'done' }).eq('id', f.id);
-    await supabase.from('contacts').update({ last_contacted_at: new Date().toISOString() }).eq('id', f.contact_id);
-    toast('Relance close.'); await data.refresh();
+  // « Fait » = la personne a été jointe (date de dernier échange mise à jour) ;
+  // « Écarter » ferme la relance sans rien affirmer sur l'échange.
+  const closeFollowUp = async (f: any, contacted: boolean) => {
+    const { error } = await supabase.from('follow_ups').update({ status: contacted ? 'done' : 'dismissed' }).eq('id', f.id);
+    if (error) { toast(`Échec : ${error.message}`); return; }
+    if (contacted) {
+      const { error: e2 } = await supabase.from('contacts').update({ last_contacted_at: new Date().toISOString() }).eq('id', f.contact_id);
+      if (e2) { toast(`Relance close, mais la date d'échange n'a pas pu être enregistrée : ${e2.message}`); await data.refresh(); return; }
+    }
+    toast(contacted ? 'Relance faite, échange enregistré.' : 'Relance écartée.'); await data.refresh();
   };
   const markContacted = async (c: any) => {
     const { error } = await supabase.from('contacts').update({ last_contacted_at: new Date().toISOString() }).eq('id', c.id);
@@ -125,7 +137,7 @@ export const HomePage: React.FC = () => {
 
   const stats = [
     { label: 'Contacts', value: contactsCount, to: '/contacts' },
-    { label: 'À relancer', value: totalDue, to: '/contacts?vue=due', dot: 'bg-[hsl(var(--h-amber-500))]' },
+    { label: 'À relancer', value: totalDue, to: '/contacts?statut=due', dot: 'bg-[hsl(var(--h-amber-500))]' },
     { label: 'À traiter', value: totalPending, to: '/mises-a-jour' },
     { label: 'En froid', value: enFroid, to: '/contacts?statut=dormant', dot: 'bg-[hsl(var(--h-red-500))]' },
   ];
@@ -144,7 +156,7 @@ export const HomePage: React.FC = () => {
           <div className="truncate text-xs text-muted-foreground">{lastNote ? lastNote.content.slice(0, 80) : meta}</div>
         </div>
         {meta && lastNote && <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">{meta}</span>}
-        <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
+        <span className="flex shrink-0 items-center gap-0.5 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100" onClick={(e) => e.stopPropagation()}>
           <button className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground" onClick={() => setNoteFor(c.id)}><PenLine size={13} /> Noter</button>
           {action}
         </span>
@@ -229,9 +241,9 @@ export const HomePage: React.FC = () => {
 
                 {(dueFollowUps.length > 0 || dormants.length > 0) && (
                   <section className="mb-8">
-                    <SectionHead title="À relancer" count={totalDue} action={<button className={ghostLink} onClick={() => navigate('/contacts?vue=due')}>Tout voir <ArrowRight size={12} /></button>} />
+                    <SectionHead title="À recontacter" count={totalDue + enFroid} action={<button className={ghostLink} onClick={() => navigate('/contacts?vue=due')}>Tout voir <ArrowRight size={12} /></button>} />
                     <div className="flex flex-col">
-                      {dueFollowUps.map(({ f, c }) => relanceRow(c, <span className="text-[hsl(var(--h-amber-500))]">{f.label} · {dayFR(f.due_date)}</span>, faitBtn(() => closeFollowUp(f)), `f-${f.id}`))}
+                      {dueFollowUps.map(({ f, c }) => relanceRow(c, <span className="text-[hsl(var(--h-amber-500))]">{f.label} · {dayFR(f.due_date)}</span>, <>{faitBtn(() => closeFollowUp(f, true))}<button className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground" onClick={() => closeFollowUp(f, false)}><X size={13} /> Écarter</button></>, `f-${f.id}`))}
                       {dormants.filter(({ c }) => !dueFollowUps.some((d) => d.c.id === c.id)).map(({ c, touch }) => relanceRow(c, <>{relativeFR(touch!.toISOString())}</>, faitBtn(() => markContacted(c)), `d-${c.id}`))}
                     </div>
                   </section>

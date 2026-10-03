@@ -28,7 +28,8 @@ export const PushNetworkPanel: React.FC<{
   const [busy, setBusy] = useState(false);
   const [candidates, setCandidates] = useState<any[]>([]);
   const [alreadyThere, setAlreadyThere] = useState<any[]>([]);
-  const [unchecked, setUnchecked] = useState<Set<string>>(new Set());
+  // Sélection positive : rien n'est partagé sans avoir été coché.
+  const [checked, setChecked] = useState<Set<string>>(new Set());
 
   const targetSpace = data.spaceById.get(targetSpaceId);
 
@@ -39,24 +40,31 @@ export const PushNetworkPanel: React.FC<{
         const personalSpace = data.spaces.find((s) => s.type === 'personal');
         if (!personalSpace) throw new Error('Espace personnel introuvable.');
 
-        const [{ data: personalContacts }, { data: existingContacts }] = await Promise.all([
-          supabase.from('contacts').select('*').eq('space_id', personalSpace.id),
-          supabase.from('contacts').select('first_name, last_name, phone, email').eq('space_id', targetSpaceId),
+        const all = async (cols: string, spaceId: string) => {
+          const out: any[] = [];
+          for (let from = 0; ; from += 1000) {
+            const { data: page, error } = await supabase.from('contacts').select(cols).eq('space_id', spaceId).range(from, from + 999);
+            if (error) throw error;
+            out.push(...(page ?? []));
+            if (!page || page.length < 1000) return out;
+          }
+        };
+        const [personalContacts, existingContacts] = await Promise.all([
+          all('*', personalSpace.id),
+          all('first_name, last_name, phone, email', targetSpaceId),
         ]);
 
         const existing = existingContacts ?? [];
         const existingPhones = new Set(existing.map((ec: any) => normalize(ec.phone)).filter((v): v is string => v !== null));
         const existingEmails = new Set(existing.map((ec: any) => normalize(ec.email)).filter((v): v is string => v !== null));
 
+        const existingNames = new Set(existing.map((ec: any) => `${ec.first_name ?? ''}|${ec.last_name ?? ''}`.toLowerCase()));
         const dupes: any[] = [];
         const fresh: any[] = [];
         for (const pc of personalContacts ?? []) {
           const phone = normalize(pc.phone);
           const email = normalize(pc.email);
-          const sameName = existing.some((ec: any) =>
-            (ec.first_name ?? '').toLowerCase() === (pc.first_name ?? '').toLowerCase() &&
-            (ec.last_name ?? '').toLowerCase() === (pc.last_name ?? '').toLowerCase()
-          );
+          const sameName = existingNames.has(`${pc.first_name ?? ''}|${pc.last_name ?? ''}`.toLowerCase());
           if (sameName || (phone && existingPhones.has(phone)) || (email && existingEmails.has(email))) {
             dupes.push(pc);
           } else {
@@ -81,8 +89,8 @@ export const PushNetworkPanel: React.FC<{
   }, [onClose, busy]);
 
   const selected = useMemo(
-    () => candidates.filter((c) => !unchecked.has(c.id)),
-    [candidates, unchecked]
+    () => candidates.filter((c) => checked.has(c.id)),
+    [candidates, checked]
   );
 
   const push = async () => {
@@ -113,6 +121,8 @@ export const PushNetworkPanel: React.FC<{
           phone: c.phone,
           linkedin: c.linkedin,
           ai_context: c.ai_context,
+          // Relie la copie à la fiche d'origine : une seule personne partout.
+          shared_contact_id: c.shared_contact_id ?? c.id,
           source: 'manual',
         }));
 
@@ -171,8 +181,8 @@ export const PushNetworkPanel: React.FC<{
           ) : (
             <>
               <p className="t-sec" style={{ color: 'var(--ink-2)', marginBottom: 16 }}>
-                Vos contacts personnels seront copiés dans ce cercle et deviendront visibles
-                par ses membres. Décochez ceux que vous voulez garder pour vous.
+                Cochez les contacts personnels à copier dans ce cercle : ils deviendront
+                visibles par ses membres. Rien n'est partagé sans être coché.
               </p>
 
               {candidates.length === 0 ? (
@@ -190,8 +200,8 @@ export const PushNetworkPanel: React.FC<{
                       >
                         <input
                           type="checkbox"
-                          checked={!unchecked.has(c.id)}
-                          onChange={() => setUnchecked((prev) => {
+                          checked={checked.has(c.id)}
+                          onChange={() => setChecked((prev) => {
                             const next = new Set(prev);
                             if (next.has(c.id)) next.delete(c.id); else next.add(c.id);
                             return next;

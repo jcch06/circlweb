@@ -252,6 +252,13 @@ export const PipelinesPage: React.FC = () => {
                         <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                           <span className={cn('size-1.5 rounded-full', STATUS_DOT[st])} />
                           Bougé {relativeFR(it.updated_at)}
+                          <span className="flex-1" />
+                          {/* Alternative au glisser-déposer : clavier, tactile, écran étroit. */}
+                          <select value={it.stage_id} aria-label={`Étape de ${fullName(c)}`}
+                            onClick={(e) => e.stopPropagation()} onChange={(e) => moveTo(it.id, e.target.value)}
+                            className="max-w-[110px] cursor-pointer truncate rounded border-0 bg-transparent py-0.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline focus-visible:outline-1">
+                            {stages.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                          </select>
                         </div>
                       </div>
                     );

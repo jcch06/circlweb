@@ -20,7 +20,7 @@ export const NoteComposer: React.FC<{
   contactFirstName?: string;
   onSaved?: () => void;
 }> = ({ contactId, contactFirstName, onSaved }) => {
-  const { refresh } = useData();
+  const { refresh, user } = useData();
   const { toast } = useToast();
   const [text, setText] = useState('');
   const [isPrivate, setIsPrivate] = useState(false);
@@ -54,7 +54,21 @@ export const NoteComposer: React.FC<{
       await refresh();
       onSaved?.();
     } catch (err: any) {
-      toast(`La note n'a pas pu être enregistrée : ${err.message ?? 'erreur réseau'}`);
+      // L'analyse IA a échoué : la note est quand même enregistrée telle quelle,
+      // sauf refus d'accès (fiche verrouillée), qui s'applique aussi à l'écriture.
+      const status = err?.context?.status;
+      const { error } = status === 401 || status === 403
+        ? { error: err }
+        : await supabase.from('notes').insert({ contact_id: contactId, author_id: user?.id, content: trimmed, is_private: isPrivate, context: 'professional' });
+      if (error) {
+        toast(`La note n'a pas pu être enregistrée : ${error.message ?? 'erreur réseau'}`);
+      } else {
+        setText('');
+        if (taRef.current) taRef.current.style.height = 'auto';
+        toast("Note enregistrée. L'analyse automatique n'a pas pu être faite.");
+        await refresh();
+        onSaved?.();
+      }
     } finally {
       setBusy(false);
     }

@@ -34,7 +34,10 @@ const CIRCLE_HEX: Record<string, string> = {
   'var(--circle-7)': '#2D9CB0', 'var(--circle-8)': '#8A7357',
 };
 
-const ACCENT_HEX = '#5E81F4';
+// Couleurs d'encre du canevas, lues au moment du dessin pour suivre le thème.
+const ink = () => document.documentElement.classList.contains('dark')
+  ? { accent: '#fafafa', label: '#a3a3a3', link: 'rgba(250,250,250,0.18)', linkDim: 'rgba(250,250,250,0.05)' }
+  : { accent: '#171717', label: '#525252', link: 'rgba(23,23,23,0.16)', linkDim: 'rgba(23,23,23,0.05)' };
 
 export const NetworkPage: React.FC = () => {
   const data = useData();
@@ -219,14 +222,14 @@ export const NetworkPage: React.FC = () => {
     if (bridges.has(c.id)) {
       ctx.beginPath();
       ctx.arc(node.x, node.y, r + 1.8, 0, 2 * Math.PI);
-      ctx.strokeStyle = ACCENT_HEX;
+      ctx.strokeStyle = ink().accent;
       ctx.lineWidth = 1.2 / scale;
       ctx.stroke();
     }
     if (selectedId === c.id || onPath) {
       ctx.beginPath();
       ctx.arc(node.x, node.y, r + 2.6, 0, 2 * Math.PI);
-      ctx.strokeStyle = ACCENT_HEX;
+      ctx.strokeStyle = ink().accent;
       ctx.lineWidth = 2 / scale;
       ctx.stroke();
     }
@@ -238,7 +241,7 @@ export const NetworkPage: React.FC = () => {
       const fontSize = Math.max(10 / scale, 2.4);
       ctx.font = `700 ${fontSize}px Lato, -apple-system, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.fillStyle = '#4A5350';
+      ctx.fillStyle = ink().label;
       ctx.fillText(label, node.x, node.y + r + fontSize + 1);
     }
     ctx.globalAlpha = 1;
@@ -329,7 +332,7 @@ export const NetworkPage: React.FC = () => {
               width={dims.w}
               height={dims.h}
               graphData={{ nodes, links }}
-              backgroundColor="#F5F5FA"
+              backgroundColor="transparent"
               nodeCanvasObject={paintNode}
               nodePointerAreaPaint={(node: any, color, ctx) => {
                 ctx.fillStyle = color;
@@ -339,8 +342,8 @@ export const NetworkPage: React.FC = () => {
               }}
               linkColor={(l: any) => {
                 const key = [typeof l.source === 'object' ? l.source.id : l.source, typeof l.target === 'object' ? l.target.id : l.target].sort().join('|');
-                if (path) return pathEdges.has(key) ? ACCENT_HEX : 'rgba(23,27,26,0.05)';
-                return 'rgba(23,27,26,0.16)';
+                if (path) return pathEdges.has(key) ? ink().accent : ink().linkDim;
+                return ink().link;
               }}
               linkWidth={(l: any) => {
                 const key = [typeof l.source === 'object' ? l.source.id : l.source, typeof l.target === 'object' ? l.target.id : l.target].sort().join('|');

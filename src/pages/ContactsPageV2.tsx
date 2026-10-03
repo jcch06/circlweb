@@ -24,7 +24,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 
 const VIEWS: { key: ViewKey; label: string }[] = [
   { key: 'all', label: 'Tous' },
-  { key: 'due', label: 'À relancer' },
+  { key: 'due', label: 'À recontacter' }, // statuts « À relancer » + « En froid »
   { key: 'not_enriched', label: 'Non enrichis' },
 ];
 
@@ -52,6 +52,15 @@ export const ContactsPageV2: React.FC = () => {
   const statusFilter = searchParams.get('statut') as RelStatus | null;
   const tagFilter = searchParams.get('tag');
   const [sort, setSort] = useState<SortKey>('name');
+  // En-tête triable : vrai bouton (clavier) et sens annoncé (aria-sort).
+  const sortHead = (key: SortKey, label: string, dir: 'ascending' | 'descending') => (
+    <TableHead aria-sort={sort === key ? dir : 'none'}>
+      <button type="button" onClick={() => setSort(key)}
+        className={cn('-mx-1 rounded px-1 hover:text-foreground focus-visible:outline focus-visible:outline-1', sort === key && 'text-foreground')}>
+        {label}{sort === key && <span aria-hidden> {dir === 'ascending' ? '↑' : '↓'}</span>}
+      </button>
+    </TableHead>
+  );
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -233,10 +242,10 @@ export const ContactsPageV2: React.FC = () => {
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="w-10" />
-                  <TableHead className="cursor-pointer" onClick={() => setSort('name')}>Nom</TableHead>
-                  <TableHead className="cursor-pointer" onClick={() => setSort('company')}>Poste & entreprise</TableHead>
+                  {sortHead('name', 'Nom', 'ascending')}
+                  {sortHead('company', 'Poste & entreprise', 'ascending')}
                   <TableHead>Statut</TableHead>
-                  <TableHead className="cursor-pointer" onClick={() => setSort('last')}>Dernier échange</TableHead>
+                  {sortHead('last', 'Dernier échange', 'descending')}
                   <TableHead>Tags</TableHead>
                   {!data.selectedSpaceId && <TableHead>Cercle</TableHead>}
                 </TableRow>

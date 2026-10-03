@@ -45,6 +45,7 @@ export const OpportunityCard: React.FC<{
   const navigate = useNavigate();
   const [draftOpen, setDraftOpen] = useState(false);
   const [snoozeOpen, setSnoozeOpen] = useState(false);
+  const [mailOpened, setMailOpened] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const from = data.contactById.get(intro.from_contact_id);
@@ -80,17 +81,18 @@ export const OpportunityCard: React.FC<{
     return true;
   };
 
-  const send = async () => {
+  // Deux temps : ouvrir le brouillon dans la messagerie, puis confirmer
+  // l'envoi. « Envoyée » n'est enregistré qu'après cette confirmation.
+  const openMail = () => {
     const subject = `${to.first_name} ↔ ${from.first_name}`;
+    window.location.href = `mailto:${from.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(draft)}`;
+    setMailOpened(true);
+  };
+  const confirmSent = async () => {
     const ok = await persist('sent');
     if (!ok) return;
     setDraftOpen(false);
-    toast('Intro marquée comme envoyée.', from.email ? {
-      label: 'Ouvrir mon mail',
-      onClick: () => {
-        window.location.href = `mailto:${from.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(draft)}`;
-      },
-    } : undefined);
+    toast('Intro enregistrée comme envoyée.');
     onResolved();
   };
 
@@ -175,9 +177,15 @@ export const OpportunityCard: React.FC<{
             <button className="btn btn-quiet" style={{ padding: '6px 11px' }} onClick={() => setDraftOpen(false)}>
               Fermer
             </button>
-            <button className="btn btn-primary" style={{ padding: '6px 11px' }} disabled={busy} onClick={send}>
-              <Mail size={13} /> {from.email ? 'Envoyer l’intro' : 'Marquer comme envoyée'}
-            </button>
+            {from.email && !mailOpened ? (
+              <button className="btn btn-primary" style={{ padding: '6px 11px' }} disabled={busy} onClick={openMail}>
+                <Mail size={13} /> Ouvrir dans ma messagerie
+              </button>
+            ) : (
+              <button className="btn btn-primary" style={{ padding: '6px 11px' }} disabled={busy} onClick={confirmSent}>
+                <Mail size={13} /> Je l’ai envoyée
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -185,7 +193,7 @@ export const OpportunityCard: React.FC<{
       {!draftOpen && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12, position: 'relative' }}>
           <button className="btn btn-primary" style={{ padding: '6px 11px' }} onClick={() => setDraftOpen(true)}>
-            Envoyer l'intro
+            Préparer l'intro
           </button>
           <div style={{ position: 'relative' }}>
             <button className="btn btn-ghost" style={{ padding: '6px 11px' }} onClick={() => setSnoozeOpen((o) => !o)}>

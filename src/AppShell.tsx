@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Home, Users, Bell, BookOpen, Lightbulb, Layers, Share2, Columns3, Sparkles,
-  Plus, Search, LogOut, ChevronsUpDown, Check, Copy, Sun, Moon,
+  Plus, Search, LogOut, ChevronsUpDown, Check, Copy, Sun, Moon, Menu,
 } from 'lucide-react';
 import { useData } from './data';
 import { CommandPalette } from './ui/CommandPalette';
@@ -49,6 +49,9 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const location = useLocation();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [dark, setDark] = useState(isDark());
+  // Sous md, la barre latérale devient un panneau ouvert par le bouton menu.
+  const [navOpen, setNavOpen] = useState(false);
+  useEffect(() => setNavOpen(false), [location.pathname]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -71,7 +74,9 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   return (
     <div className="flex h-screen overflow-hidden text-foreground">
       {/* Sidebar — modèle CRM Atlas, 192px, blanche, nav en sections */}
-      <aside className="flex w-48 shrink-0 flex-col overflow-y-auto border-r"
+      {navOpen && <div className="fixed inset-0 z-30 bg-black/30 md:hidden" onClick={() => setNavOpen(false)} />}
+      <aside className={cn('fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col overflow-y-auto border-r transition-transform md:static md:w-48 md:translate-x-0',
+          navOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full')}
         style={{ background: 'hsl(var(--sidebar-background))', borderColor: 'hsl(var(--sidebar-border))' }}>
         <div className="flex items-center gap-2 px-3.5 pb-2 pt-3.5">
           <img src={logo} alt="Circl" className="size-[22px] rounded-md" />
@@ -162,7 +167,9 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 
       {/* Zone principale : TopBar + contenu */}
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">
-        <header className="flex h-12 shrink-0 items-center justify-between border-b bg-card px-5">
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b bg-card px-3 md:px-5">
+          <button onClick={() => setNavOpen(true)} aria-label="Ouvrir la navigation"
+            className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-muted md:hidden"><Menu size={16} /></button>
           <h1 className="text-sm font-medium tracking-tight">{title}</h1>
         </header>
         <div className="relative min-h-0 flex-1 overflow-hidden page-enter">

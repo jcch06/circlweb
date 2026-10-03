@@ -111,6 +111,43 @@ export const mockLinks = [
   { from_contact_id: 'c-2', to_contact_id: 'c-4', created_at: iso(12) },
 ];
 
+// --- Pipelines : tableaux de contacts par étapes ---
+export const mockPipelines = [
+  { id: 'p-prospection', name: 'Prospection', space_id: 's-perso' },
+  { id: 'p-levee', name: 'Levée de fonds', space_id: 's-invest' },
+];
+
+export const mockStages = [
+  { id: 'st-1', pipeline_id: 'p-prospection', name: 'À contacter', position: 0, tone: 'neutral' },
+  { id: 'st-2', pipeline_id: 'p-prospection', name: 'Contacté', position: 1, tone: 'neutral' },
+  { id: 'st-3', pipeline_id: 'p-prospection', name: 'En discussion', position: 2, tone: 'progress' },
+  { id: 'st-4', pipeline_id: 'p-prospection', name: 'Proposition', position: 3, tone: 'progress' },
+  { id: 'st-5', pipeline_id: 'p-prospection', name: 'Gagné', position: 4, tone: 'won' },
+  { id: 'st-6', pipeline_id: 'p-prospection', name: 'Perdu', position: 5, tone: 'lost' },
+  { id: 'st-7', pipeline_id: 'p-levee', name: 'Identifié', position: 0, tone: 'neutral' },
+  { id: 'st-8', pipeline_id: 'p-levee', name: 'Premier contact', position: 1, tone: 'neutral' },
+  { id: 'st-9', pipeline_id: 'p-levee', name: 'Due diligence', position: 2, tone: 'progress' },
+  { id: 'st-10', pipeline_id: 'p-levee', name: 'Term sheet', position: 3, tone: 'progress' },
+  { id: 'st-11', pipeline_id: 'p-levee', name: 'Closé', position: 4, tone: 'won' },
+];
+
+export const mockPipelineItems = [
+  { id: 'pi-1', pipeline_id: 'p-prospection', stage_id: 'st-1', contact_id: 'c-13', position: 0, updated_at: iso(3) },
+  { id: 'pi-2', pipeline_id: 'p-prospection', stage_id: 'st-1', contact_id: 'c-22', position: 1, updated_at: iso(5) },
+  { id: 'pi-3', pipeline_id: 'p-prospection', stage_id: 'st-1', contact_id: 'c-19', position: 2, updated_at: iso(9) },
+  { id: 'pi-4', pipeline_id: 'p-prospection', stage_id: 'st-2', contact_id: 'c-7', position: 0, updated_at: iso(2) },
+  { id: 'pi-5', pipeline_id: 'p-prospection', stage_id: 'st-2', contact_id: 'c-14', position: 1, updated_at: iso(6) },
+  { id: 'pi-6', pipeline_id: 'p-prospection', stage_id: 'st-3', contact_id: 'c-8', position: 0, updated_at: iso(1) },
+  { id: 'pi-7', pipeline_id: 'p-prospection', stage_id: 'st-3', contact_id: 'c-6', position: 1, updated_at: iso(4) },
+  { id: 'pi-8', pipeline_id: 'p-prospection', stage_id: 'st-4', contact_id: 'c-9', position: 0, updated_at: iso(2) },
+  { id: 'pi-9', pipeline_id: 'p-prospection', stage_id: 'st-5', contact_id: 'c-4', position: 0, updated_at: iso(12) },
+  { id: 'pi-10', pipeline_id: 'p-levee', stage_id: 'st-7', contact_id: 'c-16', position: 0, updated_at: iso(4) },
+  { id: 'pi-11', pipeline_id: 'p-levee', stage_id: 'st-8', contact_id: 'c-21', position: 0, updated_at: iso(7) },
+  { id: 'pi-12', pipeline_id: 'p-levee', stage_id: 'st-8', contact_id: 'c-3', position: 1, updated_at: iso(10) },
+  { id: 'pi-13', pipeline_id: 'p-levee', stage_id: 'st-9', contact_id: 'c-0', position: 0, updated_at: iso(1) },
+  { id: 'pi-14', pipeline_id: 'p-levee', stage_id: 'st-10', contact_id: 'c-1', position: 0, updated_at: iso(2) },
+];
+
 // --- Index dérivés (mêmes formes que data.tsx) ---
 function buildMaps() {
   const contactById = new Map(mockContacts.map((c) => [c.id, c]));
@@ -154,6 +191,9 @@ export function buildMockBase() {
     contactLinks: mockLinks,
     pendingUpdates: mockUpdates,
     followUps: mockFollowUps,
+    pipelines: mockPipelines,
+    pipelineStages: mockStages,
+    pipelineItems: mockPipelineItems,
     avatarColorFor: (i: number) => AV[i % AV.length],
     ...maps,
   };

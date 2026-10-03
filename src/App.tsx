@@ -14,6 +14,8 @@ import { NetworkPage } from './pages/NetworkPage';
 import { CapturePage } from './pages/CapturePage';
 import { OpportunitiesPage } from './pages/OpportunitiesPage';
 import { DuplicatesRoute } from './pages/DuplicatesRoute';
+import { PipelinesPage } from './pages/PipelinesPage';
+import { DemanderPage } from './pages/DemanderPage';
 
 function AppRoutes({ onLogout }: { onLogout: () => void }) {
   return (
@@ -22,6 +24,8 @@ function AppRoutes({ onLogout }: { onLogout: () => void }) {
         <Route element={<AppShell onLogout={onLogout} />}>
           <Route index element={<Navigate to="/accueil" replace />} />
           <Route path="/accueil" element={<HomePage />} />
+          <Route path="/demander" element={<DemanderPage />} />
+          <Route path="/pipelines" element={<PipelinesPage />} />
           <Route path="/contacts" element={<ContactsPageV2 />} />
           <Route path="/contacts/:id" element={<ContactsPageV2 />} />
           <Route path="/reseau" element={<NetworkPage />} />

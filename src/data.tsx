@@ -19,6 +19,11 @@ export interface DataApi {
   contactLinks: any[];
   pendingUpdates: any[];
   followUps: any[];
+  /* Pipelines (nouvel objet) : vides côté Supabase tant que les tables ne
+     sont pas branchées ; alimentés par le mock en mode design. */
+  pipelines: any[];
+  pipelineStages: any[];
+  pipelineItems: any[];
   selectedSpaceId: string | null;
   setSelectedSpaceId: (id: string | null) => void;
   refresh: () => Promise<void>;
@@ -200,6 +205,9 @@ export const DataProvider: React.FC<{ session: any; children: React.ReactNode }>
     contactLinks,
     pendingUpdates,
     followUps,
+    pipelines: [],
+    pipelineStages: [],
+    pipelineItems: [],
     selectedSpaceId,
     setSelectedSpaceId,
     refresh,

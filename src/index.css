@@ -34,7 +34,7 @@
 
     --background: 0 0% 100%;
     --foreground: 0 0% 9%;
-    --card: 0 0% 100%;
+    --ui-card: 0 0% 100%;
     --card-foreground: 0 0% 9%;
     --card-hover: 0 0% 97%;
     --popover: 0 0% 100%;
@@ -45,11 +45,11 @@
     --secondary-foreground: 0 0% 9%;
     --muted: 0 0% 96.5%;
     --muted-foreground: 0 0% 45%;
-    --accent: 0 0% 96%;
+    --ui-accent: 0 0% 96%;
     --accent-foreground: 0 0% 9%;
     --destructive: 0 72% 46%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 92%;
+    --ui-border: 0 0% 92%;
     --input: 0 0% 92%;
     --ring: 0 0% 9%;
     --radius: 0.75rem;
@@ -67,7 +67,7 @@
 
     --background: 0 0% 7%;
     --foreground: 0 0% 95%;
-    --card: 0 0% 9.5%;
+    --ui-card: 0 0% 9.5%;
     --card-foreground: 0 0% 95%;
     --card-hover: 0 0% 13%;
     --popover: 0 0% 11%;
@@ -78,11 +78,11 @@
     --secondary-foreground: 0 0% 95%;
     --muted: 0 0% 14%;
     --muted-foreground: 0 0% 60%;
-    --accent: 0 0% 16%;
+    --ui-accent: 0 0% 16%;
     --accent-foreground: 0 0% 95%;
     --destructive: 0 62% 52%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 100% / 0.09;
+    --ui-border: 0 0% 100% / 0.09;
     --input: 0 0% 100% / 0.11;
     --ring: 0 0% 100% / 0.25;
     --sidebar-background: 0 0% 8%;

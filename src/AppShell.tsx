@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
-  Home, Users, Bell, BookOpen, Lightbulb, Layers, Share2,
+  Home, Users, Bell, BookOpen, Lightbulb, Layers, Share2, Columns3, Sparkles,
   Plus, Search, LogOut, ChevronsUpDown, Check, Copy, Sun, Moon,
 } from 'lucide-react';
 import { useData } from './data';
@@ -15,25 +15,32 @@ import {
 } from '@/components/ui/dropdown-menu';
 import logo from './assets/logocircl.png';
 
+// Structure produit validée : le contact est l'atome ; Pipelines (prospection)
+// et Demander (IA sur le réseau) sont des surfaces de premier rang.
 const NAV_GROUPS: { label?: string; items: { to: string; label: string; icon: any; badge?: 'updates' }[] }[] = [
-  { items: [{ to: '/accueil', label: 'Accueil', icon: Home }] },
+  { items: [
+    { to: '/accueil', label: 'Accueil', icon: Home },
+    { to: '/demander', label: 'Demander', icon: Sparkles },
+  ] },
   { label: 'Réseau', items: [
     { to: '/contacts', label: 'Contacts', icon: Users },
+    { to: '/pipelines', label: 'Pipelines', icon: Columns3 },
     { to: '/reseau', label: 'Réseau', icon: Share2 },
-    { to: '/cercles', label: 'Cercles', icon: Layers },
   ] },
-  { label: 'Activité', items: [
+  { label: 'Intelligence', items: [
     { to: '/mises-a-jour', label: 'Mises à jour', icon: Bell, badge: 'updates' },
     { to: '/opportunites', label: 'Opportunités', icon: Lightbulb },
+  ] },
+  { label: 'Équipe', items: [
+    { to: '/cercles', label: 'Cercles', icon: Layers },
     { to: '/journal', label: 'Journal', icon: BookOpen },
   ] },
-  { label: 'Outils', items: [{ to: '/doublons', label: 'Doublons', icon: Copy }] },
 ];
 
 const TITLES: Record<string, string> = {
-  '/accueil': 'Accueil', '/contacts': 'Contacts', '/reseau': 'Réseau', '/cercles': 'Cercles',
-  '/mises-a-jour': 'Mises à jour', '/opportunites': 'Opportunités', '/journal': 'Journal',
-  '/doublons': 'Doublons', '/capture': 'Capturer',
+  '/accueil': 'Accueil', '/demander': 'Demander', '/contacts': 'Contacts', '/pipelines': 'Pipelines',
+  '/reseau': 'Réseau', '/cercles': 'Cercles', '/mises-a-jour': 'Mises à jour', '/opportunites': 'Opportunités',
+  '/journal': 'Journal', '/doublons': 'Doublons', '/capture': 'Capturer',
 };
 
 export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
@@ -144,6 +151,7 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="top" className="w-48">
+              <DropdownMenuItem onClick={() => navigate('/doublons')}><Copy size={13} /> Doublons</DropdownMenuItem>
               <DropdownMenuItem onClick={onLogout}><LogOut size={13} /> Se déconnecter</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

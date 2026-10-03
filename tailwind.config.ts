@@ -25,7 +25,7 @@ export default {
         'micro': ['10px', { lineHeight: '14px' }],
       },
       colors: {
-        border: "hsl(var(--border))",
+        border: "hsl(var(--ui-border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
@@ -47,7 +47,7 @@ export default {
           foreground: "hsl(var(--muted-foreground))",
         },
         accent: {
-          DEFAULT: "hsl(var(--accent))",
+          DEFAULT: "hsl(var(--ui-accent))",
           foreground: "hsl(var(--accent-foreground))",
         },
         popover: {
@@ -55,7 +55,7 @@ export default {
           foreground: "hsl(var(--popover-foreground))",
         },
         card: {
-          DEFAULT: "hsl(var(--card))",
+          DEFAULT: "hsl(var(--ui-card))",
           foreground: "hsl(var(--card-foreground))",
           hover: "hsl(var(--card-hover))",
         },

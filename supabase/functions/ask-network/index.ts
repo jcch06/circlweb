@@ -208,13 +208,20 @@ Le carnet de contacts est fourni dans le premier message, entre balises <contact
             required: ["response", "contacts"],
           },
         }],
-        tool_choice: { type: "tool", name: "repondre" },
+        // Ce modèle refuse un outil imposé (tool_choice "tool") : choix automatique,
+        // la consigne demande l'outil et une lecture de secours couvre le texte libre.
+        tool_choice: { type: "auto" },
       }),
     });
     const body = await ai.json();
     if (!ai.ok) return json({ error: body?.error?.message ?? `IA indisponible (${ai.status})` }, 502);
-    const parsed: any = body.content?.find((b: any) => b.type === "tool_use")?.input
-      ?? { response: body.content?.find((b: any) => b.type === "text")?.text ?? "", contacts: [] };
+    let parsed: any = body.content?.find((b: any) => b.type === "tool_use")?.input;
+    if (!parsed) {
+      const text: string = (body.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
+      // Secours : un JSON complet dans le texte, sinon le texte seul (sans fiches).
+      try { parsed = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] ?? ""); } catch { parsed = null; }
+      if (!parsed || typeof parsed.response !== "string") parsed = { response: text.replace(/\{[\s\S]*\}\s*$/, "").trim(), contacts: [] };
+    }
     if (body.stop_reason === "max_tokens" && !parsed.response) parsed.response = "La réponse était trop longue. Posez une question plus précise.";
 
     // Ne renvoie que des ids réellement accessibles à l'appelant, sans doublon.

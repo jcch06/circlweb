@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Lock, Pencil, Trash2, Sparkles, UserPlus } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Lock, Pencil, Trash2, Sparkles, UserPlus, Mail, CalendarDays } from 'lucide-react';
+import { IS_MOCK } from '../lib/mode';
 import { supabase } from '../lib/supabase';
 import { useData } from '../data';
 import { useToast } from './Toast';
@@ -17,6 +18,13 @@ export const Timeline: React.FC<{ contact: any; onOpenContact?: (id: string) => 
   const [draft, setDraft] = useState('');
 
   const notes = notesByContact.get(contact.id) ?? [];
+  // Échanges détectés dans Gmail et Agenda (visibles par vous seul).
+  const [interactions, setInteractions] = useState<any[]>([]);
+  useEffect(() => {
+    if (IS_MOCK) return;
+    supabase.from('interactions').select('id, kind, occurred_at, title').eq('contact_id', contact.id)
+      .order('occurred_at', { ascending: false }).limit(30).then(({ data }) => setInteractions(data ?? []));
+  }, [contact.id]);
   const isShared = spaceById.get(contact.space_id)?.type !== 'personal';
 
   const mentionsByNote = new Map<string, any[]>();
@@ -28,8 +36,10 @@ export const Timeline: React.FC<{ contact: any; onOpenContact?: (id: string) => 
     (mentionsByNote.get(l.source_note_id) ?? mentionsByNote.set(l.source_note_id, []).get(l.source_note_id)!).push(other);
   }
 
-  const events: { kind: 'note' | 'enriched' | 'created'; at: string; note?: any }[] = [
+  const LABEL: Record<string, string> = { email_in: 'Email reçu', email_out: 'Email envoyé', meeting: 'Rendez-vous' };
+  const events: { kind: 'note' | 'enriched' | 'created' | 'exchange'; at: string; note?: any; label?: string }[] = [
     ...notes.map((n) => ({ kind: 'note' as const, at: n.created_at, note: n })),
+    ...interactions.map((x) => ({ kind: 'exchange' as const, at: x.occurred_at, label: x.kind === 'meeting' && x.title ? `Rendez-vous : ${x.title}` : LABEL[x.kind], note: x })),
     ...(contact.enriched_at ? [{ kind: 'enriched' as const, at: contact.enriched_at }] : []),
     ...(contact.created_at ? [{ kind: 'created' as const, at: contact.created_at }] : []),
   ].sort((a, b) => (a.at < b.at ? 1 : -1));
@@ -56,10 +66,11 @@ export const Timeline: React.FC<{ contact: any; onOpenContact?: (id: string) => 
     <div className="flex flex-col">
       {events.map((ev, i) => {
         if (ev.kind !== 'note') {
+          const Icon = ev.kind === 'enriched' ? Sparkles : ev.kind === 'created' ? UserPlus : ev.note?.kind === 'meeting' ? CalendarDays : Mail;
           return (
-            <div key={`${ev.kind}-${i}`} className="flex items-center gap-2.5 border-b py-2.5 last:border-0">
-              {ev.kind === 'enriched' ? <Sparkles size={13} className="text-muted-foreground" /> : <UserPlus size={13} className="text-muted-foreground" />}
-              <span className="text-[13px] text-muted-foreground">{ev.kind === 'enriched' ? 'Fiche enrichie' : 'Contact ajouté'}</span>
+            <div key={`${ev.kind}-${ev.note?.id ?? i}`} className="flex items-center gap-2.5 border-b py-2.5 last:border-0">
+              <Icon size={13} className="shrink-0 text-muted-foreground" />
+              <span className="truncate text-[13px] text-muted-foreground">{ev.kind === 'enriched' ? 'Fiche enrichie' : ev.kind === 'created' ? 'Contact ajouté' : ev.label}</span>
               <span className="ml-auto text-xs tabular-nums text-muted-foreground">{relativeFR(ev.at)}</span>
             </div>
           );

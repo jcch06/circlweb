@@ -72,6 +72,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (err) {
     console.warn('[notify-digest] track-linkedin', (err as Error).message);
   }
+  // Gmail et Agenda des comptes connectés : le dernier échange est à jour avant le digest.
+  try {
+    await fetch(`${SUPABASE_URL}/functions/v1/google-sync`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, 'Content-Type': 'application/json' },
+      body: '{}',
+      signal: AbortSignal.timeout(20000),
+    });
+  } catch (err) {
+    console.warn('[notify-digest] google-sync', (err as Error).message);
+  }
 
   const admin = createClient(SUPABASE_URL, SERVICE_KEY);
   const today = new Date().toISOString().slice(0, 10);

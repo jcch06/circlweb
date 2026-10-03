@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Home, Users, Bell, BookOpen, Lightbulb, Layers, Share2, Columns3, Sparkles,
-  Plus, Search, LogOut, ChevronsUpDown, Check, Copy, Sun, Moon, Menu,
+  Plus, Search, LogOut, ChevronsUpDown, Check, Copy, Sun, Moon, Menu, Mail,
 } from 'lucide-react';
 import { useData } from './data';
+import { supabase } from './lib/supabase';
 import { CommandPalette } from './ui/CommandPalette';
+import { GoogleConnect } from './ui/GoogleConnect';
 import { circleColor } from './ui/format';
 import { cn } from './lib/utils';
 import { toggleTheme, isDark } from './lib/theme';
@@ -52,12 +54,20 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   // Sous md, la barre latérale devient un panneau ouvert par le bouton menu.
   const [navOpen, setNavOpen] = useState(false);
   useEffect(() => setNavOpen(false), [location.pathname]);
-  // Retour de Stripe après un achat de crédits.
+  // Retour de Stripe (achat de crédits) ou de Google (connexion Gmail et Agenda).
+  const [googleOpen, setGoogleOpen] = useState(false);
   const [creditsNotice, setCreditsNotice] = useState<string | null>(null);
   useEffect(() => {
-    const q = new URLSearchParams(window.location.search).get('credits');
-    if (!q) return;
-    setCreditsNotice(q === 'ok' ? 'Paiement reçu. Vos crédits sont ajoutés à votre solde.' : 'Paiement annulé. Aucun montant n’a été débité.');
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get('credits'), g = params.get('google');
+    if (!q && !g) return;
+    const GOOGLE: Record<string, string> = {
+      ok: 'Google est connecté. Circl rattache vos échanges à vos contacts.',
+      refuse: 'Connexion Google annulée.', expire: 'La connexion Google a expiré. Recommencez.',
+      non_configure: "La connexion Google n'est pas encore activée.", erreur: 'La connexion Google a échoué. Réessayez.',
+    };
+    if (g === 'ok') { setGoogleOpen(true); supabase.functions.invoke('google-sync', { body: {} }).then(() => data.refresh(['contacts'])); }
+    setCreditsNotice(g ? (GOOGLE[g] ?? GOOGLE.erreur) : q === 'ok' ? 'Paiement reçu. Vos crédits sont ajoutés à votre solde.' : 'Paiement annulé. Aucun montant n’a été débité.');
     window.history.replaceState(null, '', window.location.pathname);
     const t = window.setTimeout(() => setCreditsNotice(null), 6000);
     return () => window.clearTimeout(t);
@@ -166,6 +176,7 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="top" className="w-48">
+              <DropdownMenuItem onClick={() => setGoogleOpen(true)}><Mail size={13} /> Gmail et Agenda</DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate('/doublons')}><Copy size={13} /> Doublons</DropdownMenuItem>
               <DropdownMenuItem onClick={onLogout}><LogOut size={13} /> Se déconnecter</DropdownMenuItem>
             </DropdownMenuContent>
@@ -174,6 +185,7 @@ export const AppShell: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       </aside>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      {googleOpen && <GoogleConnect onClose={() => setGoogleOpen(false)} onSynced={() => data.refresh(['contacts'])} />}
 
       {/* Zone principale : TopBar + contenu */}
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   X, Mail, Phone, Link2, ArrowLeft, Lock, Sparkles, MoreHorizontal, Trash2, Search, Columns3, Check,
 } from 'lucide-react';
@@ -122,13 +122,22 @@ export const ContactDrawer: React.FC<{
     item: i, pipeline: data.pipelines.find((p) => p.id === i.pipeline_id), stage: data.pipelineStages.find((s) => s.id === i.stage_id),
   })), [data.pipelineItems, data.pipelines, data.pipelineStages, contactId]);
 
+  // Reprise d'une recherche FullEnrich lancée plus tôt (page rechargée, fiche refermée).
+  const findRef = useRef<(kind: 'email' | 'phone', resume?: boolean) => void>(undefined);
+  useEffect(() => {
+    if (IS_MOCK) return;
+    supabase.from('enrichment_jobs').select('kind').eq('contact_id', contactId).in('status', ['pending', 'finalizing'])
+      .then(({ data: jobs }) => { const kind = jobs?.[0]?.kind; if (kind) findRef.current?.(kind, true); });
+  }, [contactId]);
+
   if (!contact) return null;
 
   const name = fullName(contact);
   const touch = lastTouch(contact, data.lastNoteByContact.get(contactId));
   const status = relStatus(touch);
   const tags = data.tagsByContact.get(contactId) ?? [];
-  const locked = contact.contact_sharing_mode === 'request_only' && !contact.email && !contact.phone;
+  // Fiche verrouillée : la vue contacts_visible le dit directement.
+  const locked = contact.is_unlocked === false;
   const noteCount = (data.notesByContact.get(contactId) ?? []).length;
 
   const hop = (id: string) => { setStack((s) => [...s, contactId]); onNavigate(id); };
@@ -191,9 +200,9 @@ export const ContactDrawer: React.FC<{
 
   // Recherche d'email / téléphone (FullEnrich, revendue au crédit). Débit
   // côté serveur, seulement si une valeur est trouvée.
-  const findInfo = async (kind: 'email' | 'phone') => {
+  const findInfo = async (kind: 'email' | 'phone', resume = false) => {
     const cost = COST[kind];
-    if (credits < cost) { toast('Crédits insuffisants pour cette recherche.'); return; }
+    if (!resume && credits < cost) { toast('Crédits insuffisants pour cette recherche.'); return; }
     setFinding(kind);
     if (!IS_MOCK) {
       const label = kind === 'email' ? 'Email' : 'Téléphone';
@@ -204,8 +213,8 @@ export const ContactDrawer: React.FC<{
         try { const b = await res.error.context?.json?.(); if (b?.error) msg = b.error; if (typeof b?.balance === 'number') setCredits(b.balance); } catch { /* corps illisible */ }
         return { status: 'error', error: msg };
       };
-      // Lancement puis suivi toutes les 4 s, jusqu'à 5 min (waterfall FullEnrich).
-      // ponytail: le suivi s'arrête si la page est rechargée ; le job reste en base.
+      // Lancement (ou reprise d'une recherche en cours, côté serveur) puis
+      // suivi toutes les 4 s, jusqu'à 5 min (waterfall FullEnrich).
       let r = await call({ contact_id: contactId, kind });
       for (let i = 0; r.status === 'pending' && r.job_id && i < 75; i++) {
         await new Promise((ok) => setTimeout(ok, 4000));
@@ -231,6 +240,7 @@ export const ContactDrawer: React.FC<{
     setFinding(null);
     toast(`${kind === 'email' ? 'Email' : 'Téléphone'} trouvé · ${cost} crédit${cost > 1 ? 's' : ''} utilisé${cost > 1 ? 's' : ''}.`);
   };
+  findRef.current = findInfo;
 
   const addToPipeline = async (pipelineId: string) => {
     const p = data.pipelines.find((x) => x.id === pipelineId);

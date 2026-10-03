@@ -18,7 +18,7 @@ const SUGGESTIONS = [
   'Qui est dans la tech à Paris ?',
 ];
 
-type Msg = { role: 'user' | 'assistant'; text: string; ids?: string[]; why?: Record<string, string> };
+type Msg = { role: 'user' | 'assistant'; text: string; ids?: string[]; why?: Record<string, string>; coverage?: string };
 
 export const DemanderPage: React.FC = () => {
   const data = useData();
@@ -47,11 +47,13 @@ export const DemanderPage: React.FC = () => {
       return;
     }
     // IA réelle : ask-network lit vos fiches sous votre session (masquage respecté).
-    const history = msgs.map(({ role, text, ids }) => ({ role, text, ids }));
+    // Les noms accompagnent les ids : « lui », « le deuxième » restent résolus au tour suivant.
+    const history = msgs.map(({ role, text, ids }) => ({ role, text, ids, names: ids?.map((id) => { const c = data.contactById.get(id); return c ? fullName(c) : ''; }) }));
     const res: any = await supabase.functions.invoke('ask-network', { body: { question: q, space_id: data.selectedSpaceId, history } });
     let text: string;
     let ids: string[] = [];
     const why: Record<string, string> = {};
+    let coverage: string | undefined;
     if (res.error) {
       let msg = res.error.message ?? 'erreur';
       try { const body = await res.error.context?.json?.(); if (body?.error) msg = body.error; } catch { /* corps illisible */ }
@@ -59,8 +61,9 @@ export const DemanderPage: React.FC = () => {
     } else {
       text = res.data?.response || 'Aucune réponse.';
       for (const c of res.data?.contacts ?? []) { ids.push(c.id); why[c.id] = c.why; }
+      if (res.data?.searched < res.data?.total) coverage = `Recherche faite sur les ${res.data.searched.toLocaleString('fr-FR')} fiches les plus proches de votre question, sur ${res.data.total.toLocaleString('fr-FR')}.`;
     }
-    setMsgs((m) => [...m, { role: 'assistant', text, ids, why }]);
+    setMsgs((m) => [...m, { role: 'assistant', text, ids, why, coverage }]);
     setBusy(false);
   };
 
@@ -110,6 +113,7 @@ export const DemanderPage: React.FC = () => {
           ) : (
             <div key={i}>
               <p className="whitespace-pre-wrap text-[14px] leading-relaxed">{m.text}</p>
+              {m.coverage && <p className="mt-1 text-xs text-muted-foreground">{m.coverage}</p>}
               {m.ids && m.ids.length > 0 && (
                 <div className="mt-3 overflow-hidden rounded-xl border">
                   {m.ids.map((id) => {

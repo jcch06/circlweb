@@ -54,13 +54,14 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
     }
 
-    // Fetch all contacts in the user's space for context
-    const { data: contacts, error: contactsError } = await supabase
-      .from("contacts")
+    // Fetch all contacts in the user's space for context, through the masked
+    // view under the caller's session: locked contacts expose only their name.
+    const { data: contacts, error: contactsError } = await userClient
+      .from("contacts_visible")
       .select(`
         id, first_name, last_name, job_title, company, industry,
         location, company_size, bio, ai_context, last_contacted_at,
-        phone, email, source, created_at
+        phone, email, source, created_at, is_unlocked
       `)
       .eq("space_id", space_id)
       .order("last_name");
@@ -69,8 +70,8 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: contactsError.message }), { status: 500 });
     }
 
-    // Fetch tags for these contacts
-    const contactIds = (contacts || []).map((c) => c.id);
+    // Fetch tags for these contacts (unlocked ones only)
+    const contactIds = (contacts || []).filter((c: any) => c.is_unlocked).map((c) => c.id);
     const { data: contactTags } = await supabase
       .from("contact_tags")
       .select("contact_id, tag_id, tags(name, category)")

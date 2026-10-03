@@ -130,6 +130,10 @@ serve(async (req) => {
       .not("accepted_at", "is", null)
       .maybeSingle();
     if (!membership) return json({ error: "Forbidden" }, 403);
+    // Fiche verrouillée (cercle request_only sans accès accordé) : ni lecture
+    // de ses champs ni écriture dérivée.
+    const { data: canView } = await userClient.rpc("can_view_contact_full", { p_contact_id: contact.id });
+    if (canView !== true) return json({ error: "Fiche verrouillée : demandez l'accès au propriétaire." }, 403);
 
     const today = todayParis();
 
@@ -274,7 +278,9 @@ Règles :
     const current = contact as unknown as Record<string, string | null>;
     const pending: unknown[] = [];
 
-    for (const fu of structured.field_updates ?? []) {
+    // Une note privée ne produit aucun objet partagé (mises à jour, liens) :
+    // ces tables sont lisibles par tout le cercle.
+    for (const fu of isPrivate ? [] : structured.field_updates ?? []) {
       const field = fu.field as Field;
       if (!ALLOWED_FIELDS.includes(field)) continue;
       const newValue = (fu.new_value ?? "").trim();
@@ -315,7 +321,7 @@ Règles :
 
     // Link mentioned contacts (who-knows-who) for the galaxy graph + AI.
     const mentioned: { id: string; name: string }[] = [];
-    for (const rawName of structured.mentioned_names ?? []) {
+    for (const rawName of isPrivate ? [] : structured.mentioned_names ?? []) {
       const name = (rawName ?? "").replace(/[^\p{L}\p{N}\s'-]/gu, "").trim();
       if (name.length < 3) continue;
       const tokens = name.split(/\s+/).filter((t) => t.length >= 2);

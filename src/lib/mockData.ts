@@ -78,6 +78,23 @@ export const mockContacts: C[] = raw.map(([fn, ln, job, co, space, days], i) => 
   inferred_needs: i % 5 === 0 ? ['recrutement CTO'] : null,
 }));
 
+// Carnet de téléphone typique : milieux notés entre parenthèses ou dans le
+// champ entreprise, « Collab X » pour les collaborateurs parlementaires.
+const PHONE_BOOK: Array<[string, string, string | null]> = [
+  ['Anouk', '(scout)', null], ['Olivier', '(Scout)', null], ['Cabrel', '(scout)', null], ['Emma', '(Scout)', null],
+  ['Sarah', '(LFV)', null], ['Mélanie', '(LFV)', null], ['Hannah', '(LFV)', null],
+  ['Farid', '(avec Lunettes)', null], ['Alex', 'Martin', null], ['Jules', 'Bernard', null], ['Inès', 'Lefort', null],
+  ['Raphaël', 'Tabusse', 'Collab Charles Allioncle'], ['Agnès', 'Evren', 'Sénatrice LR'], ['Éric', 'Pauget', 'Député LR'],
+  ['Laure', 'Lavalette', 'RN'], ['Stanislas', 'Paute', 'Collaborateur Laure Lavalette'],
+  ['Adèle', 'Rosner', 'Radio Courtoisie'], ['Marie', 'Falicon', 'Radio Courtoisie'],
+  ['Frédéric', 'Guichard', 'LCL'], ['Fabienne', 'Hebraud', 'LCL'],
+];
+PHONE_BOOK.forEach(([fn, ln, co], i) => mockContacts.push({
+  id: `p-${i}`, space_id: i % 3 ? 's-perso' : 's-anciens', owner_id: USER_ID, first_name: fn, last_name: ln, job_title: null, company: co,
+  email: null, phone: null, photo_url: null, enriched_at: null, last_contacted_at: i % 4 === 0 ? iso(20 + i * 9) : null,
+  shared_contact_id: null, industry: null, location: null, bio: null, ai_context: null, linkedin: null, skills: null, inferred_needs: null,
+}));
+
 // Cas réel reproduit : nom saisi en minuscules, profil enrichi verbeux.
 Object.assign(mockContacts[10], {
   first_name: 'benoit', last_name: 'de balincourt',

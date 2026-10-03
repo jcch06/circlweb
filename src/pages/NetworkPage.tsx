@@ -1,515 +1,497 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import ForceGraph2D from 'react-force-graph-2d';
-import { Search, X, Route as RouteIcon, PenLine, Rows3, Share2 } from 'lucide-react';
+import { Check, Pencil, Rows3, Share2, Sparkles, X, ArrowRight, Link2 } from 'lucide-react';
 import { useData } from '../data';
+import { supabase } from '../lib/supabase';
+import { IS_MOCK } from '../lib/mode';
+import { cn } from '../lib/utils';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { ContactDrawer } from '../ui/ContactDrawer';
-import { NoteComposer } from '../ui/NoteComposer';
-import { AICard, SectionLabel, Segmented } from '../ui/Bits';
-import { fullName, avatarColor, circleColor, lastTouch, relStatus, STATUS_META, relativeFR } from '../ui/format';
+import { Avatar } from '../ui/Bits';
+import { fullName, lastTouch, relStatus, relativeFR, type RelStatus } from '../ui/format';
+import { computeMilieux, suggestLinks, hasInfo, linkKey, norm, type Suggestion } from '../lib/networkRules';
 
-// Réseau (brief 4.3) : le graphe devient un outil de décision.
-// Seules les arêtes réelles (contact_links) sont visibles, épaisseur selon
-// le nombre de notes sources. Un seul encodage couleur à la fois. Panneau
-// droit permanent : légende au repos, contexte du nœud au clic.
-// « Me présenter à… » illumine le chemin réel fondé sur les notes.
+// Réseau : le carnet rangé par milieux (où l'on a connu les gens), et des
+// liens qui disent toujours pourquoi ils existent. Les milieux et les liens
+// devinés sont calculés par des règles lisibles (lib/networkRules) ; la base
+// ne garde que les décisions de l'utilisateur.
 
-type ColorMode = 'circles' | 'recency' | 'degree';
+type Tab = 'milieux' | 'liens' | 'trier';
+const UNCLASSIFIED = '__a_classer__';
+const DOT: Record<RelStatus, string> = { fresh: 'bg-hgreen-500', due: 'bg-hamber-500', dormant: 'bg-hred-500', never: 'bg-muted-foreground/50' };
+const KIND_LABEL: Record<string, string> = { works_for: 'travaille pour', co_mention: 'connaît', note: 'cités dans une note', knows: 'connaît', colleague: 'collègue de' };
 
-const MODES: { key: ColorMode; label: string; shortcut: string }[] = [
-  { key: 'circles', label: 'Cercles', shortcut: '1' },
-  { key: 'recency', label: 'Récence', shortcut: '2' },
-  { key: 'degree', label: 'Force', shortcut: '3' },
-];
+type Bubble = { key: string; name: string; ids: string[]; r: number; x: number; y: number; unclassified?: boolean };
 
-// Miroir littéral des tokens (le canvas ne lit pas les var()). À garder
-// aligné sur --status-* et --circle-* de index.css.
-const RECENCY_COLORS: Record<string, string> = {
-  fresh: '#1E9E63', due: '#B9821A', dormant: '#D9455A', never: '#A6A6C0',
-};
-
-const CIRCLE_HEX: Record<string, string> = {
-  'var(--circle-1)': '#5E81F4', 'var(--circle-2)': '#4D4CAC', 'var(--circle-3)': '#9698D6',
-  'var(--circle-4)': '#D9455A', 'var(--circle-5)': '#B9821A', 'var(--circle-6)': '#1E9E63',
-  'var(--circle-7)': '#2D9CB0', 'var(--circle-8)': '#8A7357',
-};
-
-// Couleurs d'encre du canevas, lues au moment du dessin pour suivre le thème.
-const ink = () => document.documentElement.classList.contains('dark')
-  ? { accent: '#fafafa', label: '#a3a3a3', link: 'rgba(250,250,250,0.18)', linkDim: 'rgba(250,250,250,0.05)' }
-  : { accent: '#171717', label: '#525252', link: 'rgba(23,23,23,0.16)', linkDim: 'rgba(23,23,23,0.05)' };
+/** Bulles serrées autour de « Vous » : placement en spirale puis relaxation des chevauchements. */
+function layoutBubbles(items: Omit<Bubble, 'r' | 'x' | 'y'>[]): Bubble[] {
+  const bs = items.map((it, i) => {
+    const r = Math.min(90, 36 + 6 * Math.sqrt(it.ids.length));
+    const a = i * 2.39996, d = 70 + 22 * i;
+    return { ...it, r, x: Math.cos(a) * d, y: Math.sin(a) * d };
+  });
+  const me = { r: 30, x: 0, y: 0 };
+  for (let k = 0; k < 320; k++) {
+    for (const b of bs) { b.x *= 0.985; b.y *= 0.985; }
+    const all = [me, ...bs];
+    for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) {
+      const p = all[i], q = all[j];
+      const dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy) || 0.01, min = p.r + q.r + 12;
+      if (d >= min) continue;
+      const m = (min - d) / 2, ux = dx / d, uy = dy / d;
+      if (p === me) { q.x += ux * m * 2; q.y += uy * m * 2; }
+      else { p.x -= ux * m; p.y -= uy * m; q.x += ux * m; q.y += uy * m; }
+    }
+  }
+  return bs;
+}
 
 export const NetworkPage: React.FC = () => {
   const data = useData();
   const navigate = useNavigate();
   const params = useParams<{ id?: string }>();
-  const graphRef = useRef<any>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [dims, setDims] = useState({ w: 800, h: 600 });
-  const [mode, setMode] = useState<ColorMode>('circles');
-  const [showIsolated, setShowIsolated] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
-  const [pathTargetMode, setPathTargetMode] = useState(false);
-  const [path, setPath] = useState<string[] | null>(null);
-  const [noteFor, setNoteFor] = useState<string | null>(null);
-  const hoverRef = useRef<string | null>(null);
+  const [tab, setTab] = useState<Tab>('milieux');
+  const [selected, setSelected] = useState<string | null>(null);
+  const [explicit, setExplicit] = useState<Map<string, string[]>>(new Map());
+  const [aliases, setAliases] = useState<Map<string, string>>(new Map());
+  const [rejected, setRejected] = useState<Set<string>>(new Set());
+  const [loaded, setLoaded] = useState(IS_MOCK);
+  const [aiBusy, setAiBusy] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const userId = data.user?.id;
 
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setDims({ w: el.clientWidth, h: el.clientHeight }));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+  // Décisions de l'utilisateur (classements, renommages, rejets).
+  const loadDecisions = async () => {
+    if (IS_MOCK) return;
+    const [m, a, r] = await Promise.all([
+      supabase.from('contact_milieux').select('contact_id, milieu').limit(20000),
+      supabase.from('milieu_aliases').select('from_name, to_name'),
+      supabase.from('link_rejections').select('a, b, kind'),
+    ]);
+    const ex = new Map<string, string[]>();
+    for (const row of m.data ?? []) (ex.get(row.contact_id) ?? ex.set(row.contact_id, []).get(row.contact_id)!).push(row.milieu);
+    setExplicit(ex);
+    setAliases(new Map((a.data ?? []).map((x) => [x.from_name, x.to_name])));
+    setRejected(new Set((r.data ?? []).map((x) => linkKey(x.a, x.b, x.kind))));
+    setLoaded(true);
+  };
+  useEffect(() => { loadDecisions(); }, []);
 
-  /* ---- Construction du graphe : arêtes réelles agrégées ---- */
-  const { nodes, links, degree, linkCount, isolatedCount } = useMemo(() => {
-    const contacts = data.selectedSpaceId
-      ? data.contacts.filter((c) => c.space_id === data.selectedSpaceId)
-      : data.contacts;
-    const byId = new Map(contacts.map((c) => [c.id, c]));
+  // Une personne = une fiche, même copiée dans plusieurs cercles.
+  const people = useMemo(() => {
+    const seen = new Set<string>();
+    return data.contacts
+      .filter((c) => !data.selectedSpaceId || c.space_id === data.selectedSpaceId)
+      .filter((c) => { const k = c.shared_contact_id ?? c.id; if (seen.has(k)) return false; seen.add(k); return true; });
+  }, [data.contacts, data.selectedSpaceId]);
 
-    const pair = new Map<string, { a: string; b: string; count: number }>();
-    for (const l of data.contactLinks) {
-      if (!byId.has(l.from_contact_id) || !byId.has(l.to_contact_id)) continue;
-      const [a, b] = [l.from_contact_id, l.to_contact_id].sort();
-      const key = `${a}|${b}`;
-      const e = pair.get(key) ?? { a, b, count: 0 };
-      e.count += 1;
-      pair.set(key, e);
-    }
+  const result = useMemo(() => computeMilieux({ contacts: people, explicit, aliases }), [people, explicit, aliases]);
+  const status = (c: any) => relStatus(lastTouch(c, data.lastNoteByContact.get(c.id)));
 
-    const deg = new Map<string, number>();
-    for (const e of pair.values()) {
-      deg.set(e.a, (deg.get(e.a) ?? 0) + e.count);
-      deg.set(e.b, (deg.get(e.b) ?? 0) + e.count);
-    }
-
-    const connected = contacts.filter((c) => (deg.get(c.id) ?? 0) > 0);
-    const isolated = contacts.filter((c) => (deg.get(c.id) ?? 0) === 0);
-
-    const shown = showIsolated ? contacts : connected;
-    const nodes = shown.map((c) => ({ id: c.id, c }));
-    const links = [...pair.values()].map((e) => ({ source: e.a, target: e.b, count: e.count }));
-
-    return { nodes, links, degree: deg, linkCount: pair, isolatedCount: isolated.length };
-  }, [data.contacts, data.contactLinks, data.selectedSpaceId, showIsolated]);
-
-  const maxDegree = useMemo(() => Math.max(1, ...[...degree.values()]), [degree]);
-  const bridges = useMemo(() => {
-    const sorted = [...degree.entries()].sort((a, b) => b[1] - a[1]);
-    return new Set(sorted.slice(0, 5).map(([id]) => id));
-  }, [degree]);
-
-  /* ---- Couleur d'un nœud selon l'encodage actif ---- */
-  const nodeColor = useCallback((c: any): string => {
-    if (mode === 'circles') {
-      const space = data.spaceById.get(c.space_id);
-      return space ? (CIRCLE_HEX[circleColor(space)] ?? '#8C99B3') : '#8C99B3';
-    }
-    if (mode === 'recency') {
-      const s = relStatus(lastTouch(c, data.lastNoteByContact.get(c.id)));
-      return RECENCY_COLORS[s];
-    }
-    const d = degree.get(c.id) ?? 0;
-    const t = Math.min(1, d / maxDegree);
-    // Force : du gris clair au bleu périwinkle (accent #5E81F4)
-    const mix = (a: number, b: number) => Math.round(a + (b - a) * t);
-    return `rgb(${mix(220, 94)}, ${mix(220, 129)}, ${mix(230, 244)})`;
-  }, [mode, data.spaceById, data.lastNoteByContact, degree, maxDegree]);
-
-  /* ---- Raccourcis clavier 1/2/3 ---- */
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
-      const m = MODES.find((x) => x.shortcut === e.key);
-      if (m) setMode(m.key);
-      if (e.key === 'Escape') { setPath(null); setPathTargetMode(false); setSelectedId(null); }
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, []);
-
-  /* ---- Chemin d'intro : BFS pondéré (liens forts privilégiés) ---- */
-  const adjacency = useMemo(() => {
-    const adj = new Map<string, { to: string; count: number }[]>();
-    for (const e of linkCount.values()) {
-      (adj.get(e.a) ?? adj.set(e.a, []).get(e.a)!).push({ to: e.b, count: e.count });
-      (adj.get(e.b) ?? adj.set(e.b, []).get(e.b)!).push({ to: e.a, count: e.count });
-    }
-    return adj;
-  }, [linkCount]);
-
-  const findPath = useCallback((fromId: string, toId: string): string[] | null => {
-    // Dijkstra avec coût 1/count : les liens nourris de notes pèsent moins.
-    const dist = new Map<string, number>([[fromId, 0]]);
-    const prev = new Map<string, string>();
-    const queue = new Set<string>([fromId]);
-    while (queue.size > 0) {
-      let u: string | null = null; let best = Infinity;
-      for (const q of queue) { const d = dist.get(q) ?? Infinity; if (d < best) { best = d; u = q; } }
-      if (!u) break;
-      queue.delete(u);
-      if (u === toId) break;
-      for (const { to, count } of adjacency.get(u) ?? []) {
-        const alt = (dist.get(u) ?? 0) + 1 / Math.max(1, count);
-        if (alt < (dist.get(to) ?? Infinity)) {
-          dist.set(to, alt);
-          prev.set(to, u);
-          queue.add(to);
-        }
-      }
-    }
-    if (!prev.has(toId) && fromId !== toId) return null;
-    const out = [toId];
-    let cur = toId;
-    while (cur !== fromId) { cur = prev.get(cur)!; out.unshift(cur); }
-    return out;
-  }, [adjacency]);
-
-  const pathEdges = useMemo(() => {
-    if (!path) return new Set<string>();
-    const s = new Set<string>();
-    for (let i = 0; i < path.length - 1; i++) {
-      s.add([path[i], path[i + 1]].sort().join('|'));
-    }
+  const known = useMemo(() => {
+    const s = new Set(rejected);
+    for (const l of data.contactLinks) s.add(linkKey(l.from_contact_id, l.to_contact_id, 'any'));
     return s;
-  }, [path]);
+  }, [rejected, data.contactLinks]);
+  const suggestions = useMemo(() => (loaded ? suggestLinks(people, data.notes, known) : []), [loaded, people, data.notes, known]);
 
-  /* ---- Recherche fly-to (8 résultats max) ---- */
-  const matches = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (q.length < 2) return [];
-    return nodes
-      .filter((n) => fullName(n.c).toLowerCase().includes(q) || (n.c.company ?? '').toLowerCase().includes(q))
-      .slice(0, 8);
-  }, [query, nodes]);
+  const bubbles = useMemo(() => {
+    const items: Omit<Bubble, 'r' | 'x' | 'y'>[] = result.milieux.slice(0, 28).map((m) => ({ key: norm(m.name), name: m.name, ids: m.ids }));
+    if (result.unclassified.length) items.push({ key: UNCLASSIFIED, name: 'À classer', ids: result.unclassified, unclassified: true });
+    return layoutBubbles(items);
+  }, [result]);
+  const view = useMemo(() => {
+    const xs = bubbles.flatMap((b) => [b.x - b.r, b.x + b.r]).concat([-40, 40]);
+    const ys = bubbles.flatMap((b) => [b.y - b.r, b.y + b.r]).concat([-40, 40]);
+    // Taille minimale : un petit carnet ne doit pas être agrandi jusqu'à des libellés géants.
+    const w = Math.max(760, Math.max(...xs) - Math.min(...xs) + 32), h = Math.max(520, Math.max(...ys) - Math.min(...ys) + 32);
+    const cx = (Math.max(...xs) + Math.min(...xs)) / 2, cy = (Math.max(...ys) + Math.min(...ys)) / 2;
+    return `${cx - w / 2} ${cy - h / 2} ${w} ${h}`;
+  }, [bubbles]);
 
-  const flyTo = (id: string) => {
-    const node: any = nodes.find((n) => n.id === id);
-    const g = graphRef.current;
-    if (node && g && node.x !== undefined) {
-      g.centerAt(node.x, node.y, 500);
-      g.zoom(3, 500);
-    }
-    if (pathTargetMode && selectedId) {
-      setPath(findPath(selectedId, id));
-      setPathTargetMode(false);
+  const sel = bubbles.find((b) => b.key === selected) ?? null;
+  const members = useMemo(() => {
+    if (!sel) return [];
+    return sel.ids.map((id) => data.contactById.get(id)).filter(Boolean)
+      .sort((a: any, b: any) => (lastTouch(b, data.lastNoteByContact.get(b.id))?.getTime() ?? 0) - (lastTouch(a, data.lastNoteByContact.get(a.id))?.getTime() ?? 0));
+  }, [sel, data.contactById, data.lastNoteByContact]);
+
+  const flash = (msg: string) => { setNotice(msg); window.setTimeout(() => setNotice(null), 3200); };
+
+  // ---- Décisions ----
+  const classify = async (contactId: string, milieu: string) => {
+    const name = milieu.trim().replace(/\s+/g, ' ');
+    if (!name) return;
+    setExplicit((m) => new Map(m).set(contactId, [name]));
+    if (IS_MOCK) return;
+    const { error } = await supabase.from('contact_milieux').insert({ contact_id: contactId, milieu: name.slice(0, 80), source: 'user' });
+    if (error && error.code !== '23505') flash(`Classement non enregistré : ${error.message}`);
+  };
+  const rename = async (from: string, to: string) => {
+    const target = to.trim().replace(/\s+/g, ' ');
+    if (!target || norm(target) === norm(from)) return;
+    setAliases((m) => new Map(m).set(norm(from), target));
+    setSelected(norm(target));
+    if (IS_MOCK) return;
+    const { error } = await supabase.from('milieu_aliases').upsert({ from_name: norm(from), to_name: target.slice(0, 80) });
+    if (error) flash(`Renommage non enregistré : ${error.message}`);
+  };
+  const decide = async (s: Suggestion, ok: boolean) => {
+    const [a, b] = s.a < s.b ? [s.a, s.b] : [s.b, s.a];
+    setRejected((r) => new Set(r).add(linkKey(a, b, ok ? 'any' : s.kind)));
+    if (IS_MOCK) return;
+    if (ok) {
+      const from = data.contactById.get(s.a);
+      const { error } = await supabase.from('contact_links').insert({
+        space_id: from?.space_id, from_contact_id: s.a, to_contact_id: s.b, kind: s.kind, reason: s.reason, created_by: userId,
+      });
+      if (error && error.code !== '23505') { flash(`Lien non enregistré : ${error.message}`); return; }
+      await data.refresh();
     } else {
-      setSelectedId(id);
+      const { error } = await supabase.from('link_rejections').insert({ a, b, kind: s.kind });
+      if (error && error.code !== '23505') flash(`Rejet non enregistré : ${error.message}`);
     }
-    setQuery('');
+  };
+  const removeLink = async (l: any) => {
+    const { error } = await supabase.from('contact_links').delete().eq('id', l.id);
+    if (error) { flash(`Suppression impossible : ${error.message}`); return; }
+    await data.refresh();
+  };
+  // Classement IA des contacts qui ont au moins un indice (entreprise, poste, email, parenthèse).
+  const aiCandidates = useMemo(() => result.unclassified.filter((id) => { const c = data.contactById.get(id); return c && hasInfo(c); }), [result, data.contactById]);
+  const runAI = async () => {
+    if (IS_MOCK || aiCandidates.length === 0) return;
+    let done = 0, classified = 0;
+    const milieux = result.milieux.map((m) => m.name);
+    for (let i = 0; i < aiCandidates.length; i += 150) {
+      setAiBusy(`Classement en cours… ${done}/${aiCandidates.length}`);
+      const res: any = await supabase.functions.invoke('classify-milieux', { body: { contact_ids: aiCandidates.slice(i, i + 150), milieux } });
+      if (res.error) { setAiBusy(null); flash("Le classement automatique a échoué. Réessayez dans un instant."); return; }
+      classified += res.data?.classified ?? 0;
+      done = Math.min(aiCandidates.length, i + 150);
+    }
+    setAiBusy(null);
+    await loadDecisions();
+    flash(`${classified} contact${classified > 1 ? 's' : ''} rangé${classified > 1 ? 's' : ''} par l'IA. Les autres restent à classer.`);
   };
 
-  const selected = selectedId ? data.contactById.get(selectedId) : null;
-
-  /* ---- Rendu d'un nœud : zoom sémantique léger ---- */
-  const paintNode = useCallback((node: any, ctx: CanvasRenderingContext2D, scale: number) => {
-    const c = node.c;
-    const d = degree.get(c.id) ?? 0;
-    const r = 3 + Math.min(5, Math.sqrt(d));
-    const onPath = path?.includes(c.id);
-    const dimmed = path && !onPath;
-
-    ctx.globalAlpha = dimmed ? 0.15 : 1;
-    ctx.beginPath();
-    ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-    ctx.fillStyle = nodeColor(c);
-    ctx.fill();
-
-    if (bridges.has(c.id)) {
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, r + 1.8, 0, 2 * Math.PI);
-      ctx.strokeStyle = ink().accent;
-      ctx.lineWidth = 1.2 / scale;
-      ctx.stroke();
-    }
-    if (selectedId === c.id || onPath) {
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, r + 2.6, 0, 2 * Math.PI);
-      ctx.strokeStyle = ink().accent;
-      ctx.lineWidth = 2 / scale;
-      ctx.stroke();
-    }
-
-    // Étiquettes : ponts et survol toujours, tout le monde au zoom rapproché
-    const showLabel = scale > 2.4 || bridges.has(c.id) || hoverRef.current === c.id || onPath || selectedId === c.id;
-    if (showLabel && !dimmed) {
-      const label = fullName(c);
-      const fontSize = Math.max(10 / scale, 2.4);
-      ctx.font = `700 ${fontSize}px Lato, -apple-system, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.fillStyle = ink().label;
-      ctx.fillText(label, node.x, node.y + r + fontSize + 1);
-    }
-    ctx.globalAlpha = 1;
-  }, [degree, nodeColor, bridges, selectedId, path]);
-
-  const steps = useMemo(() => {
-    if (!path || path.length < 2) return [];
-    const out: { from: any; to: any; notes: number }[] = [];
-    for (let i = 0; i < path.length - 1; i++) {
-      const key = [path[i], path[i + 1]].sort().join('|');
-      out.push({
-        from: data.contactById.get(path[i]),
-        to: data.contactById.get(path[i + 1]),
-        notes: linkCount.get(key)?.count ?? 1,
-      });
-    }
-    return out;
-  }, [path, data.contactById, linkCount]);
+  // ---- Rendu ----
+  const personRow = (c: any, right?: React.ReactNode) => {
+    const st = status(c);
+    const via = c.owner_id && c.owner_id !== userId ? c.owner_display_name : null;
+    return (
+      <button key={c.id} onClick={() => navigate(`/reseau/${c.id}`)}
+        className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none">
+        <Avatar name={fullName(c)} firstName={c.first_name} lastName={c.last_name} size={24} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px]">{fullName(c)}</span>
+          <span className="block truncate text-xs text-muted-foreground">
+            {[c.job_title, c.company].filter(Boolean).join(' · ') || 'Fiche à compléter'}{via ? ` · via ${via}` : ''}
+          </span>
+        </span>
+        {right ?? (
+          <span className="flex shrink-0 items-center gap-1.5 text-xs tabular-nums text-muted-foreground">
+            <span className={cn('size-1.5 rounded-full', DOT[st])} />{lastTouch(c, data.lastNoteByContact.get(c.id)) ? relativeFR(lastTouch(c, data.lastNoteByContact.get(c.id))!.toISOString()) : 'jamais'}
+          </span>
+        )}
+      </button>
+    );
+  };
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Barre d'outils */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 20px', borderBottom: '1px solid var(--line)', background: 'var(--card)', flexWrap: 'wrap' }}>
-        <Segmented
-          options={[
-            { key: 'table', label: 'Table', icon: Rows3 },
-            { key: 'reseau', label: 'Réseau', icon: Share2 },
-          ]}
-          value="reseau"
-          onChange={(v) => { if (v === 'table') navigate(`/contacts${window.location.search}`); }}
-        />
-        <span style={{ width: 1, height: 18, background: 'var(--line-strong)' }} />
-        <span className="t-meta" style={{ color: 'var(--mut)' }}>Colorer par</span>
-        <Segmented
-          size="sm"
-          options={MODES.map((m) => ({ key: m.key, label: m.label }))}
-          value={mode}
-          onChange={setMode}
-        />
-        <div style={{ position: 'relative', flex: 1, maxWidth: 260 }}>
-          <Search size={13} style={{ position: 'absolute', left: 9, top: 9, color: 'var(--faint)' }} />
-          <input
-            className="input"
-            style={{ paddingLeft: 28, padding: '6px 10px 6px 28px', fontSize: 13 }}
-            placeholder={pathTargetMode ? 'Me présenter à qui ?' : 'Chercher dans le réseau…'}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          {matches.length > 0 && (
-            <div className="popover" style={{ top: 'calc(100% + 4px)', left: 0, right: 0, padding: 4 }}>
-              {matches.map((n) => (
-                <button key={n.id} className="nav-item" onClick={() => flyTo(n.id)}>
-                  <span style={{ width: 8, height: 8, borderRadius: 999, background: nodeColor(n.c), flex: 'none' }} />
-                  <span style={{ flex: 1 }}>{fullName(n.c)}</span>
-                </button>
-              ))}
-            </div>
-          )}
+    <div className="flex h-full flex-col">
+      <div className="flex flex-wrap items-center gap-2 border-b bg-card px-4 py-2.5 md:px-6">
+        <div className="flex items-center rounded-lg bg-secondary p-0.5 text-xs">
+          <button className="rounded-md px-3 py-1 font-medium text-muted-foreground hover:text-foreground" onClick={() => navigate(`/contacts${window.location.search}`)}><Rows3 className="mr-1.5 inline size-3.5" />Table</button>
+          <span className="rounded-md bg-card px-3 py-1 font-medium shadow-sm"><Share2 className="mr-1.5 inline size-3.5" />Réseau</span>
         </div>
-        {isolatedCount > 0 && (
-          <button className={`chip clickable${showIsolated ? ' chip-filter on' : ''}`} onClick={() => setShowIsolated((o) => !o)}>
-            {isolatedCount} isolés
+        <span className="mx-1 h-4 w-px bg-border" />
+        {([
+          ['milieux', `Milieux · ${result.milieux.length}`],
+          ['liens', `Liens${suggestions.length ? ` · ${suggestions.length} à confirmer` : ''}`],
+          ['trier', `À classer · ${result.unclassified.length.toLocaleString('fr-FR')}`],
+        ] as [Tab, string][]).map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)} aria-pressed={tab === k}
+            className={cn('rounded-md px-2.5 py-1 text-[13px] tabular-nums', tab === k ? 'bg-secondary font-medium text-foreground' : 'text-muted-foreground hover:text-foreground')}>
+            {label}
           </button>
-        )}
-        {path && (
-          <button className="chip clickable chip-filter on" onClick={() => setPath(null)}>
-            chemin ✕
-          </button>
-        )}
+        ))}
+        <span className="flex-1" />
+        {notice && <span role="status" className="text-xs text-muted-foreground">{notice}</span>}
       </div>
 
-      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        {/* Canvas */}
-        <div ref={wrapRef} style={{ flex: 1, background: 'var(--wash)', position: 'relative', minWidth: 0 }}>
-          {nodes.length === 0 ? (
-            <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
-              <AICard style={{ maxWidth: 420, textAlign: 'center' }}>
-                <SectionLabel>Le réseau se dessine avec vos notes</SectionLabel>
-                <p className="t-sec" style={{ color: 'var(--ink-2)' }}>
-                  Mentionnez une personne dans la note d'une autre (« déjeuner avec Paul et Marie »)
-                  et un lien apparaît ici. Aucun lien pour l'instant dans ce cercle.
-                </p>
-              </AICard>
-            </div>
-          ) : (
-            <ForceGraph2D
-              ref={graphRef}
-              width={dims.w}
-              height={dims.h}
-              graphData={{ nodes, links }}
-              backgroundColor="transparent"
-              nodeCanvasObject={paintNode}
-              nodePointerAreaPaint={(node: any, color, ctx) => {
-                ctx.fillStyle = color;
-                ctx.beginPath();
-                ctx.arc(node.x, node.y, 8, 0, 2 * Math.PI);
-                ctx.fill();
-              }}
-              linkColor={(l: any) => {
-                const key = [typeof l.source === 'object' ? l.source.id : l.source, typeof l.target === 'object' ? l.target.id : l.target].sort().join('|');
-                if (path) return pathEdges.has(key) ? ink().accent : ink().linkDim;
-                return ink().link;
-              }}
-              linkWidth={(l: any) => {
-                const key = [typeof l.source === 'object' ? l.source.id : l.source, typeof l.target === 'object' ? l.target.id : l.target].sort().join('|');
-                const w = Math.min(4, l.count);
-                return pathEdges.has(key) ? w + 1.5 : w;
-              }}
-              onNodeClick={(node: any) => {
-                if (pathTargetMode && selectedId) {
-                  setPath(findPath(selectedId, node.id));
-                  setPathTargetMode(false);
-                } else {
-                  setSelectedId(node.id);
-                }
-              }}
-              onNodeHover={(node: any) => { hoverRef.current = node?.id ?? null; }}
-              onBackgroundClick={() => { setSelectedId(null); setPath(null); setPathTargetMode(false); }}
-              cooldownTicks={120}
-            />
-          )}
-        </div>
+      {tab === 'milieux' && (
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+          <div className="relative min-h-[320px] flex-1 overflow-hidden bg-background">
+            {people.length === 0 ? (
+              <div className="grid h-full place-items-center p-8 text-center text-sm text-muted-foreground">Importez des contacts pour voir apparaître vos milieux.</div>
+            ) : (
+              <svg viewBox={view} className="h-full w-full" role="img" aria-label="Vos milieux, autour de vous">
+                {bubbles.map((b) => {
+                  const active = b.ids.filter((id) => { const c = data.contactById.get(id); return c && ['fresh', 'due'].includes(status(c)); }).length;
+                  return <line key={`l-${b.key}`} x1={0} y1={0} x2={b.x} y2={b.y} className="stroke-border" strokeWidth={1 + 4 * (active / Math.max(1, b.ids.length))} strokeDasharray={b.unclassified ? '4 4' : undefined} />;
+                })}
+                {bubbles.map((b) => {
+                  const on = selected === b.key;
+                  const inside = true;
+                  const maxChars = Math.floor((b.r * 2 - 14) / 6.6);
+                  const label = b.name.length > maxChars ? `${b.name.slice(0, Math.max(3, maxChars - 1))}…` : b.name;
+                  return (
+                    <g key={b.key} role="button" tabIndex={0} aria-label={`${b.name}, ${b.ids.length} contacts`} className="cursor-pointer outline-none"
+                      onClick={() => setSelected(on ? null : b.key)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(on ? null : b.key); } }}>
+                      <title>{b.name}</title>
+                      <circle cx={b.x} cy={b.y} r={b.r}
+                        className={cn('transition-colors', b.unclassified ? 'fill-background stroke-muted-foreground/40' : on ? 'fill-foreground stroke-foreground' : 'fill-secondary stroke-border hover:fill-muted')}
+                        strokeWidth={on ? 2 : 1} strokeDasharray={b.unclassified ? '5 4' : undefined} />
+                      <text x={b.x} y={inside ? b.y - 2 : b.y + b.r + 13} textAnchor="middle"
+                        className={cn('select-none text-[12px] font-medium', on && inside ? 'fill-background' : 'fill-foreground')}>{label}</text>
+                      <text x={b.x} y={inside ? b.y + 14 : b.y + 4} textAnchor="middle"
+                        className={cn('select-none text-[11px] tabular-nums', on && inside ? 'fill-background/70' : 'fill-muted-foreground')}>{b.ids.length.toLocaleString('fr-FR')}</text>
+                    </g>
+                  );
+                })}
+                <circle cx={0} cy={0} r={30} className="fill-foreground" />
+                <text x={0} y={4} textAnchor="middle" className="select-none fill-background text-[12px] font-medium">Vous</text>
+              </svg>
+            )}
+            <p className="pointer-events-none absolute bottom-3 left-4 text-xs text-muted-foreground">Taille = nombre de contacts · trait plus épais = milieu plus actif</p>
+          </div>
 
-        {/* Panneau droit permanent : légende au repos, contexte au clic */}
-        <div style={{ width: 340, flex: 'none', borderLeft: '1px solid var(--line)', background: 'var(--card)', overflowY: 'auto', padding: '16px 18px' }}>
-          {selected ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ width: 40, height: 40, borderRadius: 999, background: avatarColor(fullName(selected)), display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 600, fontSize: 13, flex: 'none' }}>
-                  {(selected.first_name?.[0] ?? '') + (selected.last_name?.[0] ?? '')}
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="t-name" style={{ fontSize: 16 }}>{fullName(selected)}</div>
-                  <div className="t-meta" style={{ color: 'var(--mut)' }}>
-                    {[selected.job_title, selected.company].filter(Boolean).join(' @ ') || 'Fiche peu renseignée'}
-                  </div>
-                </div>
-                <button className="btn btn-quiet" style={{ padding: 5 }} onClick={() => { setSelectedId(null); setPath(null); }}><X size={14} /></button>
-              </div>
-
-              <div className="t-sec" style={{ color: 'var(--ink-2)' }}>
-                <span className="tnum">{degree.get(selected.id) ?? 0}</span> lien{(degree.get(selected.id) ?? 0) > 1 ? 's' : ''} dans le réseau
-                {bridges.has(selected.id) && <span style={{ color: 'var(--accent)', fontWeight: 500 }}> · contact-pont</span>}
-                {' · '}{STATUS_META[relStatus(lastTouch(selected, data.lastNoteByContact.get(selected.id)))].label.toLowerCase()}
-              </div>
-
-              {selected.ai_context && (
-                <AICard>
-                  <SectionLabel>Mémoire</SectionLabel>
-                  <div className="t-sec" style={{ color: 'var(--ink-2)' }}>{selected.ai_context}</div>
-                </AICard>
-              )}
-
-              {(data.notesByContact.get(selected.id) ?? []).slice(0, 3).map((n) => (
-                <div key={n.id} className="t-sec" style={{ color: 'var(--ink-2)', borderLeft: '2px solid var(--line-strong)', paddingLeft: 10 }}>
-                  {n.content.slice(0, 110)}{n.content.length > 110 ? '…' : ''}
-                  <div className="t-meta tnum" style={{ color: 'var(--faint)', marginTop: 2 }}>{relativeFR(n.created_at)}</div>
-                </div>
-              ))}
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <button className="btn btn-primary" style={{ justifyContent: 'center' }} onClick={() => navigate(`/reseau/${selected.id}`)}>
-                  Ouvrir la fiche
-                </button>
-                <button className="btn btn-ghost" style={{ justifyContent: 'center' }} onClick={() => setNoteFor(selected.id)}>
-                  <PenLine size={14} /> Ajouter une note
-                </button>
-                <button
-                  className={`btn ${pathTargetMode ? 'btn-primary' : 'btn-ghost'}`}
-                  style={{ justifyContent: 'center' }}
-                  onClick={() => { setPathTargetMode((o) => !o); setPath(null); }}
-                >
-                  <RouteIcon size={14} /> {pathTargetMode ? 'Cliquez la cible…' : 'Me présenter à…'}
-                </button>
-              </div>
-
-              {path && steps.length > 0 && (
+          <aside className="w-full shrink-0 overflow-y-auto border-t bg-card p-4 md:w-[340px] md:border-l md:border-t-0">
+            {sel ? (
+              <MilieuPanel key={sel.key} bubble={sel} members={members} personRow={personRow} status={status}
+                onRename={(to) => rename(sel.name, to)} onClose={() => setSelected(null)}
+                onTriage={() => setTab('trier')} onAI={runAI} aiCount={aiCandidates.length} aiBusy={aiBusy} />
+            ) : (
+              <div className="flex flex-col gap-4 text-[13px]">
                 <div>
-                  <SectionLabel>Chemin d'intro · {steps.length} étape{steps.length > 1 ? 's' : ''}</SectionLabel>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {steps.map((s, i) => (
-                      <div key={i} className="t-sec" style={{ color: 'var(--ink-2)' }}>
-                        <span className="tnum" style={{ color: 'var(--accent)', fontWeight: 600 }}>{i + 1}.</span>{' '}
-                        <b>{s.from ? fullName(s.from) : '?'}</b> connaît <b>{s.to ? fullName(s.to) : '?'}</b>
-                        <span className="t-meta" style={{ color: 'var(--mut)' }}>
-                          {' '}({s.notes} note{s.notes > 1 ? 's' : ''} en commun)
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                  <h2 className="text-sm font-semibold">Vos milieux</h2>
+                  <p className="mt-1 leading-relaxed text-muted-foreground">
+                    Circl range vos contacts selon les indices de leurs fiches : un mot entre parenthèses dans le nom, l'entreprise, le domaine d'email, le poste. Cliquez une bulle pour voir qui s'y trouve.
+                  </p>
                 </div>
-              )}
-              {path === null && pathTargetMode && (
-                <div className="t-meta" style={{ color: 'var(--mut)' }}>
-                  Cliquez une personne dans le graphe ou cherchez-la ci-dessus.
-                </div>
-              )}
-              {path && steps.length === 0 && (
-                <div className="t-sec" style={{ color: 'var(--mut)' }}>
-                  Aucun chemin dans vos notes entre ces deux personnes.
-                </div>
-              )}
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <SectionLabel>Légende</SectionLabel>
-              {mode === 'circles' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {data.spaces.map((s) => (
-                    <div key={s.id} className="t-sec" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ width: 10, height: 10, borderRadius: 999, background: CIRCLE_HEX[circleColor(s)] }} />
-                      {s.name}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {mode === 'recency' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {(['fresh', 'due', 'dormant', 'never'] as const).map((k) => (
-                    <div key={k} className="t-sec" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ width: 10, height: 10, borderRadius: 999, background: RECENCY_COLORS[k] }} />
-                      {STATUS_META[k].label}
-                      <span className="t-meta" style={{ color: 'var(--faint)' }}>(dernière trace dans Circl)</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {mode === 'degree' && (
-                <div className="t-sec" style={{ color: 'var(--ink-2)' }}>
-                  Plus un contact est foncé, plus il est relié. L'anneau bleu marque vos 5 contacts-ponts.
-                </div>
-              )}
-              <div className="t-sec" style={{ color: 'var(--mut)', lineHeight: '20px' }}>
-                L'épaisseur d'un lien = le nombre de notes qui relient deux personnes.
-                Cliquez un contact pour son contexte, puis « Me présenter à… » pour
-                trouver un chemin d'introduction.
+                <dl className="grid grid-cols-2 gap-y-1.5 tabular-nums">
+                  <dt className="text-muted-foreground">Contacts rangés</dt><dd className="text-right">{(people.length - result.unclassified.length).toLocaleString('fr-FR')}</dd>
+                  <dt className="text-muted-foreground">À classer</dt><dd className="text-right">{result.unclassified.length.toLocaleString('fr-FR')}</dd>
+                  <dt className="text-muted-foreground">Liens à confirmer</dt><dd className="text-right">{suggestions.length}</dd>
+                </dl>
+                {aiCandidates.length > 0 && !IS_MOCK && (
+                  <Button variant="outline" size="sm" disabled={!!aiBusy} onClick={runAI}>
+                    <Sparkles className="size-3.5" />{aiBusy ?? `Ranger ${aiCandidates.length} contacts avec l'IA`}
+                  </Button>
+                )}
+                {result.unclassified.length > 0 && (
+                  <Button variant="ghost" size="sm" className="justify-between" onClick={() => setTab('trier')}>
+                    Trier les contacts à classer <ArrowRight className="size-3.5" />
+                  </Button>
+                )}
               </div>
-              <div className="t-meta" style={{ color: 'var(--faint)' }}>
-                Raccourcis : 1 cercles · 2 récence · 3 force · Échap tout désélectionner
-              </div>
-            </div>
-          )}
+            )}
+          </aside>
         </div>
-      </div>
-
-      {/* Fiche unique, partagée avec Contacts */}
-      {params.id && (
-        <ContactDrawer
-          contactId={params.id}
-          onClose={() => navigate('/reseau')}
-          onNavigate={(id) => navigate(`/reseau/${id}`)}
-        />
       )}
 
-      {noteFor && (
-        <div className="modal-scrim" onClick={() => setNoteFor(null)}>
-          <div className="modal" style={{ width: 560 }} onClick={(e) => e.stopPropagation()}>
-            <div className="t-block" style={{ marginBottom: 12 }}>
-              Note sur {fullName(data.contactById.get(noteFor) ?? {})}
-            </div>
-            <NoteComposer
-              contactId={noteFor}
-              contactFirstName={data.contactById.get(noteFor)?.first_name}
-              onSaved={() => setNoteFor(null)}
-            />
+      {tab === 'liens' && (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-6 md:px-6">
+            <section>
+              <h2 className="text-sm font-semibold">Liens à confirmer</h2>
+              <p className="mt-1 text-[13px] text-muted-foreground">Circl les a déduits de vos fiches et de vos notes. Rien n'est enregistré sans votre accord.</p>
+              {suggestions.length === 0 ? (
+                <p className="mt-4 text-[13px] text-muted-foreground">Aucun lien à confirmer. Écrivez « Collab Prénom Nom » dans l'entreprise d'un contact, ou citez quelqu'un dans une note, et Circl le proposera ici.</p>
+              ) : (
+                <ul className="mt-3 divide-y border-y">
+                  {suggestions.map((s) => {
+                    const a = data.contactById.get(s.a), b = data.contactById.get(s.b);
+                    if (!a || !b) return null;
+                    return (
+                      <li key={`${s.a}-${s.b}-${s.kind}`} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13px]">
+                            <button className="font-medium hover:underline" onClick={() => navigate(`/reseau/${a.id}`)}>{fullName(a)}</button>
+                            <span className="text-muted-foreground"> {KIND_LABEL[s.kind]} </span>
+                            <button className="font-medium hover:underline" onClick={() => navigate(`/reseau/${b.id}`)}>{fullName(b)}</button>
+                          </div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">{s.reason}</div>
+                        </div>
+                        <div className="flex shrink-0 gap-1.5">
+                          <Button size="sm" variant="outline" onClick={() => decide(s, true)}><Check className="size-3.5" />Confirmer</Button>
+                          <Button size="sm" variant="ghost" onClick={() => decide(s, false)}><X className="size-3.5" />Rejeter</Button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+            <section>
+              <h2 className="text-sm font-semibold">Liens enregistrés</h2>
+              {data.contactLinks.length === 0 ? (
+                <p className="mt-2 text-[13px] text-muted-foreground">Aucun lien pour l'instant.</p>
+              ) : (
+                <ul className="mt-3 divide-y border-y">
+                  {data.contactLinks.map((l) => {
+                    const a = data.contactById.get(l.from_contact_id), b = data.contactById.get(l.to_contact_id);
+                    if (!a || !b) return null;
+                    const note = l.source_note_id ? data.notes.find((n) => n.id === l.source_note_id) : null;
+                    return (
+                      <li key={l.id} className="group flex items-center gap-3 py-2.5">
+                        <Link2 className="size-3.5 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13px]">
+                            <button className="font-medium hover:underline" onClick={() => navigate(`/reseau/${a.id}`)}>{fullName(a)}</button>
+                            <span className="text-muted-foreground"> {KIND_LABEL[l.kind ?? 'note']} </span>
+                            <button className="font-medium hover:underline" onClick={() => navigate(`/reseau/${b.id}`)}>{fullName(b)}</button>
+                          </div>
+                          <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {l.reason ?? (note ? `Note du ${new Date(note.created_at).toLocaleDateString('fr-FR')} : « ${note.content.slice(0, 90)}${note.content.length > 90 ? '…' : ''} »` : 'Issu d’une note')}
+                          </div>
+                        </div>
+                        {l.created_by === userId && (
+                          <button aria-label="Supprimer ce lien" onClick={() => removeLink(l)}
+                            className="grid size-7 place-items-center rounded-md text-muted-foreground opacity-100 hover:bg-muted hover:text-foreground md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"><X className="size-3.5" /></button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
           </div>
         </div>
       )}
+
+      {tab === 'trier' && (
+        <Triage ids={result.unclassified} milieux={result.milieux.map((m) => m.name)} onClassify={classify}
+          onAI={runAI} aiCount={aiCandidates.length} aiBusy={aiBusy} />
+      )}
+
+      {params.id && (
+        <ContactDrawer contactId={params.id} onClose={() => navigate('/reseau')} onNavigate={(id) => navigate(`/reseau/${id}`)} />
+      )}
+    </div>
+  );
+};
+
+const MilieuPanel: React.FC<{
+  bubble: Bubble; members: any[]; personRow: (c: any) => React.ReactNode; status: (c: any) => RelStatus;
+  onRename: (to: string) => void; onClose: () => void; onTriage: () => void; onAI: () => void; aiCount: number; aiBusy: string | null;
+}> = ({ bubble, members, personRow, status, onRename, onClose, onTriage, onAI, aiCount, aiBusy }) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(bubble.name);
+  const counts = members.reduce((n: Record<RelStatus, number>, c) => { n[status(c)]++; return n; }, { fresh: 0, due: 0, dormant: 0, never: 0 });
+  const shown = members.slice(0, 200);
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-start gap-2">
+        {editing ? (
+          <form className="flex flex-1 gap-1.5" onSubmit={(e) => { e.preventDefault(); onRename(draft); setEditing(false); }}>
+            <Input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} aria-label="Nouveau nom du milieu" className="h-8" />
+            <Button size="sm" type="submit">OK</Button>
+          </form>
+        ) : (
+          <h2 className="flex-1 text-sm font-semibold leading-8">{bubble.name}</h2>
+        )}
+        {!bubble.unclassified && !editing && (
+          <button aria-label="Renommer ce milieu" onClick={() => setEditing(true)} className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"><Pencil className="size-3.5" /></button>
+        )}
+        <button aria-label="Fermer" onClick={onClose} className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"><X className="size-3.5" /></button>
+      </div>
+      <p className="text-xs tabular-nums text-muted-foreground">
+        {members.length.toLocaleString('fr-FR')} contact{members.length > 1 ? 's' : ''} · {counts.fresh} actif{counts.fresh > 1 ? 's' : ''} · {counts.due} à relancer · {counts.dormant} en froid
+      </p>
+      {bubble.unclassified && (
+        <div className="flex flex-col gap-1.5">
+          <Button size="sm" onClick={onTriage}>Trier ces contacts <ArrowRight className="size-3.5" /></Button>
+          {aiCount > 0 && !IS_MOCK && (
+            <Button size="sm" variant="outline" disabled={!!aiBusy} onClick={onAI}><Sparkles className="size-3.5" />{aiBusy ?? `Ranger ${aiCount} contacts avec l'IA`}</Button>
+          )}
+        </div>
+      )}
+      <div className="-mx-2 flex flex-col">{shown.map((c) => personRow(c))}</div>
+      {members.length > shown.length && <p className="text-xs text-muted-foreground">Et {members.length - shown.length} autres.</p>}
+    </div>
+  );
+};
+
+/** Tri des contacts à classer : une personne à la fois, un milieu en un clic ou une touche. */
+const Triage: React.FC<{
+  ids: string[]; milieux: string[]; onClassify: (id: string, milieu: string) => void;
+  onAI: () => void; aiCount: number; aiBusy: string | null;
+}> = ({ ids, milieux, onClassify, onAI, aiCount, aiBusy }) => {
+  const data = useData();
+  const [skipped, setSkipped] = useState<Set<string>>(new Set());
+  const [draft, setDraft] = useState('');
+  const queue = ids.filter((id) => !skipped.has(id));
+  const c = queue[0] ? data.contactById.get(queue[0]) : null;
+  const choices = milieux.slice(0, 9);
+  const pick = (m: string) => { if (c) { onClassify(c.id, m); setDraft(''); } };
+  const skip = () => { if (c) setSkipped((s) => new Set(s).add(c.id)); };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).tagName === 'INPUT') return;
+      const n = Number(e.key);
+      if (n >= 1 && n <= choices.length) { e.preventDefault(); pick(choices[n - 1]); }
+      if (e.key === 'ArrowRight' || e.key === 's') { e.preventDefault(); skip(); }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  });
+
+  if (!c) {
+    return (
+      <div className="grid flex-1 place-items-center p-8 text-center">
+        <div>
+          <h2 className="text-sm font-semibold">{ids.length === 0 ? 'Tous vos contacts sont rangés' : 'Fin de la pile'}</h2>
+          <p className="mt-1 text-[13px] text-muted-foreground">{ids.length === 0 ? 'Votre carte des milieux est complète.' : 'Les contacts passés reviendront à votre prochaine visite.'}</p>
+        </div>
+      </div>
+    );
+  }
+  const lastNote = (data.notesByContact.get(c.id) ?? [])[0];
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto flex max-w-xl flex-col gap-5 px-4 py-8 md:px-6">
+        <div className="flex items-center justify-between text-xs tabular-nums text-muted-foreground">
+          <span>{queue.length.toLocaleString('fr-FR')} contact{queue.length > 1 ? 's' : ''} à classer</span>
+          {aiCount > 0 && !IS_MOCK && (
+            <button className="inline-flex items-center gap-1 hover:text-foreground disabled:opacity-60" disabled={!!aiBusy} onClick={onAI}>
+              <Sparkles className="size-3" />{aiBusy ?? `Laisser l'IA ranger les ${aiCount} qui ont des indices`}
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <Avatar name={fullName(c)} firstName={c.first_name} lastName={c.last_name} size={40} />
+          <div className="min-w-0">
+            <div className="truncate text-base font-medium">{fullName(c)}</div>
+            <div className="truncate text-[13px] text-muted-foreground">
+              {[c.job_title, c.company, c.email].filter(Boolean).join(' · ') || 'Aucune autre information sur cette fiche'}
+            </div>
+          </div>
+        </div>
+        {lastNote && <p className="text-[13px] leading-relaxed text-muted-foreground">Dernière note : « {lastNote.content.slice(0, 180)}{lastNote.content.length > 180 ? '…' : ''} »</p>}
+        <div>
+          <h3 className="mb-2 text-xs font-medium text-muted-foreground">Où l'avez-vous connu ?</h3>
+          <div className="flex flex-wrap gap-1.5">
+            {choices.map((m, i) => (
+              <button key={m} onClick={() => pick(m)}
+                className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1.5 text-[13px] hover:bg-muted focus-visible:outline focus-visible:outline-1">
+                <kbd className="text-[11px] tabular-nums text-muted-foreground">{i + 1}</kbd>{m}
+              </button>
+            ))}
+          </div>
+          <form className="mt-2 flex gap-1.5" onSubmit={(e) => { e.preventDefault(); pick(draft); }}>
+            <Input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Nouveau milieu, par exemple Famille" aria-label="Nouveau milieu" className="h-9" />
+            <Button type="submit" variant="outline" disabled={!draft.trim()}>Ranger</Button>
+          </form>
+        </div>
+        <div className="flex items-center justify-between border-t pt-4 text-xs text-muted-foreground">
+          <span>Touches 1 à {choices.length || 1} pour choisir</span>
+          <button onClick={skip} className="inline-flex items-center gap-1 hover:text-foreground">Passer <ArrowRight className="size-3" /></button>
+        </div>
+      </div>
     </div>
   );
 };

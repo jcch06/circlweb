@@ -1,61 +1,99 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  X, Mail, Phone, Link2, MapPin, Briefcase, ChevronDown, ChevronRight,
-  Trash2, Sparkles, ArrowLeft, Lock,
+  X, Mail, Phone, Link2, ArrowLeft, Lock, Sparkles, MoreHorizontal, Trash2, Search, Columns3, Check,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { enrichAndPersistContact } from '../lib/mistral';
 import { useData } from '../data';
 import { useToast } from './Toast';
-import { Avatar, StatusPill, DecisionPair, DiffLine, AICard, ConfirmModal, SectionLabel, EditableField } from './Bits';
+import { Avatar, DiffLine } from './Bits';
 import { NoteComposer } from './NoteComposer';
 import { Timeline } from './Timeline';
 import { fullName, lastTouch, relStatus, relativeFR, circleColor } from './format';
+import { IS_MOCK } from '../lib/mode';
+import { cn } from '../lib/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
-// Composant 5 : la fiche contact, unique dans toute l'application.
-// Panneau 640 px, Échap ferme, ↑/↓ change de contact, pile de navigation
-// interne pour les rebonds contact vers contact.
+// La fiche contact, unique dans toute l'app. Panneau large façon Folk :
+// propriétés à gauche (éditables en place, recherche d'email/téléphone au
+// crédit), activité à droite (note rapide, mises à jour, historique).
+// Échap ferme, ↑/↓ change de contact, pile interne pour les rebonds.
 
 const FIELD_LABELS: Record<string, string> = {
   company: 'Entreprise', job_title: 'Poste', industry: 'Secteur',
   location: 'Lieu', linkedin: 'LinkedIn', bio: 'Bio',
 };
+const STATUS: Record<string, { label: string; dot: string }> = {
+  fresh: { label: 'Actif', dot: 'bg-[hsl(var(--h-green-500))]' },
+  due: { label: 'À relancer', dot: 'bg-[hsl(var(--h-amber-500))]' },
+  dormant: { label: 'En froid', dot: 'bg-[hsl(var(--h-red-500))]' },
+  never: { label: 'Jamais contacté', dot: 'bg-muted-foreground/50' },
+};
+// Coût indicatif d'une recherche FullEnrich (waterfall), revendue au crédit.
+const COST = { email: 1, phone: 10 };
+
+/* Propriété éditable en place : clic → champ, Entrée/blur enregistre, Échap annule. */
+const Prop: React.FC<{
+  label: string; value?: string | null; placeholder?: string; disabled?: boolean;
+  onSave?: (v: string) => void; children?: React.ReactNode;
+}> = ({ label, value, placeholder = 'Ajouter', disabled, onSave, children }) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? '');
+  useEffect(() => setDraft(value ?? ''), [value]);
+  const commit = () => { setEditing(false); if (draft.trim() !== (value ?? '').trim()) onSave?.(draft.trim()); };
+  return (
+    <div className="flex min-h-[30px] items-start gap-3 py-1">
+      <span className="w-[86px] shrink-0 pt-1 text-xs text-muted-foreground">{label}</span>
+      <div className="min-w-0 flex-1">
+        {children ? children : editing ? (
+          <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={commit}
+            onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setDraft(value ?? ''); setEditing(false); } }}
+            className="w-full rounded-md border bg-card px-2 py-1 text-[13px] outline-none focus:border-foreground/25" />
+        ) : (
+          <button disabled={disabled || !onSave} onClick={() => setEditing(true)}
+            className={cn('w-full truncate rounded-md px-2 py-1 text-left text-[13px] -ml-2', onSave && !disabled && 'hover:bg-muted',
+              !value && 'text-muted-foreground/70')}>
+            {value || placeholder}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export const ContactDrawer: React.FC<{
   contactId: string;
-  siblings?: string[];           // ids ordonnés de la liste courante, pour ↑/↓
+  siblings?: string[];
   onClose: () => void;
   onNavigate: (id: string) => void;
 }> = ({ contactId, siblings, onClose, onNavigate }) => {
   const data = useData();
   const { toast } = useToast();
   const [stack, setStack] = useState<string[]>([]);
-  const [infoOpen, setInfoOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [enriching, setEnriching] = useState(false);
+  const [finding, setFinding] = useState<null | 'email' | 'phone'>(null);
+  const [overrides, setOverrides] = useState<Record<string, Record<string, any>>>({});
+  const [credits, setCredits] = useState(25);
 
-  const contact = data.contactById.get(contactId);
+  const base = data.contactById.get(contactId);
+  const contact = base ? { ...base, ...(overrides[contactId] ?? {}) } : null;
 
-  /* Clavier : Échap ferme (ou remonte la pile), ↑/↓ navigue dans la liste. */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') return;
+      const t = e.target as HTMLElement;
+      if (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT') return;
       if (e.key === 'Escape') {
-        if (stack.length > 0) {
-          const prev = stack[stack.length - 1];
-          setStack((s) => s.slice(0, -1));
-          onNavigate(prev);
-        } else onClose();
+        if (stack.length > 0) { const prev = stack[stack.length - 1]; setStack((s) => s.slice(0, -1)); onNavigate(prev); }
+        else onClose();
       }
       if (siblings && siblings.length > 1 && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
         const idx = siblings.indexOf(contactId);
         if (idx === -1) return;
         e.preventDefault();
-        const next = e.key === 'ArrowDown'
-          ? siblings[Math.min(siblings.length - 1, idx + 1)]
-          : siblings[Math.max(0, idx - 1)];
+        const next = e.key === 'ArrowDown' ? siblings[Math.min(siblings.length - 1, idx + 1)] : siblings[Math.max(0, idx - 1)];
         if (next !== contactId) { setStack([]); onNavigate(next); }
       }
     };
@@ -65,18 +103,17 @@ export const ContactDrawer: React.FC<{
 
   const pending = data.pendingByContact.get(contactId) ?? [];
   const links = useMemo(() => {
-    const arr = data.linksByContact.get(contactId) ?? [];
-    const seen = new Set<string>();
-    const out: any[] = [];
-    for (const l of arr) {
+    const seen = new Set<string>(); const out: any[] = [];
+    for (const l of data.linksByContact.get(contactId) ?? []) {
       const otherId = l.from_contact_id === contactId ? l.to_contact_id : l.from_contact_id;
-      if (seen.has(otherId)) continue;
-      seen.add(otherId);
-      const other = data.contactById.get(otherId);
-      if (other) out.push(other);
+      if (seen.has(otherId)) continue; seen.add(otherId);
+      const other = data.contactById.get(otherId); if (other) out.push(other);
     }
     return out;
   }, [data.linksByContact, data.contactById, contactId]);
+  const memberships = useMemo(() => data.pipelineItems.filter((i) => i.contact_id === contactId).map((i) => ({
+    item: i, pipeline: data.pipelines.find((p) => p.id === i.pipeline_id), stage: data.pipelineStages.find((s) => s.id === i.stage_id),
+  })), [data.pipelineItems, data.pipelines, data.pipelineStages, contactId]);
 
   if (!contact) return null;
 
@@ -86,379 +123,314 @@ export const ContactDrawer: React.FC<{
   const tags = data.tagsByContact.get(contactId) ?? [];
   const locked = contact.contact_sharing_mode === 'request_only' && !contact.email && !contact.phone;
   const noteCount = (data.notesByContact.get(contactId) ?? []).length;
-  const linkCount = links.length;
 
-  const hop = (id: string) => {
-    setStack((s) => [...s, contactId]);
-    onNavigate(id);
+  const hop = (id: string) => { setStack((s) => [...s, contactId]); onNavigate(id); };
+  const patchLocal = (patch: Record<string, any>) => setOverrides((o) => ({ ...o, [contactId]: { ...(o[contactId] ?? {}), ...patch } }));
+
+  const saveField = async (field: string, value: string) => {
+    patchLocal({ [field]: value || null });
+    if (IS_MOCK) return;
+    const { error } = await supabase.from('contacts').update({ [field]: value || null }).eq('id', contactId);
+    if (error) { toast(`Modification impossible : ${error.message}`); return; }
+    await data.refresh();
   };
 
   const decide = async (u: any, confirm: boolean) => {
-    const { error } = await supabase.rpc(
-      confirm ? 'confirm_contact_update' : 'dismiss_contact_update',
-      { p_update_id: u.id }
-    );
+    if (IS_MOCK) { toast(confirm ? 'Mise à jour appliquée.' : 'Mise à jour écartée.'); return; }
+    const { error } = await supabase.rpc(confirm ? 'confirm_contact_update' : 'dismiss_contact_update', { p_update_id: u.id });
     if (error) { toast(`Échec : ${error.message}`); return; }
     toast(confirm ? 'Mise à jour appliquée.' : 'Mise à jour écartée.');
     await data.refresh();
   };
 
-  const toggleCircle = async (spaceId: string, member: boolean) => {
-    // Architecture actuelle : un contact appartient à UN cercle (space_id).
-    // Retirer du dernier cercle est donc impossible ; déplacer = update.
-    if (member) {
-      toast('Un contact appartient à au moins un cercle. Déplacez-le plutôt vers un autre cercle.');
-      return;
-    }
+  const moveCircle = async (spaceId: string) => {
+    if (spaceId === contact.space_id) return;
+    patchLocal({ space_id: spaceId });
+    toast(`${contact.first_name} déplacé vers ${data.spaceById.get(spaceId)?.name ?? 'ce cercle'}.`);
+    if (IS_MOCK) return;
     const { error } = await supabase.from('contacts').update({ space_id: spaceId }).eq('id', contactId);
     if (error) { toast(`Déplacement impossible : ${error.message}`); return; }
-    toast(`${contact.first_name} déplacé vers ce cercle.`);
-    await data.refresh();
-  };
-
-  /* Édition en place d'un champ de la fiche. */
-  const saveField = async (field: string, value: string) => {
-    const { error } = await supabase
-      .from('contacts')
-      .update({ [field]: value || null })
-      .eq('id', contactId);
-    if (error) { toast(`Modification impossible : ${error.message}`); return; }
     await data.refresh();
   };
 
   const requestAccess = async () => {
     const { error } = await supabase.from('contact_access_requests').insert({
-      contact_id: contactId,
-      owner_id: contact.owner_id,
-      requester_id: data.user?.id,
-      space_id: contact.space_id,
+      contact_id: contactId, owner_id: contact.owner_id, requester_id: data.user?.id, space_id: contact.space_id,
     });
-    if (error) {
-      toast(error.code === '23505'
-        ? 'Vous avez déjà demandé l’accès à ce contact.'
-        : `Demande impossible : ${error.message}`);
-      return;
-    }
+    if (error) { toast(error.code === '23505' ? 'Vous avez déjà demandé l’accès à ce contact.' : `Demande impossible : ${error.message}`); return; }
     toast('Demande envoyée au propriétaire du contact.');
   };
 
-  // Passe par enrichAndPersistContact (Perplexity) et non plus par l'Edge
-  // Function enrich-contact : elle ne produisait ni skills ni inferred_needs,
-  // les deux champs dont dépend tout le moteur de synergie. Voir le commentaire
-  // de enrichAndPersistContact dans lib/mistral.ts.
+  // Enrichissement web (Perplexity) : poste, secteur, compétences, besoins.
   const enrich = async () => {
     setEnriching(true);
     try {
+      if (IS_MOCK) {
+        await new Promise((r) => setTimeout(r, 900));
+        patchLocal({ enriched_at: new Date().toISOString(), industry: contact.industry || 'Conseil', skills: ['stratégie', 'affaires publiques'] });
+        toast('Fiche enrichie depuis le web.');
+        return;
+      }
       const { skillsAdded, needsAdded } = await enrichAndPersistContact({
-        id: contactId,
-        first_name: contact.first_name,
-        last_name: contact.last_name,
-        company: contact.company,
-        job_title: contact.job_title,
-        industry: contact.industry,
-        bio: contact.bio,
-        ai_context: contact.ai_context,
-        location: contact.location,
+        id: contactId, first_name: contact.first_name, last_name: contact.last_name, company: contact.company,
+        job_title: contact.job_title, industry: contact.industry, bio: contact.bio, ai_context: contact.ai_context, location: contact.location,
       });
-      toast(
-        skillsAdded + needsAdded > 0
-          ? `Fiche enrichie : ${skillsAdded} compétence${skillsAdded > 1 ? 's' : ''}, ${needsAdded} besoin${needsAdded > 1 ? 's' : ''}.`
-          : 'Fiche enrichie.'
-      );
+      toast(skillsAdded + needsAdded > 0 ? `Fiche enrichie : ${skillsAdded} compétence${skillsAdded > 1 ? 's' : ''}, ${needsAdded} besoin${needsAdded > 1 ? 's' : ''}.` : 'Fiche enrichie.');
       await data.refresh();
     } catch (err: any) {
       toast(`Enrichissement impossible : ${err.message ?? 'erreur'}`);
-    } finally {
-      setEnriching(false);
-    }
+    } finally { setEnriching(false); }
+  };
+
+  // Recherche d'email / téléphone (FullEnrich, revendue au crédit).
+  // ponytail: simulée en mode design ; edge function find-contact-info +
+  // registre de crédits branchés à l'étape données.
+  const findInfo = async (kind: 'email' | 'phone') => {
+    const cost = COST[kind];
+    if (credits < cost) { toast('Crédits insuffisants pour cette recherche.'); return; }
+    setFinding(kind);
+    await new Promise((r) => setTimeout(r, 1000));
+    const slug = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z]/g, '');
+    const value = kind === 'email'
+      ? `${slug(contact.first_name)}.${slug(contact.last_name)}@${slug(contact.company ?? 'mail') || 'mail'}.com`
+      : '+33 6 41 27 88 03';
+    patchLocal({ [kind]: value });
+    setCredits((c) => c - cost);
+    setFinding(null);
+    toast(`${kind === 'email' ? 'Email' : 'Téléphone'} trouvé · ${cost} crédit${cost > 1 ? 's' : ''} utilisé${cost > 1 ? 's' : ''}.`);
+  };
+
+  const addToPipeline = (pipelineId: string) => {
+    const p = data.pipelines.find((x) => x.id === pipelineId);
+    toast(`${contact.first_name} ajouté à ${p?.name ?? 'ce pipeline'}.`);
   };
 
   const doDelete = async () => {
     setDeleting(true);
-    const { error } = await supabase.from('contacts').delete().eq('id', contactId);
-    setDeleting(false);
-    setConfirmDelete(false);
-    if (error) { toast(`Suppression impossible : ${error.message}`); return; }
-    onClose();
+    if (!IS_MOCK) {
+      const { error } = await supabase.from('contacts').delete().eq('id', contactId);
+      if (error) { setDeleting(false); setConfirmDelete(false); toast(`Suppression impossible : ${error.message}`); return; }
+    }
+    setDeleting(false); setConfirmDelete(false); onClose();
     toast(`${name} supprimé.`);
-    await data.refresh();
+    if (!IS_MOCK) await data.refresh();
   };
+
+  const findBtn = (kind: 'email' | 'phone') => (
+    <button disabled={finding !== null || locked} onClick={() => findInfo(kind)}
+      title={`Trouver ${kind === 'email' ? "l'email" : 'le téléphone'} via l'enrichissement`}
+      className="-ml-2 inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-[13px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50">
+      <Search size={12} />
+      {finding === kind ? 'Recherche…' : 'Trouver'}
+      <span className="text-[11px] text-muted-foreground/80">· {COST[kind]} crédit{COST[kind] > 1 ? 's' : ''}</span>
+    </button>
+  );
 
   return (
     <>
-      <div className="drawer-scrim" onClick={onClose} />
-      <aside className="drawer" role="dialog" aria-label={`Fiche de ${name}`}>
-        {/* En-tête */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 20px', borderBottom: '1px solid var(--line)' }}>
+      <div className="fixed inset-0 z-50 bg-black/20 animate-in fade-in-0" onClick={onClose} />
+      <aside role="dialog" aria-label={`Fiche de ${name}`}
+        className="fixed bottom-0 right-0 top-0 z-50 flex w-[min(940px,96vw)] flex-col border-l bg-background shadow-2xl animate-in slide-in-from-right-8 duration-200">
+        {/* Barre */}
+        <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
           {stack.length > 0 && (
-            <button
-              className="btn btn-quiet" style={{ padding: 6 }}
-              title="Retour"
-              onClick={() => {
-                const prev = stack[stack.length - 1];
-                setStack((s) => s.slice(0, -1));
-                onNavigate(prev);
-              }}
-            >
-              <ArrowLeft size={16} />
+            <button className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-muted" title="Retour"
+              onClick={() => { const prev = stack[stack.length - 1]; setStack((s) => s.slice(0, -1)); onNavigate(prev); }}>
+              <ArrowLeft size={15} />
             </button>
           )}
-          <span className="t-label" style={{ flex: 1 }}>Fiche</span>
-          {siblings && siblings.length > 1 && (
-            <span className="t-meta" style={{ color: 'var(--faint)' }}>↑↓ pour naviguer</span>
-          )}
-          <button className="btn btn-quiet" style={{ padding: 6 }} onClick={onClose} title="Fermer (Échap)">
-            <X size={16} />
-          </button>
+          <span className="text-xs text-muted-foreground">{siblings && siblings.length > 1 ? '↑ ↓ pour passer au contact suivant' : ''}</span>
+          <span className="flex-1" />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-muted" title="Plus"><MoreHorizontal size={15} /></button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setConfirmDelete(true)}>
+                <Trash2 size={13} /> Supprimer le contact
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <button className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-muted" onClick={onClose} title="Fermer (Échap)"><X size={15} /></button>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-
-          {/* 1. Bandeau mises à jour à traiter */}
-          {pending.length > 0 && (
-            <AICard>
-              <SectionLabel>{pending.length > 1 ? `${pending.length} mises à jour à traiter` : 'Mise à jour à traiter'}</SectionLabel>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {pending.map((u) => (
-                  <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      {u.field ? (
-                        <DiffLine field={FIELD_LABELS[u.field] ?? u.field} oldValue={u.old_value} newValue={u.new_value ?? ''} />
-                      ) : (
-                        <span className="t-sec">{u.summary}</span>
-                      )}
-                    </div>
-                    <DecisionPair onNo={() => decide(u, false)} onYes={() => decide(u, true)} />
-                  </div>
-                ))}
-              </div>
-            </AICard>
-          )}
-
-          {/* 2. Identité et actions */}
-          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-            <Avatar name={name} firstName={contact.first_name} lastName={contact.last_name} photoUrl={contact.photo_url} size={56} locked={locked} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="t-page" style={{ fontSize: 20, lineHeight: '26px' }}>{name}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
-                <EditableField
-                  value={contact.job_title}
-                  placeholder="Ajouter un poste"
-                  disabled={locked}
-                  onSave={(v) => saveField('job_title', v)}
-                />
-                <span className="t-sec" style={{ color: 'var(--faint)' }}>@</span>
-                <EditableField
-                  value={contact.company}
-                  placeholder="Ajouter une entreprise"
-                  disabled={locked}
-                  onSave={(v) => saveField('company', v)}
-                />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                <StatusPill
-                  status={status}
-                  lastTouchIso={touch?.toISOString()}
-                  onMarkContacted={async () => {
-                    const now = new Date().toISOString();
-                    const { error } = await supabase.from('contacts').update({ last_contacted_at: now }).eq('id', contactId);
-                    if (error) toast(`Échec : ${error.message}`);
-                    else { toast('Contact marqué comme joint.'); await data.refresh(); }
-                  }}
-                />
-                {touch && <span className="t-meta tnum" style={{ color: 'var(--mut)' }}>dernier échange {relativeFR(touch.toISOString())}</span>}
-              </div>
+        {/* Identité */}
+        <div className="flex items-start gap-4 border-b px-6 py-5">
+          <Avatar name={name} firstName={contact.first_name} lastName={contact.last_name} photoUrl={contact.photo_url} size={56} locked={locked} />
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-[20px] font-semibold tracking-tight">{name}</h2>
+            <div className="mt-0.5 truncate text-[13px] text-muted-foreground">
+              {[contact.job_title, contact.company].filter(Boolean).join(' · ') || 'Poste et entreprise à compléter'}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5"><span className={cn('size-1.5 rounded-full', STATUS[status].dot)} />{STATUS[status].label}</span>
+              {touch && <span>· dernier échange {relativeFR(touch.toISOString())}</span>}
+              {tags.map((t: any) => <span key={t.id} className="rounded-full bg-secondary px-2 py-0.5 text-[11px]">{t.name}</span>)}
             </div>
           </div>
-
-          {locked ? (
-            <div style={{ background: 'var(--orange-soft)', borderRadius: 'var(--r-el)', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Lock size={15} color="var(--orange)" />
-              <span className="t-sec" style={{ color: 'var(--orange)', flex: 1 }}>
-                Ce contact est verrouillé par son propriétaire : seuls le prénom et le nom sont partagés.
-              </span>
-              <button className="btn btn-ghost" style={{ padding: '5px 10px', fontSize: 12.5 }} onClick={requestAccess}>
-                Demander l'accès
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              {contact.email ? (
-                <a className="chip clickable" href={`mailto:${contact.email}`}><Mail size={12} />{contact.email}</a>
-              ) : (
-                <span className="chip" style={{ borderStyle: 'dashed' }}>
-                  <Mail size={12} />
-                  <EditableField value={null} placeholder="email" onSave={(v) => saveField('email', v)} />
-                </span>
-              )}
-              {contact.phone ? (
-                <a className="chip clickable" href={`tel:${contact.phone}`}><Phone size={12} />{contact.phone}</a>
-              ) : (
-                <span className="chip" style={{ borderStyle: 'dashed' }}>
-                  <Phone size={12} />
-                  <EditableField value={null} placeholder="téléphone" onSave={(v) => saveField('phone', v)} />
-                </span>
-              )}
-              {contact.linkedin && (
-                <a className="chip clickable" href={contact.linkedin} target="_blank" rel="noreferrer"><Link2 size={12} />LinkedIn</a>
-              )}
-              <span className="chip" style={contact.location ? undefined : { borderStyle: 'dashed' }}>
-                <MapPin size={12} />
-                <EditableField value={contact.location} placeholder="lieu" onSave={(v) => saveField('location', v)} />
-              </span>
-            </div>
-          )}
-
-          {/* 3. Carte Mémoire : ne s'affiche jamais vide */}
-          {contact.ai_context && (
-            <AICard>
-              <SectionLabel style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Sparkles size={12} /> Mémoire
-              </SectionLabel>
-              <div className="t-sec" style={{ color: 'var(--ink-2)', lineHeight: '21px' }}>{contact.ai_context}</div>
-            </AICard>
-          )}
-
-          {/* 4. Composer de note : le geste principal de la fiche */}
-          <NoteComposer contactId={contactId} contactFirstName={contact.first_name} />
-
-          {/* 5. Timeline */}
-          <div>
-            <SectionLabel>Activité</SectionLabel>
-            <Timeline contact={contact} onOpenContact={hop} />
-          </div>
-
-          {/* 6. Connexions */}
-          {links.length > 0 && (
-            <div>
-              <SectionLabel>Connexions</SectionLabel>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {links.map((other) => (
-                  <button key={other.id} className="chip clickable" onClick={() => hop(other.id)}>
-                    <Avatar name={fullName(other)} firstName={other.first_name} lastName={other.last_name} photoUrl={other.photo_url} size={24} />
-                    <span style={{ marginLeft: 2 }}>{fullName(other)}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* 7. Infos repliables */}
-          <div>
-            <button
-              className="btn btn-quiet"
-              style={{ padding: '4px 0', gap: 5 }}
-              onClick={() => setInfoOpen((o) => !o)}
-            >
-              {infoOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              <span className="t-label" style={{ color: 'var(--mut)' }}>Infos</span>
+          {!locked && (
+            <button onClick={enrich} disabled={enriching}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50">
+              <Sparkles size={13} /> {enriching ? 'Enrichissement…' : 'Enrichir'}
             </button>
-            {infoOpen && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 10 }}>
-                {Array.isArray(contact.skills) && contact.skills.length > 0 && (
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {contact.skills.map((s: string) => <span key={s} className="chip chip-skill">{s}</span>)}
-                  </div>
-                )}
-                {Array.isArray(contact.inferred_needs) && contact.inferred_needs.length > 0 && (
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {contact.inferred_needs.map((s: string) => <span key={s} className="chip chip-need">cherche : {s}</span>)}
-                  </div>
-                )}
-                {tags.length > 0 && (
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {tags.map((t: any) => (
-                      <span key={t.id} className="chip" style={t.color_hex ? { borderColor: 'transparent', background: `${t.color_hex}1F`, color: t.color_hex } : undefined}>
-                        {t.name}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <div className="t-sec" style={{ color: 'var(--ink-2)', display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <Briefcase size={13} color="var(--mut)" />
-                  <EditableField
-                    value={contact.industry}
-                    placeholder="Ajouter un secteur"
-                    disabled={locked}
-                    onSave={(v) => saveField('industry', v)}
-                  />
-                  {contact.company_size ? <span style={{ color: 'var(--mut)' }}>· {contact.company_size}</span> : null}
-                </div>
+          )}
+        </div>
 
-                <div>
-                  <div className="t-label" style={{ fontSize: 11, marginBottom: 4 }}>Bio</div>
-                  <EditableField
-                    value={contact.bio}
-                    placeholder="Ajouter une bio"
-                    multiline
-                    disabled={locked}
-                    onSave={(v) => saveField('bio', v)}
-                    style={{ display: 'block', width: '100%', lineHeight: '21px' }}
-                  />
-                </div>
+        {locked && (
+          <div className="mx-6 mt-4 flex items-center gap-2.5 rounded-xl border border-[hsl(var(--h-amber-500))]/30 bg-[hsl(var(--h-amber-100))] px-4 py-2.5">
+            <Lock size={14} className="text-[hsl(var(--h-amber-500))]" />
+            <span className="flex-1 text-[13px] text-[hsl(var(--h-amber-500))]">Contact verrouillé par son propriétaire : seuls le prénom et le nom sont partagés.</span>
+            <button className="rounded-md border bg-card px-2.5 py-1 text-xs hover:bg-muted" onClick={requestAccess}>Demander l'accès</button>
+          </div>
+        )}
 
-                {!contact.bio && !contact.industry && (
-                  <div className="t-sec" style={{ color: 'var(--mut)' }}>
-                    Fiche peu renseignée.
-                    <button className="btn btn-ghost" style={{ marginLeft: 10, padding: '4px 10px' }} onClick={enrich} disabled={enriching}>
-                      <Sparkles size={13} /> {enriching ? 'Enrichissement…' : 'Compléter via l’IA'}
+        {/* Corps : propriétés | activité */}
+        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto md:grid-cols-[300px_1fr] md:overflow-hidden">
+          <div className="border-b px-6 py-4 md:overflow-y-auto md:border-b-0 md:border-r">
+            <div className="mb-1 flex items-center justify-between">
+              <h3 className="text-xs font-semibold">Coordonnées</h3>
+              <span className="text-[11px] tabular-nums text-muted-foreground">{credits} crédits</span>
+            </div>
+            <Prop label="Email">
+              {contact.email ? <a href={`mailto:${contact.email}`} title={contact.email} className="inline-flex max-w-full items-center gap-1.5 truncate px-0 py-1 text-[13px] hover:underline"><Mail size={12} className="shrink-0 text-muted-foreground" />{contact.email}</a> : findBtn('email')}
+            </Prop>
+            <Prop label="Téléphone">
+              {contact.phone ? <a href={`tel:${contact.phone}`} className="inline-flex items-center gap-1.5 py-1 text-[13px] tabular-nums hover:underline"><Phone size={12} className="text-muted-foreground" />{contact.phone}</a> : findBtn('phone')}
+            </Prop>
+            <Prop label="LinkedIn">
+              {contact.linkedin
+                ? <a href={contact.linkedin.startsWith('http') ? contact.linkedin : `https://${contact.linkedin}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 py-1 text-[13px] hover:underline"><Link2 size={12} className="text-muted-foreground" />Profil</a>
+                : <span className="py-1 text-[13px] text-muted-foreground/70">Non renseigné</span>}
+            </Prop>
+
+            <h3 className="mb-1 mt-5 text-xs font-semibold">Profil</h3>
+            <Prop label="Poste" value={contact.job_title} disabled={locked} onSave={(v) => saveField('job_title', v)} />
+            <Prop label="Entreprise" value={contact.company} disabled={locked} onSave={(v) => saveField('company', v)} />
+            <Prop label="Secteur" value={contact.industry} disabled={locked} onSave={(v) => saveField('industry', v)} />
+            <Prop label="Lieu" value={contact.location} disabled={locked} onSave={(v) => saveField('location', v)} />
+            {Array.isArray(contact.skills) && contact.skills.length > 0 && (
+              <Prop label="Compétences">
+                <div className="flex flex-wrap gap-1 py-1">{contact.skills.map((s: string) => <span key={s} className="rounded-full bg-secondary px-2 py-0.5 text-[11px]">{s}</span>)}</div>
+              </Prop>
+            )}
+            {Array.isArray(contact.inferred_needs) && contact.inferred_needs.length > 0 && (
+              <Prop label="Cherche">
+                <div className="flex flex-wrap gap-1 py-1">{contact.inferred_needs.map((s: string) => <span key={s} className="rounded-full border px-2 py-0.5 text-[11px]">{s}</span>)}</div>
+              </Prop>
+            )}
+
+            <h3 className="mb-1 mt-5 text-xs font-semibold">Organisation</h3>
+            <Prop label="Cercle">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="-ml-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] hover:bg-muted">
+                    <span className="size-2 rounded-full" style={{ background: data.spaceById.get(contact.space_id) ? circleColor(data.spaceById.get(contact.space_id)) : undefined }} />
+                    {data.spaceById.get(contact.space_id)?.name ?? '—'}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-52">
+                  {data.spaces.map((s) => (
+                    <DropdownMenuItem key={s.id} onClick={() => moveCircle(s.id)}>
+                      <span className="size-2 rounded-full" style={{ background: circleColor(s) }} /><span className="flex-1">{s.name}</span>
+                      {s.id === contact.space_id && <Check size={13} />}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </Prop>
+            <Prop label="Pipeline">
+              <div className="flex flex-col items-start gap-1 py-0.5">
+                {memberships.map((m) => (
+                  <span key={m.item.id} className="text-[13px]">{m.pipeline?.name} <span className="text-muted-foreground">· {m.stage?.name}</span></span>
+                ))}
+                {data.pipelines.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="-ml-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] text-muted-foreground hover:bg-muted hover:text-foreground">
+                        <Columns3 size={12} /> Ajouter à un pipeline
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-52">
+                      {data.pipelines.map((p) => <DropdownMenuItem key={p.id} onClick={() => addToPipeline(p.id)}>{p.name}</DropdownMenuItem>)}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+            </Prop>
+            <Prop label="Source">
+              <span className="py-1 text-[13px] text-muted-foreground">
+                {contact.source === 'iphone_import' ? 'Import iPhone' : contact.source === 'import' ? 'Import' : contact.source === 'enrichment' ? 'Enrichissement' : 'Manuel'}
+                {contact.enriched_at ? ` · enrichi ${relativeFR(contact.enriched_at)}` : ''}
+              </span>
+            </Prop>
+          </div>
+
+          <div className="flex flex-col gap-6 px-6 py-5 md:overflow-y-auto">
+            {pending.length > 0 && (
+              <div className="rounded-xl border bg-muted/40 p-3.5">
+                <div className="mb-2 text-xs font-semibold">{pending.length > 1 ? `${pending.length} mises à jour détectées` : 'Mise à jour détectée'}</div>
+                <div className="flex flex-col gap-2">
+                  {pending.map((u) => (
+                    <div key={u.id} className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        {u.field ? <DiffLine field={FIELD_LABELS[u.field] ?? u.field} oldValue={u.old_value} newValue={u.new_value ?? ''} /> : <span className="text-[13px]">{u.summary}</span>}
+                        {u.source === 'linkedin' && <div className="mt-0.5 text-[11px] text-muted-foreground">Détecté sur LinkedIn</div>}
+                      </div>
+                      <button className="grid size-7 place-items-center rounded-md border text-muted-foreground hover:bg-secondary" title="Écarter" onClick={() => decide(u, false)}><X size={14} /></button>
+                      <button className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground" title="Appliquer" onClick={() => decide(u, true)}><Check size={14} /></button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <NoteComposer contactId={contactId} contactFirstName={contact.first_name} />
+
+            {contact.ai_context && (
+              <div>
+                <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold"><Sparkles size={12} /> Mémoire</h3>
+                <p className="text-[13px] leading-relaxed text-muted-foreground">{contact.ai_context}</p>
+              </div>
+            )}
+
+            <div>
+              <h3 className="mb-1 text-xs font-semibold">Activité</h3>
+              <Timeline contact={contact} onOpenContact={hop} />
+            </div>
+
+            {links.length > 0 && (
+              <div>
+                <h3 className="mb-2 text-xs font-semibold">Connexions</h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {links.map((other) => (
+                    <button key={other.id} onClick={() => hop(other.id)}
+                      className="inline-flex items-center gap-1.5 rounded-full border py-0.5 pl-0.5 pr-2.5 text-xs hover:bg-muted">
+                      <Avatar name={fullName(other)} firstName={other.first_name} lastName={other.last_name} photoUrl={other.photo_url} size={24} />
+                      {fullName(other)}
                     </button>
-                  </div>
-                )}
+                  ))}
+                </div>
               </div>
             )}
           </div>
         </div>
-
-        {/* 8. Pied administratif */}
-        <div style={{ borderTop: '1px solid var(--line)', padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 10, background: 'var(--wash)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span className="t-label" style={{ marginRight: 2 }}>Cercle</span>
-            {data.spaces.map((s) => {
-              const member = contact.space_id === s.id;
-              return (
-                <button
-                  key={s.id}
-                  className={`chip clickable${member ? ' chip-filter on' : ''}`}
-                  onClick={() => toggleCircle(s.id, member)}
-                  title={member ? 'Cercle actuel' : `Déplacer vers ${s.name}`}
-                >
-                  <span style={{ width: 8, height: 8, borderRadius: 999, background: circleColor(s), flex: 'none' }} />
-                  {s.name}
-                </button>
-              );
-            })}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span className="t-meta" style={{ color: 'var(--mut)' }}>
-              Source : {contact.source === 'iphone_import' ? 'import iPhone' : contact.source === 'enrichment' ? 'enrichissement' : 'manuel'}
-              {contact.enriched_at ? ` · enrichi ${relativeFR(contact.enriched_at)}` : ''}
-            </span>
-            <span style={{ flex: 1 }} />
-            <button className="btn btn-danger" style={{ padding: '6px 11px' }} onClick={() => setConfirmDelete(true)}>
-              <Trash2 size={13} /> Supprimer
-            </button>
-          </div>
-        </div>
       </aside>
 
-      {confirmDelete && (
-        <ConfirmModal
-          title={`Supprimer ${name} ?`}
-          body={
-            <>
-              Cette suppression est définitive et emporte tout ce qui est rattaché à cette fiche :{' '}
-              <b>{noteCount} note{noteCount > 1 ? 's' : ''}</b>, <b>{linkCount} lien{linkCount > 1 ? 's' : ''}</b>,
-              {' '}ses mises à jour et ses relances.
-            </>
-          }
-          confirmLabel="Supprimer définitivement"
-          danger
-          busy={deleting}
-          onConfirm={doDelete}
-          onCancel={() => setConfirmDelete(false)}
-        />
-      )}
+      <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Supprimer {name} ?</DialogTitle></DialogHeader>
+          <p className="text-[13px] text-muted-foreground">
+            Cette suppression est définitive et emporte tout ce qui est rattaché à cette fiche : {noteCount} note{noteCount > 1 ? 's' : ''}, {links.length} lien{links.length > 1 ? 's' : ''}, ses mises à jour et ses relances.
+          </p>
+          <DialogFooter>
+            <button className="rounded-md px-3 py-1.5 text-[13px] text-muted-foreground hover:bg-muted" onClick={() => setConfirmDelete(false)}>Annuler</button>
+            <button disabled={deleting} className="rounded-md bg-destructive px-3 py-1.5 text-[13px] font-medium text-destructive-foreground disabled:opacity-50" onClick={doDelete}>
+              {deleting ? 'Suppression…' : 'Supprimer définitivement'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };
+

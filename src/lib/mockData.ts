@@ -65,8 +65,10 @@ const AV = ['#e06666', '#57b06f', '#8a7fd1', '#d9b84a', '#e091c0', '#5b8def', '#
 export const mockContacts: C[] = raw.map(([fn, ln, job, co, space, days], i) => ({
   id: `c-${i}`, space_id: space, owner_id: USER_ID,
   first_name: fn, last_name: ln, job_title: job, company: co,
-  email: `${fn.toLowerCase().replace(/[^a-z]/g, '')}@${co.toLowerCase().replace(/[^a-z]/g, '') || 'mail'}.com`,
-  phone: '+33 6 12 34 56 78',
+  // Une partie des contacts sans email / téléphone : montre la recherche
+  // FullEnrich au crédit.
+  email: i % 3 === 1 ? null : `${fn.toLowerCase().replace(/[^a-z]/g, '')}@${co.toLowerCase().replace(/[^a-z]/g, '') || 'mail'}.com`,
+  phone: i % 2 === 0 ? null : '+33 6 12 34 56 78',
   photo_url: null,
   enriched_at: i % 3 === 0 ? iso(10) : null,
   last_contacted_at: days == null ? null : iso(days),

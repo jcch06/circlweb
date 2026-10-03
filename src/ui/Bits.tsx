@@ -155,11 +155,11 @@ export const DiffLine: React.FC<{
   oldValue?: string | null;
   newValue: string;
 }> = ({ field, oldValue, newValue }) => (
-  <span style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-    <span className="t-label" style={{ fontSize: 11 }}>{field}</span>
-    {oldValue && <span className="t-sec diff-old">{oldValue}</span>}
-    {oldValue && <span style={{ color: 'var(--faint)' }}>→</span>}
-    <span className="t-sec diff-new">{newValue}</span>
+  <span className="inline-flex flex-wrap items-baseline gap-x-2">
+    <span className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">{field}</span>
+    {oldValue && <span className="text-[13px] text-muted-foreground line-through">{oldValue}</span>}
+    {oldValue && <span className="text-muted-foreground">→</span>}
+    <span className="text-[13px] font-medium">{newValue}</span>
   </span>
 );
 

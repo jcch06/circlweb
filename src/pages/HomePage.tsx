@@ -97,7 +97,7 @@ export const HomePage: React.FC = () => {
     const c = data.contactById.get(u.contact_id);
     if (confirm && u.field === 'job_title' && c) toast('Mise à jour appliquée.', { label: `Féliciter ${c.first_name} ?`, onClick: () => setNoteFor(c.id) });
     else toast(confirm ? 'Mise à jour appliquée.' : 'Mise à jour écartée.');
-    await data.refresh();
+    await data.refresh(confirm ? ['updates', 'contacts'] : ['updates']);
   };
   // « Fait » = la personne a été jointe (date de dernier échange mise à jour) ;
   // « Écarter » ferme la relance sans rien affirmer sur l'échange.
@@ -106,14 +106,15 @@ export const HomePage: React.FC = () => {
     if (error) { toast(`Échec : ${error.message}`); return; }
     if (contacted) {
       const { error: e2 } = await supabase.from('contacts').update({ last_contacted_at: new Date().toISOString() }).eq('id', f.contact_id);
-      if (e2) { toast(`Relance close, mais la date d'échange n'a pas pu être enregistrée : ${e2.message}`); await data.refresh(); return; }
+      if (e2) { toast(`Relance close, mais la date d'échange n'a pas pu être enregistrée : ${e2.message}`); await data.refresh(['followUps']); return; }
+      data.patchContact(f.contact_id, { last_contacted_at: new Date().toISOString() });
     }
-    toast(contacted ? 'Relance faite, échange enregistré.' : 'Relance écartée.'); await data.refresh();
+    toast(contacted ? 'Relance faite, échange enregistré.' : 'Relance écartée.'); await data.refresh(['followUps']);
   };
   const markContacted = async (c: any) => {
     const { error } = await supabase.from('contacts').update({ last_contacted_at: new Date().toISOString() }).eq('id', c.id);
     if (error) { toast(`Échec : ${error.message}`); return; }
-    toast(`${c.first_name} marqué comme joint.`); await data.refresh();
+    toast(`${c.first_name} marqué comme joint.`); data.patchContact(c.id, { last_contacted_at: new Date().toISOString() });
   };
   const loadDecisions = async () => {
     const { data: rows } = await supabase.from('intro_suggestions').select('from_contact_id, to_contact_id');

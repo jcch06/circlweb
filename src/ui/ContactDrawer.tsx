@@ -148,7 +148,7 @@ export const ContactDrawer: React.FC<{
     if (IS_MOCK) return;
     const { error } = await supabase.from('contacts').update({ [field]: value || null }).eq('id', contactId);
     if (error) { toast(`Modification impossible : ${error.message}`); return; }
-    await data.refresh();
+    data.patchContact(contactId, { [field]: value || null });
   };
 
   const decide = async (u: any, confirm: boolean) => {
@@ -156,7 +156,7 @@ export const ContactDrawer: React.FC<{
     const { error } = await supabase.rpc(confirm ? 'confirm_contact_update' : 'dismiss_contact_update', { p_update_id: u.id });
     if (error) { toast(`Échec : ${error.message}`); return; }
     toast(confirm ? 'Mise à jour appliquée.' : 'Mise à jour écartée.');
-    await data.refresh();
+    await data.refresh(confirm ? ['updates', 'contacts'] : ['updates']);
   };
 
   const moveCircle = async (spaceId: string) => {
@@ -166,7 +166,7 @@ export const ContactDrawer: React.FC<{
     if (IS_MOCK) return;
     const { error } = await supabase.from('contacts').update({ space_id: spaceId }).eq('id', contactId);
     if (error) { toast(`Déplacement impossible : ${error.message}`); return; }
-    await data.refresh();
+    data.patchContact(contactId, { space_id: spaceId });
   };
 
   const requestAccess = async () => {
@@ -192,7 +192,7 @@ export const ContactDrawer: React.FC<{
         job_title: contact.job_title, industry: contact.industry, bio: contact.bio, ai_context: contact.ai_context, location: contact.location,
       });
       toast(skillsAdded + needsAdded > 0 ? `Fiche enrichie : ${skillsAdded} compétence${skillsAdded > 1 ? 's' : ''}, ${needsAdded} besoin${needsAdded > 1 ? 's' : ''}.` : 'Fiche enrichie.');
-      await data.refresh();
+      await data.refresh(['contacts']);
     } catch (err: any) {
       toast(`Enrichissement impossible : ${err.message ?? 'erreur'}`);
     } finally { setEnriching(false); }
@@ -227,7 +227,7 @@ export const ContactDrawer: React.FC<{
       if (!r.value) { toast(`${label} introuvable. Aucun crédit utilisé.`); return; }
       patchLocal({ [kind]: r.value });
       toast(`${label} trouvé · ${cost} crédit${cost > 1 ? 's' : ''} utilisé${cost > 1 ? 's' : ''}.`);
-      await data.refresh();
+      data.patchContact(contactId, { [kind]: r.value });
       return;
     }
     await new Promise((r) => setTimeout(r, 1000));
@@ -250,7 +250,7 @@ export const ContactDrawer: React.FC<{
       if (!first) { toast('Ce pipeline n’a pas d’étape.'); return; }
       const { error } = await supabase.from('pipeline_items').insert({ pipeline_id: pipelineId, stage_id: first.id, contact_id: contactId, position: 0 });
       if (error) { toast(`Ajout impossible : ${error.message}`); return; }
-      await data.refresh();
+      await data.refresh(['pipelines']);
     }
     toast(`${contact.first_name} ajouté à ${p?.name ?? 'ce pipeline'}.`);
   };
@@ -263,7 +263,7 @@ export const ContactDrawer: React.FC<{
     }
     setDeleting(false); setConfirmDelete(false); onClose();
     toast(`${name} supprimé.`);
-    if (!IS_MOCK) await data.refresh();
+    if (!IS_MOCK) await data.refresh(['contacts']);
   };
 
   const findBtn = (kind: 'email' | 'phone') => (

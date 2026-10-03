@@ -40,12 +40,12 @@ export const Timeline: React.FC<{ contact: any; onOpenContact?: (id: string) => 
     if (!content || content === note.content) return;
     const { error } = await supabase.from('notes').update({ content }).eq('id', note.id);
     if (error) toast(`Modification impossible : ${error.message}`);
-    else { toast('Note modifiée.'); await refresh(); }
+    else { toast('Note modifiée.'); await refresh(['notes']); }
   };
   const deleteNote = async (note: any) => {
     const { error } = await supabase.from('notes').delete().eq('id', note.id);
     if (error) { toast(`Suppression impossible : ${error.message}`); return; }
-    toast('Note supprimée.'); await refresh();
+    toast('Note supprimée.'); await refresh(['notes']);
   };
 
   if (events.length === 0) {

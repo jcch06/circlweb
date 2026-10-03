@@ -51,7 +51,7 @@ export const NoteComposer: React.FC<{
       setSuggestions(data.pending_updates ?? []);
       setFollowUps(data.follow_ups ?? []);
       toast('Note enregistrée.');
-      await refresh();
+      await refresh(['notes', 'updates', 'followUps', 'links']);
       onSaved?.();
     } catch (err: any) {
       // L'analyse IA a échoué : la note est quand même enregistrée telle quelle,
@@ -66,7 +66,7 @@ export const NoteComposer: React.FC<{
         setText('');
         if (taRef.current) taRef.current.style.height = 'auto';
         toast("Note enregistrée. L'analyse automatique n'a pas pu être faite.");
-        await refresh();
+        await refresh(['notes', 'updates', 'followUps', 'links']);
         onSaved?.();
       }
     } finally {
@@ -78,7 +78,7 @@ export const NoteComposer: React.FC<{
     setSuggestions((prev) => prev.filter((x) => x.id !== u.id));
     const { error } = await supabase.rpc(confirm ? 'confirm_contact_update' : 'dismiss_contact_update', { p_update_id: u.id });
     if (error) { toast(`Échec : ${error.message}`); setSuggestions((prev) => [...prev, u]); return; }
-    if (confirm) await refresh();
+    if (confirm) await refresh(['notes', 'updates', 'followUps', 'links']);
   };
 
   return (

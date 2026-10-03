@@ -47,7 +47,7 @@ export const TagsPanel: React.FC<{ onClose: () => void; onFilterTag: (tagId: str
     const { error } = await supabase.from('tags').update({ name }).eq('id', tag.id);
     if (error) { toast(`Renommage impossible : ${error.message}`); return; }
     toast('Tag renommé.');
-    await data.refresh();
+    await data.refresh(['tags']);
   };
 
   const remove = async (tag: any) => {
@@ -55,7 +55,7 @@ export const TagsPanel: React.FC<{ onClose: () => void; onFilterTag: (tagId: str
     const { error } = await supabase.from('tags').delete().eq('id', tag.id);
     if (error) { toast(`Suppression impossible : ${error.message}`); return; }
     toast(count > 0 ? `Tag supprimé (retiré de ${count} contact${count > 1 ? 's' : ''}).` : 'Tag supprimé.');
-    await data.refresh();
+    await data.refresh(['tags']);
   };
 
   const toggleMerge = (id: string) => {
@@ -83,7 +83,7 @@ export const TagsPanel: React.FC<{ onClose: () => void; onFilterTag: (tagId: str
     const targetTag = data.tags.find((t) => t.id === target);
     toast(`Fusion faite : ${affected.length} liaison${affected.length > 1 ? 's' : ''} re-taguée${affected.length > 1 ? 's' : ''} vers « ${targetTag?.name} ».`);
     setMergeSel(new Set());
-    await data.refresh();
+    await data.refresh(['tags']);
   };
 
   const mergeCount = useMemo(() => {

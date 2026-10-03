@@ -82,7 +82,7 @@ export const UpdatesPage: React.FC = () => {
     } else {
       toast(confirm ? 'Mise à jour appliquée.' : 'Mise à jour écartée.');
     }
-    await data.refresh();
+    await data.refresh(['updates', 'contacts']);
   };
 
   const confirmAll = async (updates: any[]) => {
@@ -90,7 +90,7 @@ export const UpdatesPage: React.FC = () => {
       await supabase.rpc('confirm_contact_update', { p_update_id: u.id });
     }
     toast(`${updates.length} mises à jour appliquées.`);
-    await data.refresh();
+    await data.refresh(['updates', 'contacts']);
   };
 
   const loadHistory = async () => {
@@ -109,7 +109,7 @@ export const UpdatesPage: React.FC = () => {
     const { error } = await supabase.from('contact_updates').update({ status: 'pending' }).eq('id', u.id);
     if (error) { toast(`Échec : ${error.message}`); return; }
     toast('Mise à jour restaurée.');
-    await Promise.all([loadHistory(), data.refresh()]);
+    await Promise.all([loadHistory(), data.refresh(['updates', 'contacts'])]);
   };
 
   /* Triage clavier : J/K déplacent, Entrée confirme, X écarte. */

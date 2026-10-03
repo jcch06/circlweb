@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from './lib/supabase';
 import { buildMockBase } from './lib/mockData';
 
@@ -26,7 +26,9 @@ export interface DataApi {
   pipelineItems: any[];
   selectedSpaceId: string | null;
   setSelectedSpaceId: (id: string | null) => void;
-  refresh: () => Promise<void>;
+  refresh: (only?: DataKey[]) => Promise<void>;
+  /** Met à jour une fiche en mémoire après une écriture réussie, sans tout recharger. */
+  patchContact: (id: string, patch: Record<string, unknown>) => void;
   /* Index dérivés */
   lastNoteByContact: Map<string, string>;
   followUpsByContact: Map<string, any[]>;
@@ -49,24 +51,38 @@ export function useData(): DataApi {
 // Pagination systématique (plafond Supabase 1000 lignes/requête). Le filtre
 // d'égalité optionnel permet de paginer aussi les requêtes filtrées (ex.
 // status = 'pending') sans plafond dur à 500.
+// Première page avec le total, puis les suivantes en parallèle (6 à la fois) :
+// 10 000 contacts = 1 aller-retour + 2 vagues, au lieu de 10 requêtes en file.
+// L'id départage les ex aequo pour que les pages ne se chevauchent pas.
 const fetchAll = async (
   table: string,
   orderBy: string,
   ascending = true,
   eq?: [string, unknown],
+  tiebreak: string | null = 'id',
 ) => {
   const PAGE = 1000;
-  const rows: any[] = [];
-  for (let from = 0; ; from += PAGE) {
-    let q = supabase.from(table).select('*');
+  const page = (from: number, count = false) => {
+    let q = supabase.from(table).select('*', count ? { count: 'exact' } : undefined);
     if (eq) q = q.eq(eq[0], eq[1]);
-    const { data, error } = await q.order(orderBy, { ascending }).range(from, from + PAGE - 1);
-    if (error) throw error;
-    rows.push(...(data || []));
-    if (!data || data.length < PAGE) break;
+    q = q.order(orderBy, { ascending });
+    if (tiebreak) q = q.order(tiebreak, { ascending: true });
+    return q.range(from, from + PAGE - 1);
+  };
+  const first = await page(0, true);
+  if (first.error) throw first.error;
+  const rows: any[] = [...(first.data || [])];
+  const total = first.count ?? rows.length;
+  const starts: number[] = [];
+  for (let from = PAGE; from < total; from += PAGE) starts.push(from);
+  for (let i = 0; i < starts.length; i += 6) {
+    const pages = await Promise.all(starts.slice(i, i + 6).map((from) => page(from)));
+    for (const p of pages) { if (p.error) throw p.error; rows.push(...(p.data || [])); }
   }
   return rows;
 };
+
+export type DataKey = 'contacts' | 'notes' | 'tags' | 'links' | 'updates' | 'followUps' | 'pipelines';
 
 export const DataProvider: React.FC<{ session: any; children: React.ReactNode }> = ({ session, children }) => {
   const [loading, setLoading] = useState(false);
@@ -84,9 +100,31 @@ export const DataProvider: React.FC<{ session: any; children: React.ReactNode }>
   const [pipelineItems, setPipelineItems] = useState<any[]>([]);
   const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const loadedOnce = useRef(false);
+  // refresh() recharge tout ; refresh(['notes']) seulement ce qui a changé.
+  // Le voile de chargement ne couvre que le premier chargement.
+  const refresh = useCallback(async (only?: DataKey[]) => {
     if (!session?.user) return;
-    setLoading(true);
+    if (only && loadedOnce.current) {
+      const want = new Set(only);
+      try {
+        await Promise.all([
+          want.has('contacts') && fetchAll('contacts_visible', 'first_name').then(setContacts),
+          want.has('notes') && fetchAll('notes_visible', 'created_at', false).then(setNotes),
+          want.has('tags') && Promise.all([fetchAll('tags', 'name'), fetchAll('contact_tags_visible', 'contact_id', true, undefined, 'tag_id')])
+            .then(([t, ct]) => { setTags(t); setContactTags(ct); }),
+          want.has('links') && fetchAll('contact_links', 'created_at', false).then(setContactLinks).catch(() => {}),
+          want.has('updates') && fetchAll('contact_updates', 'detected_at', false, ['status', 'pending']).then(setPendingUpdates),
+          want.has('followUps') && fetchAll('follow_ups', 'due_date', true, ['status', 'pending']).then(setFollowUps),
+          want.has('pipelines') && Promise.all([fetchAll('pipelines', 'position'), fetchAll('pipeline_stages', 'position'), fetchAll('pipeline_items', 'position')])
+            .then(([p, st, it]) => { setPipelines(p); setPipelineStages(st); setPipelineItems(it); }).catch(() => {}),
+        ]);
+      } catch (err: any) {
+        console.error('Erreur de rafraîchissement:', err);
+      }
+      return;
+    }
+    if (!loadedOnce.current) setLoading(true);
     setErrorMsg(null);
     const timeout = setTimeout(() => {
       setLoading(false);
@@ -100,7 +138,7 @@ export const DataProvider: React.FC<{ session: any; children: React.ReactNode }>
           fetchAll('contacts_visible', 'first_name'),
           fetchAll('notes_visible', 'created_at', false),
           fetchAll('tags', 'name'),
-          fetchAll('contact_tags_visible', 'contact_id'),
+          fetchAll('contact_tags_visible', 'contact_id', true, undefined, 'tag_id'),
           fetchAll('contact_links', 'created_at', false).catch(() => []),
           // contact_updates' real timestamp column is detected_at, not created_at
           // (see supabase/migrations/20260720100000_add_redesign_tables.sql).
@@ -121,6 +159,7 @@ export const DataProvider: React.FC<{ session: any; children: React.ReactNode }>
         setPendingUpdates(updatesData);
         setFollowUps(followUpsData);
       }
+      loadedOnce.current = true;
     } catch (err: any) {
       console.error('Erreur de chargement réseau:', err);
       setErrorMsg('Erreur réseau : ' + (err.message || 'impossible de joindre Supabase'));
@@ -220,6 +259,7 @@ export const DataProvider: React.FC<{ session: any; children: React.ReactNode }>
     selectedSpaceId,
     setSelectedSpaceId,
     refresh,
+    patchContact: (id: string, patch: Record<string, unknown>) => setContacts((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c))),
     lastNoteByContact,
     followUpsByContact,
     notesByContact,
@@ -239,6 +279,6 @@ export const DataProvider: React.FC<{ session: any; children: React.ReactNode }>
 export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const base = useMemo(() => buildMockBase(), []);
   const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
-  const value = { ...base, selectedSpaceId, setSelectedSpaceId, refresh: async () => {} } as unknown as DataApi;
+  const value = { ...base, selectedSpaceId, setSelectedSpaceId, refresh: async () => {}, patchContact: () => {} } as unknown as DataApi;
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 };

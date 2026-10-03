@@ -72,14 +72,14 @@ export const JournalPage: React.FC = () => {
     if (!content || content === note.content) return;
     const { error } = await supabase.from('notes').update({ content }).eq('id', note.id);
     if (error) toast(`Modification impossible : ${error.message}`);
-    else { toast('Note modifiée.'); await data.refresh(); }
+    else { toast('Note modifiée.'); await data.refresh(['notes']); }
   };
 
   const deleteNote = async (note: any) => {
     const { error } = await supabase.from('notes').delete().eq('id', note.id);
     if (error) { toast(`Suppression impossible : ${error.message}`); return; }
     toast('Note supprimée.');
-    await data.refresh();
+    await data.refresh(['notes']);
   };
 
   const targetMatches = useMemo(() => {

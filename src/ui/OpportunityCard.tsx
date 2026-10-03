@@ -118,7 +118,7 @@ export const OpportunityCard: React.FC<{
     });
     setSnoozeOpen(false);
     toast(`Relance posée au ${new Date(due).toLocaleDateString('fr-FR')}.`);
-    await data.refresh();
+    await data.refresh(['followUps']);
     onResolved();
   };
 

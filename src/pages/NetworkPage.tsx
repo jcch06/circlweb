@@ -147,7 +147,7 @@ export const NetworkPage: React.FC = () => {
         space_id: from?.space_id, from_contact_id: s.a, to_contact_id: s.b, kind: s.kind, reason: s.reason, created_by: userId,
       });
       if (error && error.code !== '23505') { flash(`Lien non enregistré : ${error.message}`); return; }
-      await data.refresh();
+      await data.refresh(['links']);
     } else {
       const { error } = await supabase.from('link_rejections').insert({ a, b, kind: s.kind });
       if (error && error.code !== '23505') flash(`Rejet non enregistré : ${error.message}`);
@@ -156,7 +156,7 @@ export const NetworkPage: React.FC = () => {
   const removeLink = async (l: any) => {
     const { error } = await supabase.from('contact_links').delete().eq('id', l.id);
     if (error) { flash(`Suppression impossible : ${error.message}`); return; }
-    await data.refresh();
+    await data.refresh(['links']);
   };
   // Classement IA des contacts qui ont au moins un indice (entreprise, poste, email, parenthèse).
   const aiCandidates = useMemo(() => result.unclassified.filter((id) => { const c = data.contactById.get(id); return c && hasInfo(c); }), [result, data.contactById]);
@@ -336,7 +336,7 @@ export const NetworkPage: React.FC = () => {
                     if (!a || !b) return null;
                     const note = l.source_note_id ? data.notes.find((n) => n.id === l.source_note_id) : null;
                     return (
-                      <li key={l.id} className="group flex items-center gap-3 py-2.5">
+                      <li key={l.id ?? `${l.from_contact_id}-${l.to_contact_id}-${l.source_note_id ?? l.kind}`} className="group flex items-center gap-3 py-2.5">
                         <Link2 className="size-3.5 shrink-0 text-muted-foreground" />
                         <div className="min-w-0 flex-1">
                           <div className="text-[13px]">

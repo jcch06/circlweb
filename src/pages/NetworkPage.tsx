@@ -54,6 +54,8 @@ export const NetworkPage: React.FC = () => {
   const [tab, setTab] = useState<Tab>('milieux');
   const [selected, setSelected] = useState<string | null>(null);
   const [explicit, setExplicit] = useState<Map<string, string[]>>(new Map());
+  // Classements proposés par l'IA : appliqués à la carte, mais à valider.
+  const [aiRows, setAiRows] = useState<Map<string, string[]>>(new Map());
   const [aliases, setAliases] = useState<Map<string, string>>(new Map());
   const [rejected, setRejected] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState(IS_MOCK);
@@ -62,19 +64,33 @@ export const NetworkPage: React.FC = () => {
   const userId = data.user?.id;
 
   // Décisions de l'utilisateur (classements, renommages, rejets).
+  // Toutes les pages : une limite d'API ne doit jamais faire oublier une décision.
+  const pageAll = async (q: () => any) => {
+    const out: any[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data: page, error } = await q().range(from, from + 999);
+      if (error) throw error;
+      out.push(...(page ?? []));
+      if (!page || page.length < 1000) return out;
+    }
+  };
   const loadDecisions = async () => {
     if (IS_MOCK) return;
-    const [m, a, r] = await Promise.all([
-      supabase.from('contact_milieux').select('contact_id, milieu').limit(20000),
-      supabase.from('milieu_aliases').select('from_name, to_name'),
-      supabase.from('link_rejections').select('a, b, kind'),
-    ]);
-    const ex = new Map<string, string[]>();
-    for (const row of m.data ?? []) (ex.get(row.contact_id) ?? ex.set(row.contact_id, []).get(row.contact_id)!).push(row.milieu);
-    setExplicit(ex);
-    setAliases(new Map((a.data ?? []).map((x) => [x.from_name, x.to_name])));
-    setRejected(new Set((r.data ?? []).map((x) => linkKey(x.a, x.b, x.kind))));
-    setLoaded(true);
+    try {
+      const [m, a, r] = await Promise.all([
+        pageAll(() => supabase.from('contact_milieux').select('contact_id, milieu, source').order('contact_id')),
+        pageAll(() => supabase.from('milieu_aliases').select('from_name, to_name').order('from_name')),
+        pageAll(() => supabase.from('link_rejections').select('a, b, kind').order('a')),
+      ]);
+      const user = new Map<string, string[]>(), ai = new Map<string, string[]>();
+      for (const row of m) { const t = row.source === 'ai' ? ai : user; (t.get(row.contact_id) ?? t.set(row.contact_id, []).get(row.contact_id)!).push(row.milieu); }
+      setExplicit(user); setAiRows(ai);
+      setAliases(new Map(a.map((x) => [x.from_name, x.to_name])));
+      setRejected(new Set(r.map((x) => linkKey(x.a, x.b, x.kind))));
+      setLoaded(true);
+    } catch {
+      flash('Vos classements n’ont pas pu être chargés. Rechargez la page.');
+    }
   };
   useEffect(() => { loadDecisions(); }, []);
 
@@ -86,7 +102,9 @@ export const NetworkPage: React.FC = () => {
       .filter((c) => { const k = c.shared_contact_id ?? c.id; if (seen.has(k)) return false; seen.add(k); return true; });
   }, [data.contacts, data.selectedSpaceId]);
 
-  const result = useMemo(() => computeMilieux({ contacts: people, explicit, aliases }), [people, explicit, aliases]);
+  const merged = useMemo(() => { const m = new Map(aiRows); for (const [k, v] of explicit) m.set(k, v); return m; }, [explicit, aiRows]);
+  const result = useMemo(() => computeMilieux({ contacts: people, explicit: merged, aliases }), [people, merged, aliases]);
+  const aiPending = useMemo(() => people.filter((c) => aiRows.has(c.id) && !explicit.has(c.id)).map((c) => c.id), [people, aiRows, explicit]);
   const status = (c: any) => relStatus(lastTouch(c, data.lastNoteByContact.get(c.id)));
 
   const known = useMemo(() => {
@@ -110,7 +128,8 @@ export const NetworkPage: React.FC = () => {
     return `${cx - w / 2} ${cy - h / 2} ${w} ${h}`;
   }, [bubbles]);
 
-  const sel = bubbles.find((b) => b.key === selected) ?? null;
+  const sel = bubbles.find((b) => b.key === selected)
+    ?? (() => { const m = result.milieux.find((x) => norm(x.name) === selected); return m ? { key: norm(m.name), name: m.name, ids: m.ids, r: 0, x: 0, y: 0 } : null; })();
   const members = useMemo(() => {
     if (!sel) return [];
     return sel.ids.map((id) => data.contactById.get(id)).filter(Boolean)
@@ -120,12 +139,15 @@ export const NetworkPage: React.FC = () => {
   const flash = (msg: string) => { setNotice(msg); window.setTimeout(() => setNotice(null), 3200); };
 
   // ---- Décisions ----
+  // Classer (ou valider une proposition de l'IA) : le choix de l'utilisateur remplace tout classement précédent.
   const classify = async (contactId: string, milieu: string) => {
     const name = milieu.trim().replace(/\s+/g, ' ');
     if (!name) return;
     setExplicit((m) => new Map(m).set(contactId, [name]));
+    setAiRows((m) => { const n = new Map(m); n.delete(contactId); return n; });
     if (IS_MOCK) return;
-    const { error } = await supabase.from('contact_milieux').insert({ contact_id: contactId, milieu: name.slice(0, 80), source: 'user' });
+    const del = await supabase.from('contact_milieux').delete().eq('contact_id', contactId);
+    const { error } = del.error ? del : await supabase.from('contact_milieux').insert({ contact_id: contactId, milieu: name.slice(0, 80), source: 'user' });
     if (error && error.code !== '23505') flash(`Classement non enregistré : ${error.message}`);
   };
   const rename = async (from: string, to: string) => {
@@ -276,6 +298,25 @@ export const NetworkPage: React.FC = () => {
                   <dt className="text-muted-foreground">À classer</dt><dd className="text-right">{result.unclassified.length.toLocaleString('fr-FR')}</dd>
                   <dt className="text-muted-foreground">Liens à confirmer</dt><dd className="text-right">{suggestions.length}</dd>
                 </dl>
+                {result.milieux.length > 0 && (
+                  <div>
+                    <h3 className="mb-1.5 text-xs font-medium text-muted-foreground">Tous les milieux · {result.milieux.length}</h3>
+                    <ul className="max-h-64 overflow-y-auto">
+                      {result.milieux.map((m) => (
+                        <li key={m.name}>
+                          <button onClick={() => setSelected(norm(m.name))} className="flex w-full items-center justify-between rounded-md px-2 py-1 text-left hover:bg-muted">
+                            <span className="truncate">{m.name}</span><span className="tabular-nums text-muted-foreground">{m.ids.length.toLocaleString('fr-FR')}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {aiPending.length > 0 && (
+                  <Button variant="ghost" size="sm" className="justify-between" onClick={() => setTab('trier')}>
+                    Vérifier {aiPending.length} classement{aiPending.length > 1 ? 's' : ''} proposé{aiPending.length > 1 ? 's' : ''} par l'IA <ArrowRight className="size-3.5" />
+                  </Button>
+                )}
                 {aiCandidates.length > 0 && !IS_MOCK && (
                   <Button variant="outline" size="sm" disabled={!!aiBusy} onClick={runAI}>
                     <Sparkles className="size-3.5" />{aiBusy ?? `Ranger ${aiCandidates.length} contacts avec l'IA`}
@@ -363,7 +404,7 @@ export const NetworkPage: React.FC = () => {
       )}
 
       {tab === 'trier' && (
-        <Triage ids={result.unclassified} milieux={result.milieux.map((m) => m.name)} onClassify={classify}
+        <Triage ids={result.unclassified} aiIds={aiPending} aiSuggestion={aiRows} milieux={result.milieux.map((m) => m.name)} onClassify={classify}
           onAI={runAI} aiCount={aiCandidates.length} aiBusy={aiBusy} />
       )}
 
@@ -381,7 +422,10 @@ const MilieuPanel: React.FC<{
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(bubble.name);
   const counts = members.reduce((n: Record<RelStatus, number>, c) => { n[status(c)]++; return n; }, { fresh: 0, due: 0, dormant: 0, never: 0 });
-  const shown = members.slice(0, 200);
+  const [limit, setLimit] = useState(50);
+  const [filter, setFilter] = useState('');
+  const filtered = filter.trim() ? members.filter((c) => `${fullName(c)} ${c.company ?? ''} ${c.job_title ?? ''}`.toLowerCase().includes(filter.trim().toLowerCase())) : members;
+  const shown = filtered.slice(0, limit);
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-start gap-2">
@@ -409,21 +453,27 @@ const MilieuPanel: React.FC<{
           )}
         </div>
       )}
+      {members.length > 50 && <Input value={filter} onChange={(e) => { setFilter(e.target.value); setLimit(50); }} placeholder="Chercher dans ce milieu" aria-label="Chercher dans ce milieu" className="h-8" />}
       <div className="-mx-2 flex flex-col">{shown.map((c) => personRow(c))}</div>
-      {members.length > shown.length && <p className="text-xs text-muted-foreground">Et {members.length - shown.length} autres.</p>}
+      {filtered.length > shown.length && (
+        <Button variant="ghost" size="sm" onClick={() => setLimit((l) => l + 50)}>Afficher 50 de plus ({(filtered.length - shown.length).toLocaleString('fr-FR')} restants)</Button>
+      )}
     </div>
   );
 };
 
 /** Tri des contacts à classer : une personne à la fois, un milieu en un clic ou une touche. */
 const Triage: React.FC<{
-  ids: string[]; milieux: string[]; onClassify: (id: string, milieu: string) => void;
+  ids: string[]; aiIds: string[]; aiSuggestion: Map<string, string[]>; milieux: string[]; onClassify: (id: string, milieu: string) => void;
   onAI: () => void; aiCount: number; aiBusy: string | null;
-}> = ({ ids, milieux, onClassify, onAI, aiCount, aiBusy }) => {
+}> = ({ ids, aiIds, aiSuggestion, milieux, onClassify, onAI, aiCount, aiBusy }) => {
   const data = useData();
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [draft, setDraft] = useState('');
-  const queue = ids.filter((id) => !skipped.has(id));
+  // Deux piles : contacts sans milieu, et classements proposés par l'IA à valider.
+  const [mode, setMode] = useState<'classer' | 'ia'>(ids.length === 0 && aiIds.length > 0 ? 'ia' : 'classer');
+  const queue = (mode === 'ia' ? aiIds : ids).filter((id) => !skipped.has(id));
+  const proposal = mode === 'ia' && queue[0] ? aiSuggestion.get(queue[0])?.[0] : undefined;
   const c = queue[0] ? data.contactById.get(queue[0]) : null;
   const choices = milieux.slice(0, 9);
   const pick = (m: string) => { if (c) { onClassify(c.id, m); setDraft(''); } };
@@ -435,6 +485,7 @@ const Triage: React.FC<{
       const n = Number(e.key);
       if (n >= 1 && n <= choices.length) { e.preventDefault(); pick(choices[n - 1]); }
       if (e.key === 'ArrowRight' || e.key === 's') { e.preventDefault(); skip(); }
+      if (e.key === 'Enter' && proposal) { e.preventDefault(); pick(proposal); }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -454,8 +505,16 @@ const Triage: React.FC<{
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto flex max-w-xl flex-col gap-5 px-4 py-8 md:px-6">
+        {aiIds.length > 0 && (
+          <div className="flex w-fit items-center rounded-lg bg-secondary p-0.5 text-xs" role="tablist">
+            {([['classer', `Sans milieu · ${ids.length}`], ['ia', `Proposés par l'IA · ${aiIds.length}`]] as const).map(([k, label]) => (
+              <button key={k} role="tab" aria-selected={mode === k} onClick={() => setMode(k)}
+                className={cn('rounded-md px-3 py-1 font-medium tabular-nums', mode === k ? 'bg-card shadow-sm' : 'text-muted-foreground hover:text-foreground')}>{label}</button>
+            ))}
+          </div>
+        )}
         <div className="flex items-center justify-between text-xs tabular-nums text-muted-foreground">
-          <span>{queue.length.toLocaleString('fr-FR')} contact{queue.length > 1 ? 's' : ''} à classer</span>
+          <span>{queue.length.toLocaleString('fr-FR')} contact{queue.length > 1 ? 's' : ''} {mode === 'ia' ? 'à vérifier' : 'à classer'}</span>
           {aiCount > 0 && !IS_MOCK && (
             <button className="inline-flex items-center gap-1 hover:text-foreground disabled:opacity-60" disabled={!!aiBusy} onClick={onAI}>
               <Sparkles className="size-3" />{aiBusy ?? `Laisser l'IA ranger les ${aiCount} qui ont des indices`}
@@ -473,7 +532,14 @@ const Triage: React.FC<{
         </div>
         {lastNote && <p className="text-[13px] leading-relaxed text-muted-foreground">Dernière note : « {lastNote.content.slice(0, 180)}{lastNote.content.length > 180 ? '…' : ''} »</p>}
         <div>
-          <h3 className="mb-2 text-xs font-medium text-muted-foreground">Où l'avez-vous connu ?</h3>
+          {proposal && (
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-[13px]">
+              <Sparkles className="size-3.5 text-muted-foreground" />
+              <span>L'IA propose <span className="font-medium">{proposal}</span>, d'après les indices de la fiche.</span>
+              <Button size="sm" className="ml-auto" onClick={() => pick(proposal)}>Valider · Entrée</Button>
+            </div>
+          )}
+          <h3 className="mb-2 text-xs font-medium text-muted-foreground">{proposal ? 'Ou choisissez un autre milieu' : 'Où l\'avez-vous connu ?'}</h3>
           <div className="flex flex-wrap gap-1.5">
             {choices.map((m, i) => (
               <button key={m} onClick={() => pick(m)}

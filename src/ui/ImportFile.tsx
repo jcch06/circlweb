@@ -29,6 +29,8 @@ export const ImportFile: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [progress, setProgress] = useState<string | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  // Lignes écartées comme doublons du fichier que l'utilisateur choisit de garder.
+  const [keep, setKeep] = useState<Set<number>>(new Set());
 
   const read = async (file: File) => {
     setError(null);
@@ -41,7 +43,11 @@ export const ImportFile: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         table = (XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' }) as unknown[][])
           .map((r) => r.map((c) => String(c ?? ''))).filter((r) => r.some((c) => c.trim()));
       } else {
-        table = parseCsv(await file.text());
+        // UTF-8 d'abord ; les exports Excel Windows (Windows-1252) donnent des « � » : on relit alors en Windows-1252.
+        const buf = await file.arrayBuffer();
+        let text = new TextDecoder('utf-8').decode(buf);
+        if (text.includes('\uFFFD')) text = new TextDecoder('windows-1252').decode(buf);
+        table = parseCsv(text);
       }
       if (table.length < 2) { setError("Ce fichier ne contient pas de ligne de contact sous l'en-tête."); return; }
       if (table.length - 1 > MAX_ROWS) { setError(`Ce fichier contient ${(table.length - 1).toLocaleString('fr-FR')} lignes. Découpez-le en fichiers de ${MAX_ROWS.toLocaleString('fr-FR')} lignes au plus.`); return; }
@@ -59,7 +65,11 @@ export const ImportFile: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const run = async () => {
     if (!built || !spaceId) return;
     if (!hasName) { setError('Indiquez au moins la colonne du prénom, du nom ou du nom complet.'); return; }
-    const payload = built.contacts.map((c) => ({ ...c, space_id: spaceId, owner_id: data.user?.id, source: 'import' }));
+    const payload = [
+      ...built.contacts.map((c) => ({ ...c, space_id: spaceId, owner_id: data.user?.id, source: 'import' })),
+      // Gardées explicitement : source 'manual', la base ne les écarte pas comme doublons.
+      ...built.ignored.filter((x) => keep.has(x.row)).map((x) => ({ ...x.contact, space_id: spaceId, owner_id: data.user?.id, source: 'manual' })),
+    ];
     let created = 0;
     const errors: string[] = [];
     if (!IS_MOCK) {
@@ -81,7 +91,7 @@ export const ImportFile: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       created = payload.length;
     }
     setProgress(null);
-    setSummary({ created, already: payload.length - created - errors.length, duplicatesInFile: built.duplicatesInFile, withoutName: built.withoutName, errors });
+    setSummary({ created, already: payload.length - created - errors.length, duplicatesInFile: built.duplicatesInFile - keep.size, withoutName: built.withoutName, errors });
   };
 
   if (summary) {
@@ -168,11 +178,28 @@ export const ImportFile: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           {built.withoutName > 0 && ` · ${built.withoutName} sans nom`}. Les personnes déjà présentes dans vos cercles seront ignorées.
         </p>
       )}
+      {built && built.ignored.length > 0 && (
+        <details className="rounded-md border px-3 py-2 text-[13px]">
+          <summary className="cursor-pointer text-muted-foreground">{built.ignored.length} ligne{built.ignored.length > 1 ? 's' : ''} écartée{built.ignored.length > 1 ? 's' : ''} comme doublon{built.ignored.length > 1 ? 's' : ''} du fichier. Vérifier</summary>
+          <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+            {built.ignored.slice(0, 200).map((x) => (
+              <li key={x.row}>
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input type="checkbox" className="size-3.5 accent-foreground" checked={keep.has(x.row)}
+                    onChange={() => setKeep((k) => { const n = new Set(k); n.has(x.row) ? n.delete(x.row) : n.add(x.row); return n; })} />
+                  <span>Ligne {x.row} · {x.name}</span><span className="text-muted-foreground">({x.reason})</span>
+                  <span className="ml-auto text-xs text-muted-foreground">Garder</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       {error && <p role="alert" className="text-[13px] text-destructive">{error}</p>}
       <DialogFooter>
-        <Button variant="outline" onClick={() => { setRows(null); setError(null); }} disabled={!!progress}>Autre fichier</Button>
+        <Button variant="outline" onClick={() => { setRows(null); setError(null); setKeep(new Set()); }} disabled={!!progress}>Autre fichier</Button>
         <Button onClick={run} disabled={!!progress || !built?.contacts.length || !spaceId}>
-          {progress ?? `Importer ${built?.contacts.length.toLocaleString('fr-FR') ?? ''}`}
+          {progress ?? `Importer ${((built?.contacts.length ?? 0) + keep.size).toLocaleString('fr-FR')}`}
         </Button>
       </DialogFooter>
     </>

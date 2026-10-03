@@ -54,3 +54,17 @@ assert.ok(s2.some((x) => x.kind === 'works_for' && x.a === '20' && x.b === '21')
 assert.ok(s2.some((x) => x.kind === 'co_mention' && x.a === '22' && x.b === '8'));
 assert.deepEqual(computeMilieux({ contacts: extra, explicit: new Map(), aliases: new Map() }).byContact.get('23'), [MEDIAS]);
 console.log('networkRules extra: OK');
+
+// Contre-audit : collaborateur non parlementaire, noms composés, homonymes, échelle.
+const ca = computeMilieux({ contacts: [{ id: 'x1', first_name: 'Alice', last_name: 'Martin', company: 'Cabinet Durand', job_title: 'Collaboratrice comptable' }], explicit: new Map(), aliases: new Map() });
+assert.ok(!(ca.byContact.get('x1') ?? []).includes(COLLABS));
+const comp = suggestLinks([{ id: 'j', first_name: 'Jean-Pierre', last_name: 'Dupont' }, { id: 'a', first_name: 'Alice', last_name: 'Roy' }],
+  [{ contact_id: 'a', content: 'Rencontre avec Jean-Pierre Dupont.', created_at: '2026-10-01T10:00:00Z' }], new Set());
+assert.ok(comp.some((x) => x.a === 'a' && x.b === 'j'));
+const homo = suggestLinks([{ id: 'h1', first_name: 'Alex', last_name: 'Martin' }, { id: 'h2', first_name: 'Alex', last_name: 'Martin' }, { id: 'z', first_name: 'Zoé', last_name: 'Roy' }],
+  [{ contact_id: 'z', content: 'Vu Alex Martin hier', created_at: '2026-10-01T10:00:00Z' }], new Set());
+assert.equal(homo.length, 0);
+const big = Array.from({ length: 50000 }, (_, i) => ({ id: `b${i}`, first_name: `Prenom${i}`, last_name: `Nom${i}`, company: `Societe ${i % 700}`, job_title: 'Directeur' }));
+const t0 = Date.now(); suggestLinks(big, [], new Set()); const ms = Date.now() - t0;
+assert.ok(ms < 3000, `suggestLinks 50 000 fiches : ${ms} ms`);
+console.log(`networkRules contre-audit: OK (50 000 fiches en ${ms} ms)`);

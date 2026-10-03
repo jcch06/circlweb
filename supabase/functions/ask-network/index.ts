@@ -78,8 +78,14 @@ serve(async (req) => {
       if (!data || data.length < 1000) break;
     }
     const linksBy = new Map<string, Set<string>>();
-    const { data: links } = await db.from("contact_links").select("from_contact_id, to_contact_id").limit(5000);
-    for (const l of links ?? []) {
+    const links: any[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data: page, error } = await db.from("contact_links").select("from_contact_id, to_contact_id").order("id").range(from, from + 999);
+      if (error) break;
+      links.push(...(page ?? []));
+      if (!page || page.length < 1000) break;
+    }
+    for (const l of links) {
       const a = personOf.get(l.from_contact_id), b = personOf.get(l.to_contact_id);
       if (!a || !b || a === b) continue;
       (linksBy.get(a) ?? linksBy.set(a, new Set()).get(a)!).add(b);

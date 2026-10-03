@@ -12,8 +12,13 @@ export const FIELD_LABEL: Record<Field, string> = {
  *  Séparateur détecté sur la première ligne (; pour les exports Excel français). */
 export function parseCsv(text: string): string[][] {
   const src = text.replace(/^﻿/, '');
-  const firstLine = src.slice(0, src.indexOf('\n') === -1 ? undefined : src.indexOf('\n'));
-  const sep = [';', '\t', ','].map((s) => ({ s, n: firstLine.split(s).length })).sort((a, b) => b.n - a.n)[0].s;
+  // Séparateur : compté sur la première ligne, hors guillemets (« "Nom, prénom";Email » est un CSV à point-virgule).
+  const count = { ';': 0, '\t': 0, ',': 0 } as Record<string, number>;
+  for (let i = 0, q = false; i < src.length && src[i] !== '\n'; i++) {
+    if (src[i] === '"') q = !q;
+    else if (!q && src[i] in count) count[src[i]]++;
+  }
+  const sep = Object.entries(count).sort((a, b) => b[1] - a[1])[0][0];
   const rows: string[][] = [];
   let row: string[] = [], cell = '', quoted = false;
   for (let i = 0; i < src.length; i++) {
@@ -59,29 +64,45 @@ export function guessMapping(headers: string[]): (Field | null)[] {
 }
 
 export type Built = Partial<Record<Exclude<Field, 'full_name'>, string>> & { first_name: string };
-export type BuildResult = { contacts: Built[]; duplicatesInFile: number; withoutName: number };
+export type Ignored = { row: number; name: string; reason: string; contact: Built };
+export type BuildResult = { contacts: Built[]; duplicatesInFile: number; withoutName: number; ignored: Ignored[] };
 
-const key = (s?: string) => (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+const key = (s?: string) => (s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+const phoneKey = (s?: string) => (s ?? '').replace(/\D/g, '').slice(-9);
 
-/** Lignes -> fiches. Une ligne sans nom est écartée ; un doublon dans le
- *  fichier (même email, même téléphone, ou même nom + entreprise) aussi. */
+/** Lignes -> fiches. Une ligne sans nom est écartée. Un doublon certain dans
+ *  le fichier aussi : même email ; même téléphone ET même nom ; même nom et
+ *  même entreprise sans email ni téléphone contradictoire. Deux homonymes aux
+ *  emails différents restent deux personnes. Les lignes écartées sont
+ *  rendues (ignored) pour que l'utilisateur puisse les garder. */
 export function buildContacts(rows: string[][], mapping: (Field | null)[]): BuildResult {
-  const seen = new Set<string>();
   const contacts: Built[] = [];
-  let duplicatesInFile = 0, withoutName = 0;
-  for (const r of rows) {
+  const ignored: Ignored[] = [];
+  const byEmail = new Map<string, Built>(), byPhoneName = new Map<string, Built>(), byName = new Map<string, Built[]>();
+  let withoutName = 0;
+  rows.forEach((r, idx) => {
     const v: Partial<Record<Field, string>> = {};
     mapping.forEach((f, i) => { const val = (r[i] ?? '').trim(); if (f && val && !v[f]) v[f] = val.slice(0, 300); });
     let first = v.first_name ?? '', last = v.last_name ?? '';
     if (!first && !last && v.full_name) { const parts = v.full_name.split(/\s+/); first = parts[0]; last = parts.slice(1).join(' '); }
     if (!first && last) { first = last; last = ''; }
-    if (!first) { withoutName++; continue; }
-    const phoneKey = (v.phone ?? '').replace(/\D/g, '').slice(-9);
-    const ids = [v.email && `e:${key(v.email)}`, phoneKey.length === 9 && `p:${phoneKey}`, `n:${key(`${first} ${last}`)}|${key(v.company)}`].filter(Boolean) as string[];
-    if (ids.some((id) => seen.has(id))) { duplicatesInFile++; continue; }
-    ids.forEach((id) => seen.add(id));
+    if (!first) { withoutName++; return; }
     const { full_name: _drop, ...rest } = v;
-    contacts.push({ ...rest, first_name: first, ...(last ? { last_name: last } : {}) });
-  }
-  return { contacts, duplicatesInFile, withoutName };
+    const c: Built = { ...rest, first_name: first, ...(last ? { last_name: last } : {}) };
+    const name = key(`${first} ${last}`), email = key(v.email), phone = phoneKey(v.phone);
+    const dupOf = (email && byEmail.get(email))
+      || (phone.length === 9 && byPhoneName.get(`${phone}|${name}`))
+      || (byName.get(`${name}|${key(v.company)}`) ?? []).find((o) =>
+        (!email || !o.email || key(o.email) === email) && (phone.length !== 9 || !o.phone || phoneKey(o.phone) === phone));
+    if (dupOf) {
+      ignored.push({ row: idx + 2, name: `${first} ${last}`.trim(), reason: email && key(dupOf.email) === email ? 'même email' : 'même personne', contact: c });
+      return;
+    }
+    contacts.push(c);
+    if (email) byEmail.set(email, c);
+    if (phone.length === 9) byPhoneName.set(`${phone}|${name}`, c);
+    const nk = `${name}|${key(v.company)}`;
+    byName.set(nk, [...(byName.get(nk) ?? []), c]);
+  });
+  return { contacts, duplicatesInFile: ignored.length, withoutName, ignored };
 }

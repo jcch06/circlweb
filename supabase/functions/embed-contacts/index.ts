@@ -69,8 +69,10 @@ serve(async (req) => {
       });
       const body = await res.json();
       if (!res.ok) return json({ error: body?.error?.message ?? `Embeddings indisponibles (${res.status})` }, 502);
-      await Promise.all(batch.map((t, i) => admin.from("contacts")
+      const writes = await Promise.all(batch.map((t, i) => admin.from("contacts")
         .update({ embedding: JSON.stringify(body.data[i].embedding), embedding_hash: t.hash }).eq("id", t.id)));
+      const failed = writes.filter((w) => w.error).length;
+      if (failed) return json({ error: `${failed} fiche(s) non indexée(s)`, embedded: batch.length - failed, remaining: todo.length - batch.length + failed }, 500);
     }
     return json({ embedded: batch.length, remaining: todo.length - batch.length, total: withInfo.length });
   } catch (err) {

@@ -25,7 +25,8 @@ const FREE_MAIL = new Set(['gmail.com', 'googlemail.com', 'hotmail.com', 'hotmai
 const PARTIES = new Set(['lr', 'rn', 'ps', 'lfi', 'udr', 'eelv', 'pcf', 'modem', 'horizons', 'renaissance', 'reconquete',
   'les republicains', 'rassemblement national', 'la france insoumise', 'parti socialiste']);
 const POLITICAL = /\b(deput[ee]?e?s?|senat(eur|rice)s?|maire|ministre|elue?s?|conseill(er|ere) (regional|municipal|departemental)e?)\b/;
-const COLLAB = /\b(coll?ab(orat(eur|rice))?|assistante? parlementaire)\b/;
+// « Collab X » (abréviation d'usage) ou mention parlementaire explicite ; « collaboratrice comptable » ne compte pas.
+const COLLAB = /\b(coll?ab|colab|(collaborat(eur|rice)|assistante?) parlementaire)\b/;
 const MEDIA = /\b(journalistes?|redac\w*|radio|television|tv|presse|media|magazine|podcast|editorialiste|chroniqueu?r\w*)\b/;
 // « Collab Philippe Ballard & Arnaud Sanvert », « Colab Parlementaire Stéphane Rambaud »
 const WORKS_FOR = /\bcoll?ab(?:orat(?:eur|rice))?\.?(?:\s+parlementaire)?\s*(?:de\s+|d['’]\s*)?(.+)$/i;
@@ -109,7 +110,10 @@ export function computeMilieux({ contacts, explicit, aliases }: MilieuInput): Mi
 /** Un contact sans aucun indice exploitable par l'IA (nom seul). */
 export const hasInfo = (c: RuleContact) => Boolean(c.company || c.job_title || c.email || /\(/.test(`${c.first_name} ${c.last_name}`));
 
-const fullKey = (c: RuleContact) => norm(`${c.first_name ?? ''} ${c.last_name ?? ''}`.replace(/\([^)]*\)/g, ''));
+// Même normalisation pour les noms et pour les textes : « Jean-Pierre » et
+// « d'Arras » se comparent mot à mot.
+const words = (s?: string | null) => norm(s).replace(/[^\p{L}\p{N} ]+/gu, ' ').replace(/\s+/g, ' ').trim();
+const fullKey = (c: RuleContact) => words(`${c.first_name ?? ''} ${c.last_name ?? ''}`.replace(/\([^)]*\)/g, ''));
 const pairKey = (a: string, b: string, kind: string) => `${a < b ? a : b}|${a < b ? b : a}|${kind}`;
 
 /** Liens devinés, chacun avec sa raison. Exclut les paires déjà liées et rejetées. */
@@ -119,7 +123,7 @@ export function suggestLinks(contacts: RuleContact[], notes: RuleNote[], known: 
   for (const c of contacts) {
     const f = fullKey(c);
     if (f.includes(' ')) (byFull.get(f) ?? byFull.set(f, []).get(f)!).push(c);
-    const l = norm(c.last_name);
+    const l = words(c.last_name);
     if (l.length >= 4) (byLast.get(l) ?? byLast.set(l, []).get(l)!).push(c);
   }
   const out = new Map<string, Suggestion>();
@@ -138,7 +142,7 @@ export function suggestLinks(contacts: RuleContact[], notes: RuleNote[], known: 
       if (!m) continue;
       // « Collab RN Weber » : les sigles de partis ne font pas partie du nom.
       const chunks = m[1].split(/\s*(?:&|,|\/|\bet\b)\s*/i)
-        .map((x) => norm(x).split(' ').filter((w) => !PARTIES.has(w) && w !== 'an').join(' '))
+        .map((x) => words(x).split(' ').filter((w) => !PARTIES.has(w) && w !== 'an').join(' '))
         .filter((x) => x.length >= 4);
       for (const chunk of chunks) {
         const hits = byFull.get(chunk) ?? (chunk.includes(' ') ? [] : byLast.get(chunk) ?? []);
@@ -146,12 +150,25 @@ export function suggestLinks(contacts: RuleContact[], notes: RuleNote[], known: 
       }
     }
   }
-  // 2. Personne citée par son nom complet dans la note ou la fiche d'un autre contact.
-  // ponytail: balayage textes x noms, index par mot si les notes dépassent quelques milliers
-  const names = [...byFull.entries()].filter(([, cs]) => cs.length === 1).map(([k, cs]) => ({ k, id: cs[0].id }));
-  const scan = (owner: string, raw: string, reason: (name: string) => string) => {
-    const text = ` ${norm(raw).replace(/[^\p{L}\p{N} ]+/gu, ' ')} `;
-    for (const { k, id } of names) if (id !== owner && text.includes(` ${k} `)) add(owner, id, 'co_mention', reason(k));
+  // 2. Personne citée par son nom complet dans la note ou la fiche d'un autre
+  //    contact. Index par premier mot : coût proportionnel au texte, pas au
+  //    produit textes x carnet (50 000 fiches restent fluides).
+  const byFirst = new Map<string, { parts: string[]; id: string }[]>();
+  for (const [k, cs] of byFull) {
+    if (cs.length !== 1) continue; // homonymes : aucun lien arbitraire
+    const parts = k.split(' ');
+    (byFirst.get(parts[0]) ?? byFirst.set(parts[0], []).get(parts[0])!).push({ parts, id: cs[0].id });
+  }
+  const scan = (owner: string, raw: string, reason: () => string) => {
+    const w = words(raw).split(' ');
+    for (let i = 0; i < w.length; i++) {
+      for (const cand of byFirst.get(w[i]) ?? []) {
+        if (cand.id === owner) continue;
+        let ok = true;
+        for (let j = 1; j < cand.parts.length; j++) if (w[i + j] !== cand.parts[j]) { ok = false; break; }
+        if (ok) add(owner, cand.id, 'co_mention', reason());
+      }
+    }
   };
   const nameOf = new Map(contacts.map((c) => [c.id, `${c.first_name ?? ''} ${c.last_name ?? ''}`.replace(/\([^)]*\)/g, '').trim()]));
   for (const c of contacts) {

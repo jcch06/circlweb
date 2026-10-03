@@ -58,7 +58,13 @@ export const PushNetworkPanel: React.FC<{
         const existingPhones = new Set(existing.map((ec: any) => normalize(ec.phone)).filter((v): v is string => v !== null));
         const existingEmails = new Set(existing.map((ec: any) => normalize(ec.email)).filter((v): v is string => v !== null));
 
-        const { data: shares } = await supabase.from('contact_shares').select('contact_id').eq('space_id', targetSpaceId).limit(50000);
+        const shares: any[] = [];
+        for (let from = 0; ; from += 1000) {
+          const { data: page, error } = await supabase.from('contact_shares').select('contact_id').eq('space_id', targetSpaceId).order('contact_id').range(from, from + 999);
+          if (error) throw error;
+          shares.push(...(page ?? []));
+          if (!page || page.length < 1000) break;
+        }
         const sharedIds = new Set((shares ?? []).map((x: any) => x.contact_id));
         const existingNames = new Set(existing.map((ec: any) => `${ec.first_name ?? ''}|${ec.last_name ?? ''}`.toLowerCase()));
         const dupes: any[] = [];

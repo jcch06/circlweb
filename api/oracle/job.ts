@@ -44,7 +44,7 @@ function verifyCronToken(token: string): string | null {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const EMBED_WAVE = 250;        // contacts embedded per advance call
-const MAP_WAVE = 6;            // batches MAP-analyzed per advance call
+const MAP_WAVE = 3;            // batches MAP-analyzed per advance call
 // Hierarchical reduce: batches are reduced in groups of REDUCE_GROUP into
 // partial syntheses (REDUCE_WAVE groups per advance), then merged. A network
 // with <= SINGLE_REDUCE_MAX batches skips grouping and does one reduce.

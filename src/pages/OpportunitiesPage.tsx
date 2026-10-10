@@ -89,9 +89,15 @@ export const OpportunitiesPage: React.FC = () => {
 
   useEffect(() => {
     loadDecisions();
-    listAnalysisHistory(spaceId).then(setHistory).catch(() => {});
     const cached = getCachedMistralPipelineResult(eligible);
     if (cached) setResult(cached);
+    listAnalysisHistory(spaceId).then(async (h) => {
+      setHistory(h);
+      if (!cached && h.length > 0) {
+        const latest = await getAnalysisById(h[0].id);
+        if (latest) setResult(latest);
+      }
+    }).catch(() => {});
     const saved = localStorage.getItem('circl_action_plan');
     if (saved) { try { setPlan(JSON.parse(saved)); } catch { /* plan corrompu : on repart à vide */ } }
   }, [spaceId]);

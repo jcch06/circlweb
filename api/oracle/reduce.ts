@@ -176,7 +176,7 @@ const FALLBACK_SYNTHESIS: MistralGlobalSynthesis = {
   recommendedActionPlan: [], macroNeeds: [], valueChains: [], emergingOpportunities: []
 };
 
-const MAP_REDUCE_MODEL = 'mistral-large-latest';
+const MAP_REDUCE_MODEL = 'mistral-small-latest';
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 function buildUserContext(userProfile: any): string {

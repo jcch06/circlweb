@@ -59,7 +59,7 @@ interface MistralBatchResult {
 }
 
 const FALLBACK_BATCH_RESULT: MistralBatchResult = { recurrentNeeds: [], immediateSynergies: [], keyCompetencies: [] };
-const MAP_REDUCE_MODEL = 'mistral-large-latest';
+const MAP_REDUCE_MODEL = 'mistral-small-latest';
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 function buildUserContext(userProfile: any): string {

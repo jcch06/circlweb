@@ -86,11 +86,10 @@ function buildBatchRosters(
   contactById: Map<string, any>,
   lockedNameSet: Set<string>
 ): string {
-  const MAX_PER_BATCH = 15;
-  // Hard global ceiling: the roster must stay bounded no matter how big the
-  // network is, or REDUCE's single Mistral Large call exceeds maxDuration
-  // (60s, see vercel.json) and Vercel kills it with a 504.
-  const GLOBAL_CAP = 150;
+  const MAX_PER_BATCH = 6;
+  // Bounded ceiling: keeps prompt tight so Mistral Large responds in <25s
+  // well below Vercel's 60s execution limit.
+  const GLOBAL_CAP = 60;
 
   // Fair coverage via round-robin (richest-first WITHIN each batch, but one
   // slot per batch before any batch gets a second) instead of a single global
@@ -176,7 +175,7 @@ const FALLBACK_SYNTHESIS: MistralGlobalSynthesis = {
   recommendedActionPlan: [], macroNeeds: [], valueChains: [], emergingOpportunities: []
 };
 
-const MAP_REDUCE_MODEL = 'mistral-small-latest';
+const MAP_REDUCE_MODEL = 'mistral-large-latest';
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 function buildUserContext(userProfile: any): string {
@@ -359,20 +358,20 @@ Tu es "Oracle REDUCE", un super-cerveau stratégique spécialisé dans la consol
 ${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${bridgeContext}${rosterContext}${lockedContext}
 <instructions>
 1. Fusionne les besoins similaires ou redondants détectés dans les différents lots en "Macro-Besoins" consolidés (ne liste pas les doublons séparément).
-2. Construis PLUSIEURS chaînes de valeur globales (value chains) — vise-en une par grand PÔLE du réseau (utilise <composition_des_lots> pour repérer les pôles : froid/logistique, politique/influence, médias, luxe/événementiel, tech, etc.), pas seulement celui aligné avec le profil de l'utilisateur. Chaque chaîne relie des contacts RÉELS de lots DIFFÉRENTS autour d'un objectif commun (ex : A a un besoin, B a la compétence, C a le réseau/financement). Vise 4 à 8 chaînes quand le réseau le permet (8 maximum), chacune couvrant une dynamique différente — y compris des pôles hors-profil quand ils sont réels et étayés. Quand c'est pertinent, utilise les <bridge_contacts> comme maillons entre groupes.
-3. Identifie les thèmes dominants ET, surtout, les SYNERGIES TRANSVERSALES (crossBatchSynergies) : croise ACTIVEMENT les besoins récurrents d'un lot avec les compétences clés d'un AUTRE lot (ex : le lot A exprime un besoin de financement, le lot B regroupe des profils investissement → synergie transversale ; le lot C a besoin de tech, le lot D a des développeurs → synergie). C'est le CŒUR de la valeur d'un réseau diversifié : deux mondes qui ne se connaissent pas mais dont l'un a ce que l'autre cherche. Cherche systématiquement ces croisements besoin↔compétence entre lots différents.
+2. Construis PLUSIEURS chaînes de valeur globales (value chains) — vise-en une par grand PÔLE du réseau (utilise <composition_des_lots> pour repérer les pôles : froid/logistique, politique/influence, médias, luxe/événementiel, tech, etc.), pas seulement celui aligné avec le profil de l'utilisateur. Chaque chaîne relie des contacts RÉELS de lots DIFFÉRENTS autour d'un objectif commun (ex : A a un besoin, B a la compétence, C a le réseau/financement). Vise 3 à 5 chaînes quand le réseau le permet (5 maximum), chacune couvrant une dynamique différente — y compris des pôles hors-profil quand ils sont réels et étayés. Quand c'est pertinent, utilise les <bridge_contacts> comme maillons entre groupes.
+3. Identifie les thèmes dominants ET, surtout, les SYNERGIES TRANSVERSALES (crossBatchSynergies) : croise ACTIVEMENT les besoins récurrents d'un lot avec les compétences clés d'un AUTRE lot (ex : le lot A exprime un besoin de financement, le lot B regroupe des profils investissement → synergie transversale ; le lot C a besoin de tech, le lot D a des développeurs → synergie). C'est le CŒUR de la valeur d'un réseau diversifié : deux mondes qui ne se connaissent pas mais dont l'un a ce que l'autre cherche. Cherche systématiquement ces croisements besoin↔compétence entre lots différents (3 à 5 synergies maximum).
 4. Repère les "Portes à Explorer" (emergingOpportunities) : les pôles DENSES mais HORS-PROFIL — un thème ou un besoin réellement partagé par au moins DEUX contacts, qui ne colle à aucun levier de l'utilisateur, et qui pourrait lui ouvrir une direction nouvelle. Vois la section OUVERTURE du user_context.
 5. Propose un plan d'action concret et priorisé.
 </instructions>
 
 <rules>
-- ANCRAGE STRICT sur "macroNeeds" et "valueChains" (qui NOMMENT des contacts précis) : chaque maillon doit être un contact RÉEL présent dans <composition_des_lots> ou <aggregated_batch_data>, avec un rôle réel — n'invente JAMAIS un contact ni un rôle. Mais dans cette limite, cherche la LARGEUR : un réseau diversifié contient plusieurs pôles, donc plusieurs chaînes de valeur (une par pôle) sont attendues, pas une seule. Ne te rabats sur peu de chaînes que si le roster ne contient réellement pas de quoi en construire davantage. En revanche "crossBatchSynergies" est THÉMATIQUE (un thème, une description, un impact — pas des contacts nommés fragiles) : sois GÉNÉREUX. Dès qu'un besoin réel d'un lot rencontre une compétence réelle d'un AUTRE lot, c'est une synergie transversale valide à remonter, même sans note qui la corrobore — c'est une piste, pas une certitude. Vise plusieurs synergies transversales couvrant différents croisements de pôles (10 maximum, les plus solides) ; ne renvoie "crossBatchSynergies" vide QUE si aucun croisement besoin↔compétence n'existe réellement entre les lots (rare sur un réseau diversifié). "globalThemes" est un simple résumé factuel de ce qui existe dans <aggregated_batch_data> : il ne dépend d'aucune synergie ni alignement, et ne doit être vide que si <aggregated_batch_data> est lui-même vide.
+- ANCRAGE STRICT sur "macroNeeds" et "valueChains" (qui NOMMENT des contacts précis) : chaque maillon doit être un contact RÉEL présent dans <composition_des_lots> ou <aggregated_batch_data>, avec un rôle réel — n'invente JAMAIS un contact ni un rôle. Mais dans cette limite, cherche la LARGEUR : un réseau diversifié contient plusieurs pôles, donc plusieurs chaînes de valeur (une par pôle) sont attendues, pas une seule. Ne te rabats sur peu de chaînes que si le roster ne contient réellement pas de quoi en construire davantage. En revanche "crossBatchSynergies" est THÉMATIQUE (un thème, une description, un impact — pas des contacts nommés fragiles) : sois GÉNÉREUX. Dès qu'un besoin réel d'un lot rencontre une compétence réelle d'un AUTRE lot, c'est une synergie transversale valide à remonter, même sans note qui la corrobore — c'est une piste, pas une certitude. Vise plusieurs synergies transversales couvrant différents croisements de pôles (5 maximum, les plus solides) ; ne renvoie "crossBatchSynergies" vide QUE si aucun croisement besoin↔compétence n'existe réellement entre les lots (rare sur un réseau diversifié). "globalThemes" est un simple résumé factuel de ce qui existe dans <aggregated_batch_data> : il ne dépend d'aucune synergie ni alignement, et ne doit être vide que si <aggregated_batch_data> est lui-même vide.
 - Un "Macro-Besoin" est par définition une CONSOLIDATION : il ne se justifie que s'il regroupe au moins DEUX contacts distincts OU au moins deux besoins bruts distincts dans "mergedFrom". Ne crée JAMAIS un macro-besoin qui ne concerne qu'un seul contact avec un seul besoin recopié — ce n'est pas un macro-besoin, c'est un besoin isolé, et il n'a pas sa place ici. Si le réseau ne présente aucun besoin réellement partagé par plusieurs contacts, renvoie un tableau "macroNeeds" vide : c'est une réponse valide et préférable à des besoins triviaux. "mergedFrom" et "affectedContactsCount" doivent refléter la réalité (jamais gonflés pour atteindre le seuil).
 - Une "valueChain" ne doit relier que des contacts RÉELLEMENT nommés dans les données agrégées, chacun avec un rôle concret tiré de ses données. N'ajoute JAMAIS un maillon générique du type "un profil pertinent dans le réseau" ni un rôle vague ("profil technique ou opérationnel", "client potentiel") : si tu n'as pas de rôle précis pour un contact, ne l'inclus pas dans la chaîne.
 - Chaque synergie agrégée porte un "confidence" ("high"/"medium"/"low") hérité du MAP — "high" y signifie qu'une note réelle de l'utilisateur corrobore le lien, "medium"/"low" signifient une pure estimation IA. Privilégie les synergies "high" pour bâtir les "valueChains" et macro-besoins les plus mis en avant ; une chaîne construite uniquement sur des synergies "low" doit rester marginale, pas headline.
 - Le "recommendedActionPlan" ne doit citer que des contacts, entreprises ou organisations RÉELLEMENT présents dans les données agrégées. N'invente JAMAIS un tiers plausible (syndicat professionnel, entreprise cible, segment de marché précis) qui n'apparaît nulle part dans <aggregated_batch_data> — une action peut rester généraliste ("Prendre contact avec X pour explorer Y") plutôt que de nommer une entité non vérifiée.
 - Une "emergingOpportunity" (Porte à Explorer) suit la MÊME RIGUEUR : elle doit s'appuyer sur au moins DEUX contacts réels et nommés (dans "anchorContacts") qui partagent réellement ce thème/besoin dans les données agrégées. N'invente jamais un pôle ou une tendance à partir d'un seul contact ou d'une extrapolation. Ne remonte ici QUE des thèmes hors-profil (ceux qui collent aux leviers de l'utilisateur ont déjà leur place dans macroNeeds/valueChains) ; si tout le réseau est déjà aligné, renvoie un tableau "emergingOpportunities" vide. Le champ "whyNewDoor" explique concrètement quelle direction nouvelle ce pôle pourrait ouvrir à l'utilisateur.
-- RICHESSE DES DESCRIPTIONS : les champs "description" (macroNeeds, crossBatchSynergies, valueChains, emergingOpportunities) et "contribution" (maillons) ne doivent JAMAIS être des étiquettes creuses d'une ligne. Écris des explications concrètes et actionnables (plusieurs phrases) : QUI (contacts nommés), QUOI (le besoin/la ressource précise), POURQUOI ça crée de la valeur, et COMMENT l'activer (premier pas concret). Un utilisateur doit pouvoir agir en lisant la description, sans avoir à deviner. Ancre chaque détail dans les données réelles — riche ne veut pas dire inventé.
+- CONCISION ET IMPACT DES DESCRIPTIONS : Sois dense, direct et percutant (2 phrases maximum par description) : QUI (contacts nommés), QUOI (besoin ou opportunité concrète), et COMMENT l'activer (premier pas immédiat). Pas de bavardage ni de périphrases : chaque mot doit apporter de la valeur actionnable tout en garantissant une réponse rapide.
 - Réponds STRICTEMENT avec un objet JSON valide respectant le format ci-dessous, sans markdown ni texte additionnel.
 </rules>
 
@@ -384,16 +383,16 @@ ${aggregatedData}
 {
   "globalThemes": ["thème dominant 1", "thème dominant 2"],
   "crossBatchSynergies": [
-    { "theme": "Thème de la synergie globale", "description": "3 à 5 phrases DÉTAILLÉES : quels contacts précis de quels pôles se croisent, quel besoin de l'un rencontre quelle compétence de l'autre, le mécanisme concret de la collaboration possible, et le premier pas pour l'activer. Nomme les contacts réels quand c'est pertinent.", "potentialImpact": "Estimation de l'impact (ex: Fort potentiel commercial), justifiée en une phrase" }
+    { "theme": "Thème de la synergie globale", "description": "2 phrases denses : qui se croise, quel besoin rencontre quelle compétence, et le premier pas concret. Nomme les contacts réels.", "potentialImpact": "Estimation de l'impact qualifiée en une phrase courte" }
   ],
   "macroNeeds": [
-    { "label": "Nom du besoin consolidé (ex: Recrutement Tech Senior)", "description": "2 à 4 phrases : en quoi consiste ce besoin partagé, quels contacts précis l'expriment et pourquoi, et comment l'utilisateur pourrait y répondre concrètement.", "mergedFrom": ["besoin brut 1", "besoin brut 2"], "affectedContactsCount": 3, "priority": "high" }
+    { "label": "Nom du besoin consolidé (ex: Recrutement Tech Senior)", "description": "1 à 2 phrases : en quoi consiste ce besoin partagé et quels contacts précis l'expriment.", "mergedFrom": ["besoin brut 1", "besoin brut 2"], "affectedContactsCount": 3, "priority": "high" }
   ],
   "valueChains": [
-    { "title": "Nom de la chaîne de valeur", "description": "3 à 5 phrases riches : le scénario business complet, quel déclencheur, comment les maillons s'enchaînent concrètement, et quel résultat final concret pour l'utilisateur.", "chain": [{ "step": 1, "contactName": "Nom", "role": "Poste", "contribution": "Ce qu'il apporte à la chaîne, concrètement (1-2 phrases)" }], "estimatedImpact": "Estimation de l'impact business, chiffrée ou qualifiée" }
+    { "title": "Nom de la chaîne de valeur", "description": "2 phrases denses : scénario business et résultat concret attendu pour l'utilisateur.", "chain": [{ "step": 1, "contactName": "Nom", "role": "Poste", "contribution": "Ce qu'il apporte à la chaîne (1 phrase concrète)" }], "estimatedImpact": "Estimation de l'impact business en une phrase courte" }
   ],
   "emergingOpportunities": [
-    { "theme": "Pôle hors-profil dense (ex: Événementiel haut de gamme)", "description": "Ce que ce pôle représente dans le réseau, en détail", "anchorContacts": [{ "name": "Nom A" }, { "name": "Nom B" }], "whyNewDoor": "Quelle direction nouvelle ce pôle pourrait ouvrir à l'utilisateur" }
+    { "theme": "Pôle hors-profil dense (ex: Événementiel haut de gamme)", "description": "Ce que ce pôle représente dans le réseau (1-2 phrases)", "anchorContacts": [{ "name": "Nom A" }, { "name": "Nom B" }], "whyNewDoor": "Direction nouvelle possible pour l'utilisateur en une phrase" }
   ],
   "networkStrength": "Résumé en 1-2 phrases de la force principale de ce réseau",
   "recommendedActionPlan": ["Action 1", "Action 2"]
@@ -460,15 +459,15 @@ ${userContext ? `\n<user_context>\n${userContext}\n</user_context>\n` : ''}${loc
 <instructions>
 1. Consolide les "globalThemes" en dédupliquant les thèmes équivalents entre partielles.
 2. Fusionne les macro-besoins similaires (additionne le nombre de contacts concernés quand c'est le même besoin).
-3. Garde les chaînes de valeur les plus solides à travers TOUTES les partielles (8 maximum) — privilégie celles qui couvrent des pôles différents, y compris hors-profil quand elles sont réelles.
-4. Consolide les synergies transversales (10 maximum, les plus fortes), en repérant aussi les croisements ENTRE deux partielles différentes.
+3. Garde les chaînes de valeur les plus solides à travers TOUTES les partielles (5 maximum) — privilégie celles qui couvrent des pôles différents, y compris hors-profil quand elles sont réelles.
+4. Consolide les synergies transversales (5 maximum, les plus fortes), en repérant aussi les croisements ENTRE deux partielles différentes.
 5. Regroupe les "Portes à Explorer" (pôles hors-profil) en dédupliquant.
 6. Rédige une "networkStrength" globale et un "recommendedActionPlan" priorisé pour l'ensemble du réseau.
 </instructions>
 
 <rules>
 - N'utilise QUE des contacts, entreprises et entités qui apparaissent déjà dans les synthèses partielles ci-dessous. N'invente RIEN de nouveau — tu consolides, tu ne déduis pas de zéro.
-- Descriptions riches et actionnables (plusieurs phrases : qui / quoi / pourquoi / premier pas), jamais des étiquettes creuses.
+- Descriptions concises et actionnables (1 à 2 phrases directes : qui / quoi / premier pas), sans verbiage.
 - Une "emergingOpportunity" doit garder au moins 2 anchorContacts réels issus des partielles.
 - Réponds STRICTEMENT avec un objet JSON valide au format ci-dessous, sans markdown.
 </rules>
@@ -480,10 +479,10 @@ ${partialsText}
 <output_format>
 {
   "globalThemes": ["thème 1", "thème 2"],
-  "crossBatchSynergies": [ { "theme": "…", "description": "3-5 phrases détaillées, contacts nommés", "potentialImpact": "…" } ],
-  "macroNeeds": [ { "label": "…", "description": "2-4 phrases", "mergedFrom": ["…"], "affectedContactsCount": 4, "priority": "high" } ],
-  "valueChains": [ { "title": "…", "description": "3-5 phrases", "chain": [{ "step": 1, "contactName": "Nom", "role": "Poste", "contribution": "…" }], "estimatedImpact": "…" } ],
-  "emergingOpportunities": [ { "theme": "…", "description": "…", "anchorContacts": [{ "name": "Nom A" }, { "name": "Nom B" }], "whyNewDoor": "…" } ],
+  "crossBatchSynergies": [ { "theme": "…", "description": "2 phrases denses, contacts nommés", "potentialImpact": "Estimation courte" } ],
+  "macroNeeds": [ { "label": "…", "description": "1-2 phrases", "mergedFrom": ["…"], "affectedContactsCount": 4, "priority": "high" } ],
+  "valueChains": [ { "title": "…", "description": "2 phrases denses", "chain": [{ "step": 1, "contactName": "Nom", "role": "Poste", "contribution": "1 phrase" }], "estimatedImpact": "Estimation courte" } ],
+  "emergingOpportunities": [ { "theme": "…", "description": "1-2 phrases", "anchorContacts": [{ "name": "Nom A" }, { "name": "Nom B" }], "whyNewDoor": "1 phrase" } ],
   "networkStrength": "1-2 phrases",
   "recommendedActionPlan": ["Action 1", "Action 2"]
 }
